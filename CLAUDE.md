@@ -41,3 +41,7 @@ reader-facing layer only — nothing runs or is authored here.
     bun run test
     bun run build
     vercel --prod      # deploy (after `vercel login`)
+
+## Status
+
+See `STATUS.md` — state, open decisions, known thin spots, architecture. Update it when any of those change.
