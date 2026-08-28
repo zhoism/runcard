@@ -1,0 +1,25 @@
+export interface Stage {
+  name: string; role: string; mdin: string; cntrl: Record<string, string>;
+  restart_from: string; length_ps: number | null; requested_seed?: string;
+  realized_seed?: number; wall_s?: number; engine?: string; finished?: boolean;
+  envelope?: { rst: boolean; finished: boolean; crashes: string[] };
+}
+export interface Manifest {
+  id: string; title: string; schema: string; engine: string;
+  system: {
+    protein: { atoms: number | null; source_pdb: string | null };
+    ligand: { resname: string | null; atoms: number | null; atom_types: string[] | null; charge_method: string | null; net_charge: number | null; frcmod_missing: string[] | null };
+    solvent: { box: string | null; model: string | null; buffer_A: number | null; residues_added: number[] | null; solvated_atoms: number | null; dry_atoms: number | null };
+    force_fields: string[]; leap_in: string;
+  };
+  stages: Stage[];
+  results: {
+    mmgbsa?: { delta_total_kcal_mol: number; frame_std: number; frame_sem: number; frames: number | null; igb: string; saltcon: string; trajectory: string; run_on: string | null; mmpbsa_version: string | null; warnings: string[] };
+    plip?: { frame: { policy: string; index: number; nframes: number } | null; ligand: Record<string, unknown> | null; interactions: Record<string, { residue: string; dist?: number }[]>; source?: string };
+  };
+  analyses: Record<string, { png: string; ok: boolean | null }>;
+  structure: string | null;
+  environment: { conda_lock: Record<string, string>; pmemd: string | null; conda_lock_file: string };
+  pipeline: { stage_envelopes: Record<string, boolean>; skills: string[] };
+}
+export interface IndexEntry { id: string; title: string; ligand: string; protein_atoms: number; production_ps: number; delta_g: number; plip: boolean; engine: string }
