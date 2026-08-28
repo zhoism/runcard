@@ -1,0 +1,357 @@
+{
+ "id": "1l2y-rep6",
+ "title": "1L2Y + MOL, run 6",
+ "schema": "runcard/0.1",
+ "engine": "amber",
+ "system": {
+  "protein": {
+   "atoms": 290,
+   "source_pdb": "protein_in.pdb"
+  },
+  "ligand": {
+   "resname": "MOL",
+   "atoms": 16,
+   "atom_types": [
+    "ca",
+    "cc",
+    "cd",
+    "h4",
+    "ha",
+    "hn",
+    "na"
+   ],
+   "charge_method": "bcc",
+   "net_charge": 0.0,
+   "frcmod_missing": []
+  },
+  "solvent": {
+   "box": "oct",
+   "model": "TIP3PBOX",
+   "buffer_A": 10.0,
+   "residues_added": [
+    1894
+   ],
+   "solvated_atoms": 5989,
+   "dry_atoms": 306
+  },
+  "force_fields": [
+   "protein.ff19SB",
+   "water.tip3p",
+   "gaff2"
+  ],
+  "leap_in": "source leaprc.protein.ff19SB\nsource leaprc.water.tip3p\nsource leaprc.gaff2\nLIG = loadmol2 MOL.mol2\nloadamberparams MOL.frcmod\ncheck LIG\nprot = loadpdb protein_clean.pdb\ncheck prot\nsaveamberparm prot protein.top protein.crd\nsaveamberparm LIG ligand.top ligand.crd\ncomp = combine { prot LIG }\nsaveamberparm comp comp_dry.top comp_dry.crd\nsolvateoct comp TIP3PBOX 10.0\naddions2 comp Na+ 0\naddions2 comp Cl- 0\nsaveamberparm comp comp_oct.top comp_oct.crd\nsavepdb comp comp_oct.pdb\nquit\n"
+ },
+ "stages": [
+  {
+   "name": "min1",
+   "role": "minimization",
+   "mdin": "min1: hold solute, minimize solvent only\n &cntrl\n  imin=1, ncyc=500, maxcyc=1000, drms=0.001,\n  ntb=1, cut=9.0,\n  ntr=1, restraint_wt=500.0, restraintmask='!:WAT,Na+,Cl-',\n  ntpr=100, ntwr=1000,\n /\n",
+   "cntrl": {
+    "imin": "1",
+    "ncyc": "500",
+    "maxcyc": "1000",
+    "drms": "0.001",
+    "ntb": "1",
+    "cut": "9.0",
+    "ntr": "1",
+    "restraint_wt": "500.0",
+    "restraintmask": "",
+    "ntpr": "100",
+    "ntwr": "1000"
+   },
+   "restart_from": "comp_oct.crd",
+   "length_ps": null,
+   "requested_seed": null,
+   "realized_seed": 958795,
+   "wall_s": 9,
+   "engine": "Amber 26 PMEMD (2026)",
+   "engine_release": "26",
+   "finished": true,
+   "envelope": {
+    "rst": true,
+    "finished": true,
+    "crashes": []
+   }
+  },
+  {
+   "name": "min2",
+   "role": "minimization",
+   "mdin": "min2: hold heavy solute atoms, minimize solvent + H\n &cntrl\n  imin=1, ncyc=500, maxcyc=1000, drms=0.001,\n  ntb=1, cut=9.0,\n  ntr=1, restraint_wt=500.0, restraintmask='(!:WAT,Na+,Cl-) & (!@H=)',\n  ntpr=100, ntwr=1000,\n /\n",
+   "cntrl": {
+    "imin": "1",
+    "ncyc": "500",
+    "maxcyc": "1000",
+    "drms": "0.001",
+    "ntb": "1",
+    "cut": "9.0",
+    "ntr": "1",
+    "restraint_wt": "500.0",
+    "restraintmask": "(",
+    "ntpr": "100",
+    "ntwr": "1000"
+   },
+   "restart_from": "min1",
+   "length_ps": null,
+   "requested_seed": null,
+   "realized_seed": 547329,
+   "wall_s": 9,
+   "engine": "Amber 26 PMEMD (2026)",
+   "engine_release": "26",
+   "finished": true,
+   "envelope": {
+    "rst": true,
+    "finished": true,
+    "crashes": []
+   }
+  },
+  {
+   "name": "min3",
+   "role": "minimization",
+   "mdin": "min3: unrestrained full-system minimization\n &cntrl\n  imin=1, ncyc=500, maxcyc=1000, drms=0.001,\n  ntb=1, cut=9.0, ntr=0,\n  ntpr=100, ntwr=1000,\n /\n",
+   "cntrl": {
+    "imin": "1",
+    "ncyc": "500",
+    "maxcyc": "1000",
+    "drms": "0.001",
+    "ntb": "1",
+    "cut": "9.0",
+    "ntr": "0",
+    "ntpr": "100",
+    "ntwr": "1000"
+   },
+   "restart_from": "min2",
+   "length_ps": null,
+   "requested_seed": null,
+   "realized_seed": 589100,
+   "wall_s": 8,
+   "engine": "Amber 26 PMEMD (2026)",
+   "engine_release": "26",
+   "finished": true,
+   "envelope": {
+    "rst": true,
+    "finished": true,
+    "crashes": []
+   }
+  },
+  {
+   "name": "heat",
+   "role": "heating",
+   "mdin": "heat: 0 -> 300 K, NVT, Langevin, weak solute restraint\n &cntrl\n  imin=0, irest=0, ntx=1,\n  nstlim=25000, dt=0.002,\n  ntc=2, ntf=2, cut=9.0,\n  ntb=1, ntp=0,\n  ntt=3, gamma_ln=2.0, ig=-1,\n  tempi=0.0, temp0=300.0,\n  ntr=1, restraint_wt=2.0, restraintmask='!:WAT,Na+,Cl-',\n  ntpr=500, ntwx=500, ntwr=5000,\n  nmropt=1,\n /\n &wt TYPE='TEMP0', istep1=0, istep2=25000, value1=0.0, value2=300.0 /\n &wt TYPE='END' /\n",
+   "cntrl": {
+    "imin": "0",
+    "irest": "0",
+    "ntx": "1",
+    "nstlim": "25000",
+    "dt": "0.002",
+    "ntc": "2",
+    "ntf": "2",
+    "cut": "9.0",
+    "ntb": "1",
+    "ntp": "0",
+    "ntt": "3",
+    "gamma_ln": "2.0",
+    "ig": "-1",
+    "tempi": "0.0",
+    "temp0": "300.0",
+    "ntr": "1",
+    "restraint_wt": "2.0",
+    "restraintmask": "",
+    "ntpr": "500",
+    "ntwx": "500",
+    "ntwr": "5000",
+    "nmropt": "1"
+   },
+   "restart_from": "min3",
+   "length_ps": 50.0,
+   "requested_seed": "-1",
+   "realized_seed": 308303,
+   "wall_s": 233,
+   "engine": "Amber 26 PMEMD (2026)",
+   "engine_release": "26",
+   "finished": true,
+   "envelope": {
+    "rst": true,
+    "finished": true,
+    "crashes": []
+   }
+  },
+  {
+   "name": "density",
+   "role": "equilibration",
+   "mdin": "density: NPT equilibration, MC barostat, weak solute restraint\n &cntrl\n  imin=0, irest=1, ntx=5,\n  nstlim=25000, dt=0.002,\n  ntc=2, ntf=2, cut=9.0,\n  ntb=2, ntp=1, barostat=2, pres0=1.0, taup=2.0,\n  ntt=3, gamma_ln=2.0, ig=-1, temp0=300.0,\n  ntr=1, restraint_wt=2.0, restraintmask='!:WAT,Na+,Cl-',\n  iwrap=1, ntpr=500, ntwx=500, ntwr=5000,\n /\n",
+   "cntrl": {
+    "imin": "0",
+    "irest": "1",
+    "ntx": "5",
+    "nstlim": "25000",
+    "dt": "0.002",
+    "ntc": "2",
+    "ntf": "2",
+    "cut": "9.0",
+    "ntb": "2",
+    "ntp": "1",
+    "barostat": "2",
+    "pres0": "1.0",
+    "taup": "2.0",
+    "ntt": "3",
+    "gamma_ln": "2.0",
+    "ig": "-1",
+    "temp0": "300.0",
+    "ntr": "1",
+    "restraint_wt": "2.0",
+    "restraintmask": "",
+    "iwrap": "1",
+    "ntpr": "500",
+    "ntwx": "500",
+    "ntwr": "5000"
+   },
+   "restart_from": "heat",
+   "length_ps": 50.0,
+   "requested_seed": "-1",
+   "realized_seed": 800015,
+   "wall_s": 287,
+   "engine": "Amber 26 PMEMD (2026)",
+   "engine_release": "26",
+   "finished": true,
+   "envelope": {
+    "rst": true,
+    "finished": true,
+    "crashes": []
+   }
+  },
+  {
+   "name": "product",
+   "role": "production",
+   "mdin": "production: NPT, MC barostat, unrestrained, 30.0 ps\n &cntrl\n  imin=0, irest=1, ntx=5,\n  nstlim=15000, dt=0.002,\n  ntc=2, ntf=2, cut=9.0,\n  ntb=2, ntp=1, barostat=2, pres0=1.0, taup=2.0,\n  ntt=3, gamma_ln=2.0, ig=-1, temp0=300.0,\n  ntr=0,\n  iwrap=1, ioutfm=1, ntpr=500, ntwx=30, ntwr=5000,\n /\n",
+   "cntrl": {
+    "imin": "0",
+    "irest": "1",
+    "ntx": "5",
+    "nstlim": "15000",
+    "dt": "0.002",
+    "ntc": "2",
+    "ntf": "2",
+    "cut": "9.0",
+    "ntb": "2",
+    "ntp": "1",
+    "barostat": "2",
+    "pres0": "1.0",
+    "taup": "2.0",
+    "ntt": "3",
+    "gamma_ln": "2.0",
+    "ig": "-1",
+    "temp0": "300.0",
+    "ntr": "0",
+    "iwrap": "1",
+    "ioutfm": "1",
+    "ntpr": "500",
+    "ntwx": "30",
+    "ntwr": "5000"
+   },
+   "restart_from": "density",
+   "length_ps": 30.0,
+   "requested_seed": "-1",
+   "realized_seed": 20313,
+   "wall_s": 174,
+   "engine": "Amber 26 PMEMD (2026)",
+   "engine_release": "26",
+   "finished": true,
+   "envelope": {
+    "rst": true,
+    "finished": true,
+    "crashes": []
+   }
+  }
+ ],
+ "results": {
+  "mmgbsa": {
+   "delta_total_kcal_mol": -17.6005,
+   "frame_std": 1.5111,
+   "frame_sem": 0.1511,
+   "frames": 100.8,
+   "igb": "5",
+   "saltcon": "0.100",
+   "trajectory": "single (complex trajectory; receptor/ligand extracted)",
+   "run_on": "Tue Jun  9 16:52:58 2026",
+   "mmpbsa_version": "14.0",
+   "warnings": [
+    "MMPBSA.py: INCONSISTENCIES EXIST WITHIN INTERNAL POTENTIAL TERMS. THE VALIDITY OF THESE RESULTS ARE HIGHLY QUESTIONABLE"
+   ]
+  }
+ },
+ "analyses": {
+  "rmsd": {
+   "png": "rmsd.png",
+   "ok": true
+  },
+  "rmsf": {
+   "png": "rmsf.png",
+   "ok": true
+  },
+  "rg": {
+   "png": "rg.png",
+   "ok": true
+  },
+  "sasa": {
+   "png": "sasa.png",
+   "ok": true
+  },
+  "dssp": {
+   "png": "dssp.png",
+   "ok": true
+  },
+  "hbond": {
+   "png": "hbond.png",
+   "ok": true
+  },
+  "distmat": {
+   "png": "distmat.png",
+   "ok": true
+  },
+  "cluster": {
+   "png": "cluster.png",
+   "ok": true
+  },
+  "pca": {
+   "png": "pca.png",
+   "ok": true
+  },
+  "fel": {
+   "png": "fel.png",
+   "ok": true
+  },
+  "thermo": {
+   "png": "thermo.png",
+   "ok": true
+  },
+  "mmgbsa": {
+   "png": "mmgbsa.png",
+   "ok": true
+  }
+ },
+ "structure": "structure.pdb",
+ "environment": {
+  "conda_lock": {
+   "ambertools": "24.8",
+   "python": "3.11.15",
+   "numpy": "2.4.6",
+   "parmed": "4.3.1"
+  },
+  "pmemd": "Amber 26 PMEMD (2026)",
+  "conda_lock_file": "env.lock.yml"
+ },
+ "pipeline": {
+  "stage_envelopes": {
+   "s2": true,
+   "s3": true,
+   "s4": true,
+   "s5": true
+  },
+  "skills": [
+   "antechamber-ligandprep",
+   "tleap-build",
+   "amber-md-run",
+   "cpptraj-analysis"
+  ]
+ }
+}

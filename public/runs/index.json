@@ -1,0 +1,102 @@
+[
+ {
+  "id": "1l2y-regression",
+  "title": "1L2Y + MOL (indole)",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 5.0,
+  "delta_g": -18.1562,
+  "plip": true,
+  "engine": "Amber 26 PMEMD (2026)"
+ },
+ {
+  "id": "1l2y-rep1",
+  "title": "1L2Y + MOL, run 1",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 20.0,
+  "delta_g": -17.1779,
+  "plip": false,
+  "engine": "Amber 26 PMEMD (2026)"
+ },
+ {
+  "id": "1l2y-rep2",
+  "title": "1L2Y + MOL, run 2",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 2.0,
+  "delta_g": -17.7181,
+  "plip": false,
+  "engine": "Amber 26 PMEMD (2026)"
+ },
+ {
+  "id": "1l2y-rep3",
+  "title": "1L2Y + MOL, run 3",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 5.0,
+  "delta_g": -18.6336,
+  "plip": true,
+  "engine": "Amber 26 PMEMD (2026)"
+ },
+ {
+  "id": "1l2y-rep4",
+  "title": "1L2Y + MOL, run 4",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 30.0,
+  "delta_g": -19.1953,
+  "plip": false,
+  "engine": "Amber 26 PMEMD (2026)"
+ },
+ {
+  "id": "1l2y-rep5",
+  "title": "1L2Y + MOL, run 5",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 20.0,
+  "delta_g": -17.6065,
+  "plip": false,
+  "engine": "Amber 26 PMEMD (2026)"
+ },
+ {
+  "id": "1l2y-rep6",
+  "title": "1L2Y + MOL, run 6",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 30.0,
+  "delta_g": -17.6005,
+  "plip": false,
+  "engine": "Amber 26 PMEMD (2026)"
+ },
+ {
+  "id": "1l2y-rep7",
+  "title": "1L2Y + MOL, run 7",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 10.0,
+  "delta_g": -17.4754,
+  "plip": false,
+  "engine": "Amber 26 PMEMD (2026)"
+ },
+ {
+  "id": "1l2y-rep8",
+  "title": "1L2Y + MOL, run 8",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 5.0,
+  "delta_g": -18.4938,
+  "plip": false,
+  "engine": "Amber 26 PMEMD (2026)"
+ },
+ {
+  "id": "3htb-jz4",
+  "title": "3HTB + JZ4",
+  "ligand": "JZ4",
+  "protein_atoms": 2614,
+  "production_ps": 5.0,
+  "delta_g": -27.4121,
+  "plip": true,
+  "engine": "Amber 26 PMEMD (2026)"
+ }
+]
