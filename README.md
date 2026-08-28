@@ -4,7 +4,7 @@ A shareable, validated record of a molecular-dynamics simulation — a page a
 collaborator can open, inspect, compare, and hand to their agent.
 
 Built for the OpenAI WebMCP Challenge (Aug 25 – Sep 3, 2026). The page registers
-WebMCP tools (`document.modelContext.registerTool`) so an agent in ChatGPT's
+WebMCP tools (`navigator.modelContext.registerTool`) so an agent in ChatGPT's
 built-in browser or Chrome (`chrome://flags/#enable-webmcp-testing`) can read the
 run's manifest, validate every stage against AMBER physics rules, compare runs,
 explain uncertainty, and propose bounded, human-approved changes.
