@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError } from "../src/lib/runs";
 import { mean, sd } from "../src/lib/stats";
 import { execFileSync } from "node:child_process";
 const load = (id: string) => JSON.parse(readFileSync(`public/runs/${id}/manifest.json`, "utf8"));
@@ -88,5 +88,54 @@ describe("per-frame ΔG (Tier B)", () => {
     const e = explainResult(A, idx) as any;
     expect(e.uncertainty.corrected_sem).toBeGreaterThan(0); expect(e.which_uncertainty_to_quote).toMatch(/Quote ±0\.66 kcal\/mol/);
     expect(e.warning_note).toMatch(/kcal\/mol per frame/); expect(e.sign_claim.all_runs).toMatch(/^all 9/);
+  });
+});
+
+// ---- loader boundary (RC-001): mocked fetch; ids are unique per test because loadRun caches successes ----
+describe("loadRun / loadIndex with mocked fetch", () => {
+  const html = () => new Response("<!doctype html><html><body>fallback</body></html>", { status: 200, headers: { "content-type": "text/html" } });
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  const stub = (impl: (...a: any[]) => Promise<Response>) => { const f = vi.fn(impl); vi.stubGlobal("fetch", f); return f; };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("HTML fallback (dev server, HTTP 200) → RunLoadError naming the run and list_runs, not a JSON parser message", async () => {
+    const f = stub(async () => html());
+    const e = await loadRun("qa-html").catch(x => x);
+    expect(e).toBeInstanceOf(RunLoadError); expect(e.runId).toBe("qa-html"); expect(e.status).toBe(200);
+    expect(e.message).toMatch(/run 'qa-html' could not be loaded/); expect(e.message).toMatch(/HTML page instead of JSON/); expect(e.message).toMatch(/list_runs/);
+    expect(e.message).not.toMatch(/Unexpected token/);
+    expect(f).toHaveBeenCalledWith("/runs/qa-html/manifest.json");
+  });
+  it("HTTP 404 (static host) → RunLoadError with the status", async () => {
+    stub(async () => json({ error: "nope" }, 404));
+    const e = await loadRun("qa-404").catch(x => x);
+    expect(e).toBeInstanceOf(RunLoadError); expect(e.status).toBe(404); expect(e.message).toMatch(/no such run \(HTTP 404/); expect(e.message).toMatch(/list_runs/);
+  });
+  it("HTTP 500 and network failure → readable errors", async () => {
+    stub(async () => json({}, 500));
+    await expect(loadRun("qa-500")).rejects.toThrow(/HTTP 500/);
+    stub(async () => { throw new TypeError("Failed to fetch"); });
+    await expect(loadRun("qa-net")).rejects.toThrow(/network error.*Failed to fetch/);
+  });
+  it("valid JSON that is not a manifest → readable error", async () => {
+    stub(async () => json({ hello: "world" }));
+    await expect(loadRun("qa-shape")).rejects.toThrow(/not a run manifest/);
+  });
+  it("a failed load is not cached: the next call refetches and can succeed", async () => {
+    const f = stub(vi.fn().mockResolvedValueOnce(html()).mockResolvedValueOnce(json(A)));
+    await expect(loadRun("qa-retry")).rejects.toBeInstanceOf(RunLoadError);
+    const m = await loadRun("qa-retry"); expect(m.id).toBe(A.id); expect(m.stages.length).toBe(A.stages.length);
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+  it("a successful load is cached: one fetch for repeated calls", async () => {
+    const f = stub(async () => json(B));
+    const [x, y] = await Promise.all([loadRun("qa-cached"), loadRun("qa-cached")]);
+    expect(await loadRun("qa-cached")).toBe(x); expect(x).toBe(y); expect(x.id).toBe(B.id); expect(f).toHaveBeenCalledTimes(1);
+  });
+  it("loadIndex: HTML fallback, HTTP error, and a non-list body are readable errors; a list loads", async () => {
+    stub(async () => html()); await expect(loadIndex()).rejects.toThrow(/HTML page instead of JSON/);
+    stub(async () => json({}, 404)); await expect(loadIndex()).rejects.toThrow(/run index could not be loaded: HTTP 404/);
+    stub(async () => json({ not: "a list" })); await expect(loadIndex()).rejects.toThrow(/not a list of runs/);
+    stub(async () => json(idx)); expect((await loadIndex()).length).toBe(idx.length);
   });
 });

@@ -4,13 +4,59 @@ import { zipSync, strToU8 } from "fflate";
 import type { PerFrame } from "./types";
 import { mean, sd, sem, statisticalInefficiency, integratedAutocorrelationTime, correctedSem, blockAverageSem, halves, driftSlope, round } from "./stats";
 
-const cache = new Map<string, Promise<Manifest>>();
-export async function loadIndex(): Promise<IndexEntry[]> {
-  const r = await fetch("/runs/index.json"); return r.json();
+// ---- loading ----------------------------------------------------------
+// The dev server answers a missing file with the SPA's index.html (HTTP 200, text/html);
+// a static host answers 404. Both must become the same readable, actionable error, and a
+// failed load must not be cached, or a mistyped id can never recover without a reload.
+
+/** A run manifest could not be loaded. `message` names the run, the cause, and the recovery. */
+export class RunLoadError extends Error {
+  readonly runId: string; readonly reason: string; readonly status: number | null;
+  constructor(runId: string, reason: string, status: number | null) {
+    super(`run '${runId}' could not be loaded: ${reason}. Call list_runs (or open the run list at #/) for valid run ids.`);
+    this.name = "RunLoadError"; this.runId = runId; this.reason = reason; this.status = status;
+  }
 }
+
+/** Read a JSON body, rejecting HTML fallbacks and unparseable text with a stated reason. */
+async function readJson(r: Response, url: string): Promise<unknown> {
+  const type = r.headers.get("content-type") ?? "";
+  const text = await r.text();
+  if (/html/i.test(type) || /^\s*</.test(text)) throw new Error(`${url} returned an HTML page instead of JSON (the file does not exist; the server sent its fallback page)`);
+  try { return JSON.parse(text); } catch { throw new Error(`${url} is not valid JSON`); }
+}
+
+export async function loadIndex(): Promise<IndexEntry[]> {
+  const url = "/runs/index.json";
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`run index could not be loaded: HTTP ${r.status} for ${url}`);
+  const idx = await readJson(r, url);
+  if (!Array.isArray(idx)) throw new Error(`run index could not be loaded: ${url} is not a list of runs`);
+  return idx as IndexEntry[];
+}
+
+async function fetchRun(id: string): Promise<Manifest> {
+  const url = `/runs/${id}/manifest.json`;
+  let r: Response;
+  try { r = await fetch(url); }
+  catch (e: any) { throw new RunLoadError(id, `network error fetching ${url} (${e?.message ?? e})`, null); }
+  if (!r.ok) throw new RunLoadError(id, r.status === 404 ? `no such run (HTTP 404 for ${url})` : `HTTP ${r.status} for ${url}`, r.status);
+  let m: any;
+  try { m = await readJson(r, url); }
+  catch (e: any) { throw new RunLoadError(id, e.message, r.status); }
+  if (!m || typeof m !== "object" || typeof m.id !== "string" || !Array.isArray(m.stages)) throw new RunLoadError(id, `${url} is not a run manifest (no id/stages)`, r.status);
+  return m as Manifest;
+}
+
+const cache = new Map<string, Promise<Manifest>>();
+/** Cached per id. A rejected load is evicted so the next call (a retry, or a corrected id) fetches again. */
 export function loadRun(id: string): Promise<Manifest> {
-  if (!cache.has(id)) cache.set(id, fetch(`/runs/${id}/manifest.json`).then(r => { if (!r.ok) throw new Error(`no run ${id}`); return r.json(); }));
-  return cache.get(id)!;
+  let p = cache.get(id);
+  if (!p) {
+    p = fetchRun(id); cache.set(id, p);
+    p.catch(() => { if (cache.get(id) === p) cache.delete(id); });
+  }
+  return p;
 }
 
 // ---- validation -------------------------------------------------------

@@ -20,8 +20,12 @@ dl { display:grid; grid-template-columns: max-content 1fr; gap:4px 14px; margin:
 .badge.approved { color:var(--pass); border-color:var(--pass); } .badge.rejected { color:var(--fail); } .badge.pending { color:var(--warn); border-color:var(--warn); }
 .pass { color:var(--pass); } .fail { color:var(--fail); }
 .titlebar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; } .titlebar select { margin-left:auto; }
-.stages { display:flex; flex-wrap:wrap; align-items:center; gap:6px; } .stage { display:flex; align-items:center; gap:6px; cursor:pointer; } .arrow { color:var(--dim); }
+.stages { display:flex; flex-wrap:wrap; align-items:center; gap:6px; } .stage { display:flex; align-items:center; gap:6px; } .arrow { color:var(--dim); }
 .stagebox { border:1px solid var(--line); border-radius:6px; padding:8px 10px; min-width:120px; font-size:13px; } .stage.open .stagebox, .stagebox:hover { border-color:var(--acc); } .stagename { font-weight:600; font-family: ui-monospace, monospace; }
+/* the stage box is a native <button> (keyboard disclosure); undo the generic button look so it renders exactly as the former div did */
+button.stagebox { display:block; background:transparent; color:inherit; font:inherit; font-size:13px; font-weight:400; text-align:left; margin:0; cursor:pointer; }
+button.stagebox > span { display:block; } button.stagebox > .badge { display:inline-block; }
+button.stagebox:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
 .stagedetail { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px; } @media (max-width:1300px) { .stagedetail { grid-template-columns:1fr; } }
 pre { background:#0b0f14; border:1px solid var(--line); border-radius:6px; padding:10px; overflow:auto; font-size:12.5px; margin:0; max-height:360px; } pre.out { max-height:280px; }
 .findings { list-style:none; padding:0; margin:0; font-size:13px; } .findings li { padding:4px 0; border-bottom:1px solid var(--line); }

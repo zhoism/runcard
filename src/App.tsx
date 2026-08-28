@@ -14,12 +14,14 @@ const Verdict = ({ r }: { r: Report }) => <span className={`badge ${r.hasFail ? 
 export default function App() {
   const route = useStore(s => s.route);
   const [idx, setIdx] = useState<IndexEntry[]>([]);
-  useEffect(() => { loadIndex().then(setIdx); }, []);
+  const [idxErr, setIdxErr] = useState<string | null>(null);
+  useEffect(() => { loadIndex().then(setIdx, e => setIdxErr(String(e?.message ?? e))); }, []);
   const parts = route.split("/").filter(Boolean);
   return (
     <div className="app">
       <Header />
       <main>
+        {idxErr && <div className="interp warn" role="alert">{idxErr} — reload the page to try again.</div>}
         <Boundary label="Page">{parts[0] === "run" && parts[1] ? <RunPage key={parts[1]} id={parts[1]} idx={idx} /> :
          parts[0] === "compare" && parts[2] ? <ComparePage a={parts[1]} b={parts[2]} idx={idx} /> :
          <Home idx={idx} />}</Boundary>
@@ -55,10 +57,24 @@ function Home({ idx }: { idx: IndexEntry[] }) {
   );
 }
 
+/** Settled load failure: the message names the run and the cause; the reader can go back or retry (the loader evicts failed loads, so retry refetches). */
+function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return <section>
+    <div className="interp warn" role="alert">{message}</div>
+    <p><a href="#/">← back to the run list</a> <button className="ghost" onClick={onRetry}>retry</button></p>
+  </section>;
+}
 function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const [m, setM] = useState<Manifest | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
-  useEffect(() => { setM(null); loadRun(id).then(setM).catch(() => setM(null)); }, [id]);
+  useEffect(() => {
+    let live = true; setM(null); setErr(null);
+    loadRun(id).then(x => { if (live) setM(x); }, e => { if (live) setErr(String(e?.message ?? e)); });
+    return () => { live = false; };
+  }, [id, attempt]);
+  if (err) return <LoadError message={err} onRetry={() => setAttempt(a => a + 1)} />;
   if (!m) return <p className="dim">loading {id}…</p>;
   const ens = idx.length ? ensemble(idx, id) : null;
   const mm = m.results.mmgbsa; const prod = m.stages.find(s => s.role === "production");
@@ -86,13 +102,15 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
       </div>
 
       <div className="card">
-        <h2>Stages <span className="dim">click a stage for its input and validation</span></h2>
-        <div className="stages">{m.stages.map((s, i) => <div key={s.name} className={`stage ${open === s.name ? "open" : ""}`} onClick={() => setOpen(open === s.name ? null : s.name)}>
-          {i > 0 && <span className="arrow">→</span>}
-          <div className="stagebox"><div className="stagename">{s.name}</div><div className="dim">{s.role}{s.length_ps != null ? ` · ${s.length_ps} ps` : ""}</div>
-            <div className="dim">{s.cntrl.temp0 ? `${s.cntrl.temp0} K` : ""}{s.cntrl.ntp === "1" ? " NPT" : s.cntrl.ntb === "1" ? " NVT" : ""}{s.cntrl.ntr === "1" ? " restrained" : ""}</div>
-            <Verdict r={reports[s.name]} /></div></div>)}</div>
-        {open && (() => { const s = m.stages.find(x => x.name === open)!; const r = reports[open]; return <div className="stagedetail">
+        <h2>Stages <span className="dim">select a stage for its input and validation</span></h2>
+        {/* Each stage is a native disclosure button: Tab reaches it, Enter/Space toggle it, aria-expanded carries the state. The arrow is decoration. */}
+        <div className="stages">{m.stages.map((s, i) => <div key={s.name} className={`stage ${open === s.name ? "open" : ""}`}>
+          {i > 0 && <span className="arrow" aria-hidden="true">→</span>}
+          <button type="button" className="stagebox" id={`stage-${s.name}`} aria-expanded={open === s.name} aria-controls={open === s.name ? "stagedetail" : undefined} onClick={() => setOpen(open === s.name ? null : s.name)}>
+            <span className="stagename">{s.name}</span><span className="dim">{s.role}{s.length_ps != null ? ` · ${s.length_ps} ps` : ""}</span>
+            <span className="dim">{s.cntrl.temp0 ? `${s.cntrl.temp0} K` : ""}{s.cntrl.ntp === "1" ? " NPT" : s.cntrl.ntb === "1" ? " NVT" : ""}{s.cntrl.ntr === "1" ? " restrained" : ""}</span>
+            <Verdict r={reports[s.name]} /></button></div>)}</div>
+        {open && (() => { const s = m.stages.find(x => x.name === open)!; const r = reports[open]; return <div className="stagedetail" id="stagedetail" role="region" aria-labelledby={`stage-${open}`}>
           <div><h3>{s.name}.in</h3><pre>{s.mdin}</pre>
             <div className="dim">restarts from {s.restart_from || "initial coordinates"} · requested ig={s.requested_seed} → realized seed {s.realized_seed ?? "n/a"} · wall {s.wall_s ?? "?"} s · {s.finished ? "finished" : "not finished"}{s.envelope?.crashes?.length ? ` · crashes: ${s.envelope.crashes.join(", ")}` : ""}</div></div>
           <div><h3>Validation</h3><ul className="findings">{r.findings.map((f, i) => <li key={i}><span className={`badge ${f.level.toLowerCase()}`}>{f.level}</span> <b>{f.rule}</b> — {f.detail}</li>)}</ul></div>
@@ -149,7 +167,16 @@ function Sparkline({ x, lengthPs }: { x: number[]; lengthPs: number | null }) {
 
 function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] }) {
   const [d, setD] = useState<ReturnType<typeof diffRuns> | null>(null);
-  useEffect(() => { if (idx.length) Promise.all([loadRun(a), loadRun(b)]).then(([x, y]) => setD(diffRuns(x, y, idx))); }, [a, b, idx]);
+  const [err, setErr] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!idx.length) return;
+    let live = true; setD(null); setErr(null);
+    Promise.all([loadRun(a), loadRun(b)]).then(([x, y]) => diffRuns(x, y, idx))
+      .then(r => { if (live) setD(r); }, e => { if (live) setErr(String(e?.message ?? e)); });
+    return () => { live = false; };
+  }, [a, b, idx, attempt]);
+  if (err) return <LoadError message={`compare ${a} vs ${b}: ${err}`} onRetry={() => setAttempt(n => n + 1)} />;
   if (!d) return <p className="dim">comparing…</p>;
   return <section>
     <h1>Compare <a href={`#/run/${a}`}>{a}</a> vs <a href={`#/run/${b}`}>{b}</a></h1>
