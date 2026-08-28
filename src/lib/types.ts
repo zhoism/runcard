@@ -1,3 +1,6 @@
+export const GB_TERMS = ["BOND", "ANGLE", "DIHED", "VDWAALS", "EEL", "1-4 VDW", "1-4 EEL", "EGB", "ESURF"] as const;
+export type GbTerm = typeof GB_TERMS[number];
+export interface PerFrame { n: number; terms: Record<GbTerm, number[]>; delta_total: number[]; source: string[]; esurf_formula: string; reproduces: { delta_total_mean: boolean; sd_ddof0: boolean; checked_against: string } }
 export interface Stage {
   name: string; role: string; mdin: string; cntrl: Record<string, string>;
   restart_from: string; length_ps: number | null; requested_seed?: string;
@@ -15,7 +18,12 @@ export interface Manifest {
   };
   stages: Stage[];
   results: {
-    mmgbsa?: { delta_total_kcal_mol: number; frame_std: number; frame_sem: number; frames: number | null; igb: string; saltcon: string; trajectory: string; run_on: string | null; mmpbsa_version: string | null; warnings: string[] };
+    mmgbsa?: {
+      delta_total_kcal_mol: number; frame_std: number; frame_sem: number; sd_convention?: string;
+      frames: number | null; frames_header_text?: string | null; frames_note?: string;
+      igb: string; saltcon: string; params?: Record<string, string>; trajectory: string; run_on: string | null; mmpbsa_version: string | null; warnings: string[];
+      per_frame?: PerFrame | null;
+    };
     plip?: { frame: { policy: string; index: number; nframes: number } | null; ligand: Record<string, unknown> | null; interactions: Record<string, { residue: string; dist?: number }[]>; source?: string };
   };
   analyses: Record<string, { png: string; ok: boolean | null }>;

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual } from "../src/lib/runs";
+import { mean, sd } from "../src/lib/stats";
 import { execFileSync } from "node:child_process";
 const load = (id: string) => JSON.parse(readFileSync(`public/runs/${id}/manifest.json`, "utf8"));
 const idx = JSON.parse(readFileSync("public/runs/index.json", "utf8"));
@@ -59,5 +60,33 @@ describe("bundle", () => {
     expect(f["md/product.in"]).toMatch(/ig=\d{4,}/); expect(f["md/product.in"]).toContain("nstlim=50000");
     const g = rerunBundle(A, { seed: "fresh", target: "slurm", approved: [] });
     expect(g["md/product.in"]).toContain("ig=-1"); expect(g["run.sh"]).toContain("#SBATCH"); expect(g["run.sh"].split("\n").filter(l => l.includes("pmemd")).length).toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe("per-frame ΔG (Tier B)", () => {
+  it("every manifest's per-frame series reproduces mmgbsa.dat's mean and population SD to 4 dp", () => {
+    for (const r of idx) {
+      const mm = load(r.id).results.mmgbsa; expect(mm.per_frame, r.id).toBeTruthy();
+      expect(mm.per_frame.n).toBe(100); expect(mm.frames).toBe(100); expect(mm.frames_header_text).toBe("100.8");
+      expect(mean(mm.per_frame.delta_total)).toBeCloseTo(mm.delta_total_kcal_mol, 4);
+      expect(sd(mm.per_frame.delta_total, 0)).toBeCloseTo(mm.frame_std, 4);
+      expect(mm.per_frame.reproduces).toEqual({ delta_total_mean: true, sd_ddof0: true, checked_against: "mmgbsa.dat DELTA TOTAL" });
+    }
+  });
+  it("uncertainty: corrected SEM ≥ naive, N_eff < N, thresholds stated", () => {
+    const u = uncertaintyFromFrames(load("1l2y-rep4").results.mmgbsa.per_frame, 30);
+    expect(u.per_frame_sem).toBeCloseTo(0.1711, 4); expect(u.corrected_sem).toBeGreaterThanOrEqual(u.per_frame_sem);
+    expect(u.n_eff).toBeLessThanOrEqual(100); expect(u.frame_interval_ps).toBe(0.3); expect(u.thresholds.drifting_if).toContain("2");
+    expect(["converged", "drifting", "no drift detected", "too short to judge"]).toContain(u.verdict);
+  });
+  it("internal residual: DIHED dominates on 1l2y-rep4, magnitude tiny vs ΔG", () => {
+    const mm = load("1l2y-rep4").results.mmgbsa; const r = internalResidual(mm.per_frame, mm.delta_total_kcal_mol);
+    expect(r.dominant_term).toBe("DIHED"); expect(r.total.max_abs).toBeLessThan(0.2); expect(r.fraction_of_delta_g).toBeLessThan(1e-3);
+    expect(r.by_term.BOND.max_abs).toBeLessThanOrEqual(0.0002);
+  });
+  it("explain_result carries numbers, not adjectives", () => {
+    const e = explainResult(A, idx) as any;
+    expect(e.uncertainty.corrected_sem).toBeGreaterThan(0); expect(e.which_uncertainty_to_quote).toMatch(/Quote ±0\.66 kcal\/mol/);
+    expect(e.warning_note).toMatch(/kcal\/mol per frame/); expect(e.sign_claim.all_runs).toMatch(/^all 9/);
   });
 });

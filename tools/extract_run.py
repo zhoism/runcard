@@ -40,6 +40,63 @@ def outfile_facts(out_path):
     f["finished"] = "Total wall time" in t or "FINAL RESULTS" in t
     return f
 
+
+GB_TERMS = ["BOND", "ANGLE", "DIHED", "VDWAALS", "EEL", "1-4 VDW", "1-4 EEL", "EGB", "ESURF"]
+
+def parse_gb_mdout(path):
+    """Per-frame energy terms from an MMPBSA.py _MMPBSA_<part>_gb.mdout.0 file: one dict of lists, 100 entries each."""
+    t = rd(path)
+    blocks = re.split(r"^Processing frame \d+\s*$", t, flags=re.M)[1:]
+    terms = {k: [] for k in GB_TERMS}
+    for b in blocks:
+        kv = dict((k.strip(), float(v)) for k, v in re.findall(r"(BOND|ANGLE|DIHED|VDWAALS|EEL|EGB|1-4 VDW|1-4 EEL|RESTRAINT|ESURF)\s*=\s*(-?[\d.]+)", b))
+        for k in GB_TERMS: terms[k].append(kv[k])
+    return terms
+
+def parse_surf(path):
+    """SASA (Å²) per frame from _MMPBSA_<part>_gb_surf.dat.0 (header '#Frame SA_00001', then 'frame  SASA')."""
+    return [float(ln.split()[1]) for ln in rd(path).splitlines() if ln.strip() and not ln.startswith("#")]
+
+def parse_mmpbsa_info(path):
+    t = rd(path); info = {}
+    for k in ("startframe", "endframe", "interval", "surften", "surfoff", "igb", "saltcon", "receptor_mask", "ligand_mask", "molsurf"):
+        m = re.search(rf"^INPUT\['{k}'\]\s*=\s*(.+)$", t, re.M)
+        if m: info[k] = m.group(1).strip().strip("'")
+    m = re.search(r"^numframes\s*=\s*(\d+)", t, re.M)
+    if m: info["numframes"] = int(m.group(1))
+    return info
+
+def per_frame_gb(mmdir, dat_text):
+    """Reconstruct per-frame ΔG from the three per-part mdout files + SASA. Returns None unless it reproduces
+    mmgbsa.dat's DELTA TOTAL mean (4 dp) and population SD (4 dp) — a number is a claim."""
+    parts = {}
+    for part in ("complex", "receptor", "ligand"):
+        md_ = mmdir / f"_MMPBSA_{part}_gb.mdout.0"; sf = mmdir / f"_MMPBSA_{part}_gb_surf.dat.0"
+        if not (md_.exists() and sf.exists()): return None, "per-part mdout/surf files absent"
+        parts[part] = parse_gb_mdout(md_); parts[part]["_sasa"] = parse_surf(sf)
+    info = parse_mmpbsa_info(mmdir / "_MMPBSA_info") if (mmdir / "_MMPBSA_info").exists() else {}
+    surften = float(info.get("surften", 0.0072)); surfoff = float(info.get("surfoff", 0.0))
+    n = len(parts["complex"]["BOND"])
+    if any(len(parts[p][k]) != n for p in parts for k in GB_TERMS + ["_sasa"]): return None, "frame counts differ between parts"
+    for p in parts:
+        if all(v == 0.0 for v in parts[p]["ESURF"]):  # gbsa=0 in mmpbsa_py_energy: ESURF comes from cpptraj SASA
+            parts[p]["ESURF"] = [surften * a + surfoff for a in parts[p]["_sasa"]]
+    delta = {k: [parts["complex"][k][i] - parts["receptor"][k][i] - parts["ligand"][k][i] for i in range(n)] for k in GB_TERMS}
+    total = [sum(delta[k][i] for k in GB_TERMS) for i in range(n)]
+    mean = sum(total) / n; sd0 = (sum((x - mean) ** 2 for x in total) / n) ** 0.5
+    m = re.search(r"DELTA TOTAL\s+(-?[\d.]+)\s+([\d.]+)\s+([\d.]+)", dat_text)
+    want_mean, want_sd = float(m.group(1)), float(m.group(2))
+    ok_mean, ok_sd = abs(round(mean, 4) - want_mean) < 1e-4 + 1e-9, abs(round(sd0, 4) - want_sd) < 1e-4 + 1e-9
+    if not (ok_mean and ok_sd):
+        return None, f"MISMATCH: per-frame mean {mean:.4f} vs dat {want_mean}; sd(ddof=0) {sd0:.4f} vs dat {want_sd}"
+    r4 = lambda xs: [round(x, 4) for x in xs]
+    return {
+        "n": n, "terms": {k: r4(delta[k]) for k in GB_TERMS}, "delta_total": r4(total),
+        "source": ["_MMPBSA_{complex,receptor,ligand}_gb.mdout.0", "_MMPBSA_{complex,receptor,ligand}_gb_surf.dat.0", "_MMPBSA_info"],
+        "esurf_formula": f"surften*SASA+surfoff with surften={surften}, surfoff={surfoff}",
+        "reproduces": {"delta_total_mean": True, "sd_ddof0": True, "checked_against": "mmgbsa.dat DELTA TOTAL"},
+    }, info
+
 def stage_role(name, c):
     if c.get("imin") == "1": return "minimization"
     if name.startswith("heat"): return "heating"
@@ -111,12 +168,21 @@ def main():
         if "INCONSISTENCIES EXIST WITHIN INTERNAL POTENTIAL" in t:
             warns.append("MMPBSA.py: INCONSISTENCIES EXIST WITHIN INTERNAL POTENTIAL TERMS. THE VALIDITY OF THESE RESULTS ARE HIGHLY QUESTIONABLE")
         ver = re.search(r"MMPBSA.py Version=(\S+)", t)
+        pf, info = per_frame_gb(run / "analysis/mmgbsa", t)
+        if pf is None: print(f"  !! {rid}: per-frame ΔG not written — {info}", file=sys.stderr); info = {}
+        nframes = pf["n"] if pf else info.get("numframes")
+        if pf and info.get("numframes") not in (None, pf["n"]): print(f"  !! {rid}: mdout has {pf['n']} frames but _MMPBSA_info says {info['numframes']}", file=sys.stderr)
         results["mmgbsa"] = {
             "delta_total_kcal_mol": float(dt_.group(1)), "frame_std": float(dt_.group(2)), "frame_sem": float(dt_.group(3)),
-            "frames": float(fr.group(1)) if fr else None, "igb": gb.get("igb"), "saltcon": gb.get("saltcon"),
+            "sd_convention": "population (ddof=0), as MMPBSA.py 14.0 reports",
+            "frames": nframes, "frames_header_text": fr.group(1) if fr else None,
+            "frames_note": "frame count from the per-frame mdout blocks, cross-checked with _MMPBSA_info numframes; mmgbsa.dat's header prints (endframe-startframe)/interval+1 un-floored",
+            "igb": gb.get("igb"), "saltcon": gb.get("saltcon"),
+            "params": {k: info[k] for k in ("startframe", "endframe", "interval", "surften", "surfoff", "receptor_mask", "ligand_mask") if k in info},
             "trajectory": "single (complex trajectory; receptor/ligand extracted)",
             "run_on": (re.search(r"Run on (.+)", t) or [None, None])[1],
             "mmpbsa_version": ver.group(1) if ver else None, "warnings": warns,
+            "per_frame": pf,
         }
     analyses = {}
     for k, a in ((s5 or {}).get("outputs", {}).get("analyses", {})).items():

@@ -1,13 +1,13 @@
 # STATUS — runcard
 
-Updated 2026-08-28 (Tier A done; see `~/.claude/plans/great-plan-it-distributed-key.md` for tiers B–D). Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
+Updated 2026-08-28 (Tiers A and B done; see `~/.claude/plans/great-plan-it-distributed-key.md` for tiers B–D). Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
 
 ## Where it stands
 
 | Area | State |
 |---|---|
 | Validator (`src/lib/amberCheck.ts`) | done — 11 rules, pinned to `check_amber.py` via `test/oracle/expected.json` over 553 inputs |
-| Manifests (`public/runs/`) | done — 10 runs, all fields extracted from artifacts by `tools/extract_run.py` |
+| Manifests (`public/runs/`) | done — 10 runs, all fields extracted from artifacts by `tools/extract_run.py`; per-frame ΔG (100 frames × 9 GB terms) reconstructed from `_MMPBSA_*_gb.mdout.0` + SASA and gated on reproducing `mmgbsa.dat` exactly |
 | Tools (`src/webmcp.ts`, `src/lib/runs.ts`) | done — 10 tools, one table drives WebMCP + in-page console |
 | WebMCP in a real agent | **verified 2026-08-28** in ChatGPT's browser: tools listed, `validate_stage` logged, `propose_change` → Approve worked |
 | Page renders | verified (headless Chrome): home, run, compare. WebGL-less browsers get a fallback instead of a crash |
@@ -15,7 +15,7 @@ Updated 2026-08-28 (Tier A done; see `~/.claude/plans/great-plan-it-distributed-
 | Demo video, Devpost text | not started |
 | UI polish | postponed |
 
-`bun run test` (561) and `bun run build` pass at HEAD.
+`bun run test` (578) and `bun run build` pass at HEAD.
 
 ## Open decisions (human)
 
@@ -30,7 +30,8 @@ Updated 2026-08-28 (Tier A done; see `~/.claude/plans/great-plan-it-distributed-
 - ~~materiality = 4-key blacklist~~ → `PARAM_CLASS` taxonomy (physics / thermodynamic_state / sampling_length / restraints / minimization / output_cadence / stochastic); interpretation keyed on classes and quotes |ΔΔG| vs run-to-run SD.
 - Proposals live in page memory; a reload clears them. Intentional (nothing is authored here) — say so on the page.
 - The rerun bundle needs the original `build/` inputs (mol2, frcmod, cleaned PDB); it is not self-sufficient.
-- MMPBSA.py reports `100.8 complex frames`; shown verbatim and labelled, not rounded.
+- ~~`100.8 complex frames`~~ → `frames: 100` from the per-frame blocks (cross-checked with `_MMPBSA_info numframes`); the header string is kept as `frames_header_text` with a note that it is `(endframe−startframe)/interval+1` un-floored.
+- ~~"SEM understates uncertainty" with no number~~ → `explain_result.uncertainty`: g, τ, N_eff, corrected SEM, block-averaging plateau, halves drift + verdict with stated thresholds; `internal_term_residual` quantifies the MMPBSA warning (DIHED-only, ~0.01 % of ΔG).
 
 ## Architecture
 
@@ -41,6 +42,7 @@ public/runs/index.json           ← tools/build_index.py (derived from manifest
 src/lib/runs.ts     pure functions: validateStage/All, ensemble, explainResult, diffRuns,
                     makeProposal/applyEdits, rerunBundle/zipBundle          (test/runs.test.ts)
 src/lib/amberCheck.ts   validator port                                     (test/amberCheck.test.ts, oracle-pinned)
+src/lib/stats.ts    autocorrelation / statistical inefficiency / block averaging / drift   (test/stats.test.ts, synthetic series)
         │
 src/webmcp.ts       TOOLS[] — name, description, JSON schema, readOnly, run()
                     registerWebMCP(): navigator.modelContext.registerTool for each
@@ -63,7 +65,7 @@ mutating tool and stops at the Approve button; read tools may navigate the page 
 | `get_run_manifest` | no (navigates) | full manifest minus mdin text |
 | `get_stage_input` | no | verbatim `.in` of one stage + restart source |
 | `validate_stage` | no | PASS/WARN/FAIL findings for a stage, all stages, or supplied text |
-| `explain_result` | no | ΔG meaning, SD/SEM caveat, seeds, run-to-run spread, warnings verbatim, provenance |
+| `explain_result` | no | ΔG meaning; naive vs autocorrelation-corrected SEM, N_eff, drift verdict; which uncertainty to quote; seeds; run-to-run spread (all / ≥10 ps); sign claim; MMPBSA warning verbatim + quantified residual; provenance |
 | `diff_runs` | no (navigates) | same-system?, system diff, per-stage &cntrl diff with meaning/materiality, interpretation |
 | `get_ensemble` | no | n/mean/SD/min/max of ΔG across same-system runs |
 | `propose_change` | **yes → pending** | bounded &cntrl edit, validated before/after, awaits Approve |

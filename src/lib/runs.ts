@@ -1,6 +1,8 @@
 import type { Manifest, IndexEntry, SystemKey } from "./types";
 import { checkAmberIn, type Report } from "./amberCheck";
 import { zipSync, strToU8 } from "fflate";
+import type { PerFrame } from "./types";
+import { mean, sd, sem, statisticalInefficiency, integratedAutocorrelationTime, correctedSem, blockAverageSem, halves, driftSlope, round } from "./stats";
 
 const cache = new Map<string, Promise<Manifest>>();
 export async function loadIndex(): Promise<IndexEntry[]> {
@@ -63,21 +65,63 @@ export function signClaim(st: Stratum): string {
 }
 
 // ---- explain --------------------------------------------------------
+/** Convergence thresholds, stated in the output so the verdict is checkable. */
+export const CONVERGENCE = { drift_sigma: 2, min_n_eff: 10 };
+export function uncertaintyFromFrames(pf: PerFrame, lengthPs: number | null) {
+  const x = pf.delta_total, n = x.length;
+  const g = statisticalInefficiency(x), nEff = n / g, tau = integratedAutocorrelationTime(g);
+  const naive = sem(x, 0), corrected = correctedSem(x, g, 0);
+  const blocks = blockAverageSem(x); const plateau = blocks.length ? blocks[blocks.length - 1] : null;
+  const h = halves(x); const slope = driftSlope(x);
+  const framePs = lengthPs != null ? lengthPs / n : null;
+  const drifting = Math.abs(h.diff) > CONVERGENCE.drift_sigma * corrected;
+  const verdict = nEff < CONVERGENCE.min_n_eff ? "too short to judge" : drifting ? "drifting" : "no drift detected";
+  return {
+    n_frames: n, frame_interval_ps: framePs != null ? round(framePs, 3) : null,
+    per_frame_sd: round(sd(x, 0)), per_frame_sem: round(naive),
+    statistical_inefficiency_g: round(g, 2), integrated_autocorrelation_time_frames: round(tau, 2),
+    integrated_autocorrelation_time_ps: framePs != null ? round(tau * framePs, 3) : null,
+    n_eff: round(nEff, 1), corrected_sem: round(corrected),
+    block_averaging: { sem_by_block: blocks.map(b => ({ block: b.block, blocks: b.blocks, sem: round(b.sem) })), plateau_sem: plateau ? round(plateau.sem) : null },
+    halves: { first: round(h.first), second: round(h.second), diff: round(h.diff) },
+    drift_kcal_per_frame: round(slope, 5), drift_kcal_per_ps: framePs ? round(slope / framePs, 4) : null,
+    verdict, thresholds: { drifting_if: `|second half − first half| > ${CONVERGENCE.drift_sigma} × corrected SEM`, too_short_if: `N_eff < ${CONVERGENCE.min_n_eff}` },
+    method: "g = 1 + 2Σ(1−t/N)C(t) to first non-positive C(t) (Chodera 2007); N_eff = N/g; corrected SEM = SD·√(g/N); block averaging per Flyvbjerg–Petersen",
+    reproduces: pf.reproduces,
+  };
+}
+export function internalResidual(pf: PerFrame, deltaG: number) {
+  const internal = ["BOND", "ANGLE", "DIHED", "1-4 VDW", "1-4 EEL"] as const;
+  const by = Object.fromEntries(internal.map(k => { const v = pf.terms[k]; return [k, { mean: round(mean(v)), sd: round(sd(v, 0)), max_abs: round(Math.max(...v.map(Math.abs))) }]; })) as Record<typeof internal[number], { mean: number; sd: number; max_abs: number }>;
+  const tot = pf.delta_total.map((_, i) => internal.reduce((a, k) => a + pf.terms[k][i], 0));
+  const dominant = internal.reduce((a, b) => by[a].max_abs >= by[b].max_abs ? a : b);
+  return { by_term: by, total: { mean: round(mean(tot)), sd: round(sd(tot, 0)), max_abs: round(Math.max(...tot.map(Math.abs))) },
+    fraction_of_delta_g: round(Math.abs(mean(tot)) / Math.abs(deltaG), 6), dominant_term: dominant,
+    note: `In single-trajectory MM-GBSA the internal terms of complex − receptor − ligand should cancel exactly. Here ${dominant} is the term that does not (max |Δ| ${by[dominant].max_abs} kcal/mol per frame); the others cancel to print precision. The residual's mean is ${round(mean(tot))} kcal/mol against ΔG = ${deltaG}. The cause is not recorded in the artifacts.` };
+}
 export function explainResult(m: Manifest, idx: IndexEntry[]) {
   const mm = m.results.mmgbsa; if (!mm) return { error: "no MM-GBSA result in this run" };
   const prod = m.stages.find(s => s.role === "production");
   const ens = ensemble(idx, m.id);
+  const pf = mm.per_frame ?? null;
+  const unc = pf ? uncertaintyFromFrames(pf, prod?.length_ps ?? null) : null;
+  const resid = pf ? internalResidual(pf, mm.delta_total_kcal_mol) : null;
+  const spreadSd = ens.all.sd;
+  const which = unc && spreadSd != null
+    ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD, n=${ens.all.n}) as the uncertainty of a single run's ΔG. Within this run the correlation-corrected SEM is ${unc.corrected_sem} (N_eff ≈ ${unc.n_eff} of ${unc.n_frames} frames); the naive per-frame SEM ${unc.per_frame_sem} is ${(unc.corrected_sem / unc.per_frame_sem).toFixed(1)}× too small. Run-to-run spread is ${(spreadSd / unc.corrected_sem).toFixed(1)}× the corrected SEM, so seed-to-seed variation, not frame noise, dominates.`
+    : unc ? `Within this run the correlation-corrected SEM is ${unc.corrected_sem}; no other runs of this system to estimate run-to-run spread.` : "per-frame data not archived for this run; only MMPBSA.py's naive SEM is available.";
   return {
     value_kcal_mol: mm.delta_total_kcal_mol,
-    what_it_is: `Single-trajectory MM-GBSA (igb=${mm.igb}, saltcon=${mm.saltcon}) binding free energy, averaged over ${mm.frames} frames of the ${prod?.length_ps} ps production stage.`,
-    per_frame_std: mm.frame_std, per_frame_sem: mm.frame_sem,
-    sem_caveat: "The per-frame SEM assumes independent frames; frames from one short trajectory are correlated, so it understates the uncertainty.",
+    what_it_is: `Single-trajectory MM-GBSA (igb=${mm.igb}, saltcon=${mm.saltcon}) binding free energy, averaged over ${mm.frames} frames (every ${mm.params?.interval ?? "?"}th of ${mm.params?.endframe ?? "?"}) of the ${prod?.length_ps} ps production stage.`,
+    per_frame_std: mm.frame_std, per_frame_sem: mm.frame_sem, sd_convention: mm.sd_convention,
+    uncertainty: unc, which_uncertainty_to_quote: which,
     stochasticity: { requested_seed: prod?.requested_seed, realized_seed: prod?.realized_seed, thermostat: `ntt=${prod?.cntrl.ntt} gamma_ln=${prod?.cntrl.gamma_ln}`,
       note: "ig=-1 draws a wallclock seed; pmemd wrote the realized seed to the .out. Two runs with different seeds are different samples of the same ensemble — differing ΔG is expected, not a bug." },
     run_to_run: ens,
     sign_claim: { all_runs: signClaim(ens.all), long_runs: signClaim(ens.long) },
-    warnings: mm.warnings, warning_note: mm.warnings.length ? "MMPBSA.py emits this when complex − receptor − ligand internal terms (bond/angle/dihedral) do not cancel exactly in single-trajectory mode; it is a flag on the decomposition, recorded here verbatim rather than suppressed." : undefined,
-    provenance: { computed_on: mm.run_on, mmpbsa_version: mm.mmpbsa_version, engine: prod?.engine, ambertools: m.environment.conda_lock.ambertools, source_run_dir: m.source?.run_dir },
+    warnings: mm.warnings, internal_term_residual: resid,
+    warning_note: mm.warnings.length ? (resid ? `MMPBSA.py's warning is triggered by the internal-term residual quantified in internal_term_residual: ${resid.total.mean} ± ${resid.total.sd} kcal/mol per frame (${(resid.fraction_of_delta_g * 100).toFixed(3)} % of ΔG), from ${resid.dominant_term}. Recorded verbatim, quantified, not suppressed.` : "MMPBSA.py emits this when complex − receptor − ligand internal terms do not cancel exactly in single-trajectory mode; per-frame data not archived, so the size of the residual is unknown.") : undefined,
+    provenance: { computed_on: mm.run_on, mmpbsa_version: mm.mmpbsa_version, engine: prod?.engine, ambertools: m.environment.conda_lock.ambertools, source_run_dir: m.source?.run_dir, per_frame_source: pf?.source, frames_header_text: mm.frames_header_text, frames_note: mm.frames_note },
   };
 }
 
