@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""Derive public/runs/index.json from the manifests. Every field is copied from a manifest;
+`system` carries the fields the page hashes into a same-system fingerprint (src/lib/runs.ts)."""
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNS = ROOT / "public/runs"
+
+def entry(m):
+    prod = next((s for s in m["stages"] if s["role"] == "production"), None)
+    sy = m["system"]; mm = m["results"].get("mmgbsa") or {}
+    return {
+        "id": m["id"], "title": m["title"], "ligand": sy["ligand"]["resname"], "protein_atoms": sy["protein"]["atoms"],
+        "production_ps": prod["length_ps"] if prod else None, "delta_g": mm.get("delta_total_kcal_mol"),
+        "plip": "plip" in m["results"], "engine": m["environment"].get("pmemd") or m["engine"],
+        "system": {
+            "ligand": sy["ligand"]["resname"], "ligand_atoms": sy["ligand"]["atoms"], "atom_types": sorted(sy["ligand"]["atom_types"] or []),
+            "charge_method": sy["ligand"]["charge_method"], "net_charge": sy["ligand"]["net_charge"],
+            "protein_atoms": sy["protein"]["atoms"], "force_fields": sy["force_fields"],
+            "solvent": sy["solvent"]["model"], "box": sy["solvent"]["box"], "buffer_A": sy["solvent"]["buffer_A"],
+        },
+    }
+
+def main():
+    ms = [json.loads(p.read_text()) for p in sorted(RUNS.glob("*/manifest.json"))]
+    idx = [entry(m) for m in ms]
+    (RUNS / "index.json").write_text(json.dumps(idx, indent=1, ensure_ascii=False) + "\n")
+    print(f"index.json: {len(idx)} runs")
+
+if __name__ == "__main__": main()

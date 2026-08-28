@@ -6,6 +6,7 @@ export interface Stage {
 }
 export interface Manifest {
   id: string; title: string; schema: string; engine: string;
+  source?: { run_dir: string; extracted: string };
   system: {
     protein: { atoms: number | null; source_pdb: string | null };
     ligand: { resname: string | null; atoms: number | null; atom_types: string[] | null; charge_method: string | null; net_charge: number | null; frcmod_missing: string[] | null };
@@ -22,4 +23,5 @@ export interface Manifest {
   environment: { conda_lock: Record<string, string>; pmemd: string | null; conda_lock_file: string };
   pipeline: { stage_envelopes: Record<string, boolean>; skills: string[] };
 }
-export interface IndexEntry { id: string; title: string; ligand: string; protein_atoms: number; production_ps: number; delta_g: number; plip: boolean; engine: string }
+export interface SystemKey { ligand: string | null; ligand_atoms: number | null; atom_types: string[]; charge_method: string | null; net_charge: number | null; protein_atoms: number | null; force_fields: string[]; solvent: string | null; box: string | null; buffer_A: number | null }
+export interface IndexEntry { id: string; title: string; ligand: string; protein_atoms: number; production_ps: number; delta_g: number; plip: boolean; engine: string; system: SystemKey }

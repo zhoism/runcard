@@ -1,4 +1,4 @@
-import type { Manifest, IndexEntry } from "./types";
+import type { Manifest, IndexEntry, SystemKey } from "./types";
 import { checkAmberIn, type Report } from "./amberCheck";
 import { zipSync, strToU8 } from "fflate";
 
@@ -22,16 +22,44 @@ export function validateAll(m: Manifest) {
   return { run: m.id, verdict: stages.some(s => s.hasFail) ? "FAIL" : stages.some(s => s.hasWarn) ? "WARN" : "PASS", stages };
 }
 
-// ---- ensemble: same system (ligand resname + protein atom count) --------
-export function sameSystem(a: IndexEntry, b: IndexEntry) { return a.ligand === b.ligand && a.protein_atoms === b.protein_atoms; }
+// ---- same prepared system: fingerprint over the fields that define it ------
+export function systemKey(m: Manifest): SystemKey {
+  const sy = m.system;
+  return { ligand: sy.ligand.resname, ligand_atoms: sy.ligand.atoms, atom_types: [...(sy.ligand.atom_types ?? [])].sort(), charge_method: sy.ligand.charge_method,
+    net_charge: sy.ligand.net_charge, protein_atoms: sy.protein.atoms, force_fields: sy.force_fields, solvent: sy.solvent.model, box: sy.solvent.box, buffer_A: sy.solvent.buffer_A };
+}
+/** Stable string identity of a prepared system. Two runs with equal fingerprints simulate the same thing. */
+export function systemFingerprint(k: SystemKey): string {
+  return [k.ligand, k.ligand_atoms, k.atom_types.join("+"), k.charge_method, k.net_charge, k.protein_atoms, k.force_fields.join("+"), k.solvent, k.box, k.buffer_A].map(v => v == null ? "?" : String(v)).join("|");
+}
+export function sameSystem(a: IndexEntry, b: IndexEntry) { return systemFingerprint(a.system) === systemFingerprint(b.system); }
+
+// ---- ensemble: run-to-run statistics, all runs and long runs --------------
+/** Production length below which a run is reported separately. Chosen 2026-08-28; the page shows both strata. */
+export const LONG_RUN_MIN_PS = 10;
+export interface Stratum { n: number; mean: number | null; sd: number | null; min: number | null; max: number | null; negative: number; runs: { id: string; delta_g: number; production_ps: number }[] }
+function stratum(rs: IndexEntry[]): Stratum {
+  const g = rs.map(r => r.delta_g); const n = g.length;
+  const mean = n ? g.reduce((a, b) => a + b, 0) / n : null;
+  const sd = n > 1 && mean != null ? Math.sqrt(g.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1)) : null;
+  return { n, mean, sd, min: n ? Math.min(...g) : null, max: n ? Math.max(...g) : null, negative: g.filter(x => x < 0).length,
+    runs: rs.map(r => ({ id: r.id, delta_g: r.delta_g, production_ps: r.production_ps })) };
+}
 export function ensemble(idx: IndexEntry[], id: string) {
-  const me = idx.find(r => r.id === id)!;
+  const me = idx.find(r => r.id === id); if (!me) throw new Error(`no run ${id} in index`);
   const peers = idx.filter(r => sameSystem(r, me));
-  const g = peers.map(r => r.delta_g);
-  const n = g.length, mean = g.reduce((a, b) => a + b, 0) / n;
-  const sd = n > 1 ? Math.sqrt(g.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1)) : null;
-  return { n, mean, sd, min: Math.min(...g), max: Math.max(...g), runs: peers.map(r => ({ id: r.id, delta_g: r.delta_g, production_ps: r.production_ps })),
-    caveat: "Independent runs of the same prepared system. Production lengths differ (see runs); each ΔG is a single-trajectory MM-GBSA average over 100 frames with ig=-1 Langevin, so run-to-run spread is expected and is the relevant uncertainty — not the per-frame SEM." };
+  const all = stratum(peers), long = stratum(peers.filter(r => r.production_ps >= LONG_RUN_MIN_PS));
+  return { fingerprint: systemFingerprint(me.system), all, long: { min_ps: LONG_RUN_MIN_PS, ...long },
+    sd_convention: "sample SD (n−1) across runs",
+    caveat: `Independent runs of the same prepared system (ig=-1 Langevin, different realized seeds). Production lengths differ (${[...new Set(peers.map(r => r.production_ps))].sort((a, b) => a - b).join(", ")} ps), so 'all' mixes short and long runs; 'long' keeps runs ≥ ${LONG_RUN_MIN_PS} ps. Run-to-run spread, not the per-frame SEM, is the uncertainty to quote.` };
+}
+/** "all 9 runs give ΔG < 0" / "7 of 9" / "none" — computed, never assumed. */
+export function signClaim(st: Stratum): string {
+  if (st.n === 0) return "no runs of this system";
+  const range = `range ${st.min} to ${st.max} kcal/mol`;
+  if (st.negative === st.n) return `${st.n === 1 ? "the single run gives" : `all ${st.n} independent runs give`} ΔG < 0 (${range}); the sign is ${st.n >= 3 ? "robust" : "not yet established (n < 3)"}, the second decimal is not.`;
+  if (st.negative === 0) return `none of the ${st.n} runs gives ΔG < 0 (${range}).`;
+  return `${st.negative} of ${st.n} runs give ΔG < 0 (${range}); the sign is not robust across runs.`;
 }
 
 // ---- explain --------------------------------------------------------
@@ -47,42 +75,63 @@ export function explainResult(m: Manifest, idx: IndexEntry[]) {
     stochasticity: { requested_seed: prod?.requested_seed, realized_seed: prod?.realized_seed, thermostat: `ntt=${prod?.cntrl.ntt} gamma_ln=${prod?.cntrl.gamma_ln}`,
       note: "ig=-1 draws a wallclock seed; pmemd wrote the realized seed to the .out. Two runs with different seeds are different samples of the same ensemble — differing ΔG is expected, not a bug." },
     run_to_run: ens,
-    sign_claim: `${ens.n} independent runs all give ΔG < 0 (range ${ens.min} to ${ens.max}); the sign is robust, the second decimal is not.`,
+    sign_claim: { all_runs: signClaim(ens.all), long_runs: signClaim(ens.long) },
     warnings: mm.warnings, warning_note: mm.warnings.length ? "MMPBSA.py emits this when complex − receptor − ligand internal terms (bond/angle/dihedral) do not cancel exactly in single-trajectory mode; it is a flag on the decomposition, recorded here verbatim rather than suppressed." : undefined,
-    provenance: { computed_on: mm.run_on, mmpbsa_version: mm.mmpbsa_version, engine: prod?.engine, ambertools: m.environment.conda_lock.ambertools },
+    provenance: { computed_on: mm.run_on, mmpbsa_version: mm.mmpbsa_version, engine: prod?.engine, ambertools: m.environment.conda_lock.ambertools, source_run_dir: m.source?.run_dir },
   };
 }
 
 // ---- diff -----------------------------------------------------------
 const SEMANTIC: Record<string, string> = {
-  dt: "integration timestep (ps)", nstlim: "number of MD steps", temp0: "target temperature (K)", cut: "non-bonded cutoff (Å)",
-  ntt: "thermostat (3 = Langevin)", gamma_ln: "Langevin collision frequency (ps⁻¹)", ntp: "pressure coupling", barostat: "barostat (2 = Monte Carlo)",
-  ntc: "SHAKE constraints", ntf: "force evaluation (2 = skip H-bond forces)", ig: "random seed request", irest: "restart flag", ntx: "coordinate/velocity read",
-  ntr: "positional restraints", restraint_wt: "restraint force constant", ntwx: "trajectory write interval", ntpr: "energy print interval",
+  dt: "integration timestep (ps)", nstlim: "number of MD steps", temp0: "target temperature (K)", tempi: "initial temperature (K)", cut: "non-bonded cutoff (Å)",
+  ntt: "thermostat (3 = Langevin)", gamma_ln: "Langevin collision frequency (ps⁻¹)", ntp: "pressure coupling", barostat: "barostat (2 = Monte Carlo)", pres0: "reference pressure (bar)", taup: "pressure relaxation time (ps)",
+  ntc: "SHAKE constraints", ntf: "force evaluation (2 = skip H-bond forces)", ntb: "periodic boundary (1 = constant V, 2 = constant P)", ig: "random seed request", irest: "restart flag", ntx: "coordinate/velocity read",
+  ntr: "positional restraints", restraint_wt: "restraint force constant (kcal/mol/Å²)", restraintmask: "restrained atoms", iwrap: "wrap coordinates into the box",
+  ntwx: "trajectory write interval", ntpr: "energy print interval", ntwr: "restart write interval", ntwe: "energy file write interval", ioutfm: "trajectory format (1 = NetCDF)",
+  imin: "minimization flag", maxcyc: "minimization cycles", ncyc: "steepest-descent cycles", drms: "minimization gradient convergence", nmropt: "NMR restraints / &wt ramps",
 };
+/** What a differing &cntrl key changes. Materiality is by class, not by an ad-hoc list. */
+export type ParamClass = "physics" | "thermodynamic_state" | "sampling_length" | "restraints" | "minimization" | "output_cadence" | "stochastic" | "other";
+export const PARAM_CLASS: Record<string, ParamClass> = {
+  dt: "physics", cut: "physics", ntc: "physics", ntf: "physics", ntb: "physics", nmropt: "physics",
+  temp0: "thermodynamic_state", tempi: "thermodynamic_state", ntt: "thermodynamic_state", gamma_ln: "thermodynamic_state", ntp: "thermodynamic_state", pres0: "thermodynamic_state", barostat: "thermodynamic_state", taup: "thermodynamic_state",
+  nstlim: "sampling_length", irest: "sampling_length", ntx: "sampling_length",
+  ntr: "restraints", restraint_wt: "restraints", restraintmask: "restraints",
+  imin: "minimization", maxcyc: "minimization", ncyc: "minimization", drms: "minimization",
+  ntpr: "output_cadence", ntwx: "output_cadence", ntwr: "output_cadence", ntwe: "output_cadence", ioutfm: "output_cadence", iwrap: "output_cadence",
+  ig: "stochastic",
+};
+export const paramClass = (k: string): ParamClass => PARAM_CLASS[k.toLowerCase()] ?? "other";
+export const isMaterial = (c: ParamClass) => c !== "output_cadence" && c !== "stochastic";
 export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
-  const sys = (m: Manifest) => ({ ligand: m.system.ligand.resname, ligand_atom_types: m.system.ligand.atom_types, protein_atoms: m.system.protein.atoms,
-    force_fields: m.system.force_fields, solvent: m.system.solvent.model, box: m.system.solvent.box, waters: m.system.solvent.residues_added?.[0], charge_method: m.system.ligand.charge_method });
-  const sa = sys(a), sb = sys(b);
-  const systemDiff = Object.keys(sa).filter(k => JSON.stringify((sa as any)[k]) !== JSON.stringify((sb as any)[k])).map(k => ({ field: k, a: (sa as any)[k], b: (sb as any)[k] }));
+  const ka = systemKey(a), kb = systemKey(b);
+  const systemDiff = (Object.keys(ka) as (keyof SystemKey)[]).filter(k => JSON.stringify(ka[k]) !== JSON.stringify(kb[k])).map(k => ({ field: k, a: ka[k], b: kb[k] }));
+  const same = systemFingerprint(ka) === systemFingerprint(kb);
   const stages = a.stages.map(s => s.name).filter(n => b.stages.some(t => t.name === n));
   const stageDiffs = stages.map(n => {
-    const ca = a.stages.find(s => s.name === n)!.cntrl, cb = b.stages.find(s => s.name === n)!.cntrl;
-    const keys = [...new Set([...Object.keys(ca), ...Object.keys(cb)])].filter(k => ca[k] !== cb[k] && k !== "ig");
-    return { stage: n, changes: keys.map(k => ({ key: k, meaning: SEMANTIC[k] ?? null, a: ca[k] ?? null, b: cb[k] ?? null,
-      material: !["ntpr", "ntwx", "ntwr", "ioutfm"].includes(k) })) };
+    const sa = a.stages.find(s => s.name === n)!, sb = b.stages.find(s => s.name === n)!;
+    const keys = [...new Set([...Object.keys(sa.cntrl), ...Object.keys(sb.cntrl)])].filter(k => sa.cntrl[k] !== sb.cntrl[k]);
+    const changes = keys.map(k => { const c = paramClass(k); return { key: k, meaning: SEMANTIC[k] ?? null, class: c, material: isMaterial(c), a: sa.cntrl[k] ?? null, b: sb.cntrl[k] ?? null }; });
+    return { stage: n, length_ps: { a: sa.length_ps, b: sb.length_ps }, changes };
   }).filter(d => d.changes.length);
+  const classes = new Set(stageDiffs.flatMap(d => d.changes.map(c => c.class)));
+  const material = [...classes].filter(isMaterial);
   const seeds = { a: a.stages.map(s => s.realized_seed), b: b.stages.map(s => s.realized_seed) };
-  const same = sameSystem(ia.find(r => r.id === a.id)!, ia.find(r => r.id === b.id)!);
-  const dg = { a: a.results.mmgbsa?.delta_total_kcal_mol, b: b.results.mmgbsa?.delta_total_kcal_mol };
-  const materialStage = stageDiffs.some(d => d.changes.some(c => c.material));
+  const ea = ia.find(r => r.id === a.id);
+  const dg = { a: a.results.mmgbsa?.delta_total_kcal_mol, b: b.results.mmgbsa?.delta_total_kcal_mol,
+    diff: a.results.mmgbsa && b.results.mmgbsa ? +(a.results.mmgbsa.delta_total_kcal_mol - b.results.mmgbsa.delta_total_kcal_mol).toFixed(4) : null };
+  const spread = same && ea ? ensemble(ia, a.id) : null;
+  const sdAll = spread?.all.sd ?? null;
+  const vsSpread = dg.diff != null && sdAll != null ? `|ΔΔG| = ${Math.abs(dg.diff).toFixed(2)} kcal/mol vs run-to-run SD ${sdAll.toFixed(2)} (${(Math.abs(dg.diff) / sdAll).toFixed(1)}×)` : null;
   const interpretation = !same
-    ? "Different systems — the ΔG values are not comparable; the difference reflects the ligand/protein, not the protocol."
-    : materialStage
-      ? "Same system, protocol differs in a material parameter (see stage changes). ΔG differences may come from the protocol change AND from seed-to-seed sampling; compare against the run-to-run spread before attributing anything to the parameter."
-      : "Same system, same protocol, different Langevin seeds (and possibly output cadence). Any ΔG difference is sampling noise; judge it against the run-to-run spread, not the per-frame SEM.";
-  return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, realized_seeds: seeds, delta_g: dg,
-    run_to_run_spread: same ? ensemble(ia, a.id) : null, interpretation };
+    ? "Different prepared systems — the ΔG values are not comparable; the difference reflects the ligand/protein, not the protocol."
+    : material.length === 0
+      ? `Same system, same protocol; only ${[...classes].join(" and ") || "seeds"} differ. Any ΔG difference is sampling noise. ${vsSpread ?? ""}`.trim()
+      : material.every(c => c === "sampling_length")
+        ? `Same system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}). A longer run is a better-converged sample of the same ensemble, not a different experiment. ${vsSpread ?? ""}`.trim()
+        : `Same system, protocol differs in ${material.join(", ")} parameters (see stage changes). A ΔG difference may come from the protocol change AND from seed-to-seed sampling; judge it against the run-to-run spread before attributing anything to the parameter. ${vsSpread ?? ""}`.trim();
+  return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, differing_classes: [...classes], material_classes: material,
+    realized_seeds: seeds, delta_g: dg, run_to_run_spread: spread, interpretation };
 }
 
 // ---- proposals (bounded edits, human-approved) -----------------------

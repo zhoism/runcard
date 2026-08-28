@@ -1,6 +1,6 @@
 # STATUS — runcard
 
-Updated 2026-08-28. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
+Updated 2026-08-28 (Tier A done; see `~/.claude/plans/great-plan-it-distributed-key.md` for tiers B–D). Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
 
 ## Where it stands
 
@@ -21,13 +21,13 @@ Updated 2026-08-28. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP
 
 1. Turn off Vercel Authentication on the project (Settings → Deployment Protection).
 2. Demo story. Recommended: `validate_stage` → `explain_result` → `propose_change` + Approve → `generate_rerun_bundle`.
-3. Does `1l2y-regression` (5 ps production) belong in the n=9 ensemble statistics?
+3. ~~Does `1l2y-regression` belong in the ensemble?~~ Resolved: the ensemble reports both strata — all runs and runs ≥ 10 ps (`LONG_RUN_MIN_PS`).
 
 ## Known thin spots (real, but a judge who pokes will find them)
 
-- `explain_result.sign_claim` hardcodes "all give ΔG < 0"; the numbers are computed, the sentence is not conditional.
-- `ensemble` defines "same prepared system" as ligand resname + protein atom count.
-- `diff_runs` calls any differing key "material" unless it is one of `ntpr ntwx ntwr ioutfm`.
+- ~~sign claim hardcoded~~ → `signClaim()` computes "all / k of n / none" from the data.
+- ~~same system = ligand + atom count~~ → `systemFingerprint()` over ligand, atom types, charges, protein atoms, force fields, solvent, box, buffer; index carries the fields.
+- ~~materiality = 4-key blacklist~~ → `PARAM_CLASS` taxonomy (physics / thermodynamic_state / sampling_length / restraints / minimization / output_cadence / stochastic); interpretation keyed on classes and quotes |ΔΔG| vs run-to-run SD.
 - Proposals live in page memory; a reload clears them. Intentional (nothing is authored here) — say so on the page.
 - The rerun bundle needs the original `build/` inputs (mol2, frcmod, cleaned PDB); it is not self-sufficient.
 - MMPBSA.py reports `100.8 complex frames`; shown verbatim and labelled, not rounded.
@@ -35,8 +35,8 @@ Updated 2026-08-28. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP
 ## Architecture
 
 ```
-public/runs/<id>/manifest.json   ← tools/extract_run.py <run_dir> <id>   (reads artifacts only)
-public/runs/index.json           ← list view + ensemble grouping
+public/runs/<id>/manifest.json   ← tools/extract_run.py <run_dir> <id>   (reads artifacts only; tools/extract_all.sh has the 10 run dirs)
+public/runs/index.json           ← tools/build_index.py (derived from manifests; carries the same-system fields)
         │
 src/lib/runs.ts     pure functions: validateStage/All, ensemble, explainResult, diffRuns,
                     makeProposal/applyEdits, rerunBundle/zipBundle          (test/runs.test.ts)

@@ -1,8 +1,12 @@
 {
  "id": "1l2y-rep1",
  "title": "1L2Y + MOL, run 1",
- "schema": "runcard/0.1",
+ "schema": "runcard/0.2",
  "engine": "amber",
+ "source": {
+  "run_dir": "happy-path-fixed-run",
+  "extracted": "2026-08-28"
+ },
  "system": {
   "protein": {
    "atoms": 290,

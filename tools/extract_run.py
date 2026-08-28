@@ -5,6 +5,7 @@ Everything in the manifest is read from an artifact on disk; nothing is typed
 in. Usage: python3 tools/extract_run.py <run_dir> <id> [--title ...]
 """
 import json, re, shutil, sys
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -153,7 +154,8 @@ def main():
             if m: env[k] = m.group(1)
     eng = next((s.get("engine") for s in stages if s.get("engine")), None)
     manifest = {
-        "id": rid, "title": title, "schema": "runcard/0.1", "engine": "amber",
+        "id": rid, "title": title, "schema": "runcard/0.2", "engine": "amber",
+        "source": {"run_dir": run.name, "extracted": date.today().isoformat()},
         "system": system, "stages": stages, "results": results, "analyses": analyses,
         "structure": structure,
         "environment": {"conda_lock": env, "pmemd": eng, "conda_lock_file": "env.lock.yml"},

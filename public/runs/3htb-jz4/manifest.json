@@ -1,8 +1,12 @@
 {
  "id": "3htb-jz4",
  "title": "3HTB + JZ4",
- "schema": "runcard/0.1",
+ "schema": "runcard/0.2",
  "engine": "amber",
+ "source": {
+  "run_dir": "new-target-run",
+  "extracted": "2026-08-28"
+ },
  "system": {
   "protein": {
    "atoms": 2614,

@@ -105,7 +105,9 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
             <div className="big">{fmt(mm.delta_total_kcal_mol)} <span className="unit">kcal/mol</span></div>
             <dl><dt>per-frame</dt><dd>SD {fmt(mm.frame_std)} · SEM {fmt(mm.frame_sem, 3)} over {mm.frames} frames <span className="dim">(frame count as MMPBSA.py reports it; frames are correlated, so SEM understates uncertainty)</span></dd>
               <dt>method</dt><dd>igb={mm.igb}, saltcon={mm.saltcon}, {prod?.length_ps} ps production, seed {prod?.realized_seed}</dd>
-              {ens && ens.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.n}</b> independent runs of this system: mean {fmt(ens.mean)}, SD {fmt(ens.sd)}, range {fmt(ens.min)} … {fmt(ens.max)} <span className="dim">— production lengths differ across runs; this spread is the uncertainty that matters</span></dd></>}
+              {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b> independent runs of this system: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
+                {ens.long.n > 0 && ens.long.n < ens.all.n && <><br /><b>n={ens.long.n}</b> runs ≥ {ens.long.min_ps} ps: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</>}
+                <span className="dim"> — production lengths differ across runs; this spread is the uncertainty that matters</span></dd></>}
               <dt>computed</dt><dd>{mm.run_on}</dd></dl>
             {mm.warnings.map((w, i) => <div key={i} className="warnbox">⚠ {w}<div className="dim">Recorded verbatim from mmgbsa.dat. Ask the agent to explain_result for what it means.</div></div>)}
           </> : <p className="dim">no MM-GBSA result</p>}
@@ -142,10 +144,11 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
     <div className="grid2">
       <div className="card"><h2>System</h2>{d.system.length ? <table><tbody>{d.system.map(s => <tr key={s.field}><td>{s.field}</td><td className="mono">{show(s.a)}</td><td className="mono">{show(s.b)}</td></tr>)}</tbody></table> : <p className="pass">identical prepared system</p>}</div>
       <div className="card"><h2>ΔG</h2><table><tbody><tr><td>{a}</td><td className="num">{fmt(d.delta_g.a)}</td></tr><tr><td>{b}</td><td className="num">{fmt(d.delta_g.b)}</td></tr>
-        {d.run_to_run_spread && <tr><td>run-to-run (n={d.run_to_run_spread.n})</td><td className="num">{fmt(d.run_to_run_spread.mean)} ± {fmt(d.run_to_run_spread.sd)}</td></tr>}</tbody></table>
+        {d.run_to_run_spread && <tr><td>run-to-run (n={d.run_to_run_spread.all.n})</td><td className="num">{fmt(d.run_to_run_spread.all.mean)} ± {fmt(d.run_to_run_spread.all.sd)}</td></tr>}
+        {d.delta_g.diff != null && <tr><td>ΔΔG (a − b)</td><td className="num">{fmt(d.delta_g.diff)}</td></tr>}</tbody></table>
         <div className="dim mono">seeds A: {d.realized_seeds.a.join(" ")}<br />seeds B: {d.realized_seeds.b.join(" ")}</div></div>
     </div>
-    <div className="card"><h2>Stage parameters</h2>{d.stages.length ? d.stages.map(s => <div key={s.stage}><h3>{s.stage}</h3><table><thead><tr><th>key</th><th>meaning</th><th>{a}</th><th>{b}</th><th></th></tr></thead><tbody>{s.changes.map(c => <tr key={c.key} className={c.material ? "" : "dim"}><td className="mono">{c.key}</td><td>{c.meaning}</td><td className="mono">{c.a}</td><td className="mono">{c.b}</td><td>{c.material ? <span className="badge warn">material</span> : <span className="badge">output cadence</span>}</td></tr>)}</tbody></table></div>) : <p className="pass">no parameter differences (seeds excluded)</p>}</div>
+    <div className="card"><h2>Stage parameters</h2>{d.stages.length ? d.stages.map(s => <div key={s.stage}><h3>{s.stage}</h3><table><thead><tr><th>key</th><th>meaning</th><th>{a}</th><th>{b}</th><th></th></tr></thead><tbody>{s.changes.map(c => <tr key={c.key} className={c.material ? "" : "dim"}><td className="mono">{c.key}</td><td>{c.meaning}</td><td className="mono">{c.a}</td><td className="mono">{c.b}</td><td>{c.material ? <span className="badge warn">{c.class.replace("_", " ")}</span> : <span className="badge">{c.class.replace("_", " ")}</span>}</td></tr>)}</tbody></table></div>) : <p className="pass">no parameter differences (seeds excluded)</p>}</div>
   </section>;
 }
 
