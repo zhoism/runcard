@@ -12,8 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def rd(p): return Path(p).read_text(errors="replace")
 def jl(p): return json.loads(rd(p)) if Path(p).exists() else None
 
+def strip_comments(text):
+    # Fortran '!' starts a comment only outside quotes (restraintmask='!:WAT' is a mask, not a comment).
+    return "\n".join(re.sub(r"""('[^']*'|"[^"]*")|!.*""", lambda m: m.group(1) or "", ln) for ln in text.splitlines())
+
 def parse_cntrl(text):
-    m = re.search(r"&cntrl\b(.*?)/", re.sub(r"!.*", "", text), re.S | re.I)
+    m = re.search(r"&cntrl\b(.*?)/", strip_comments(text), re.S | re.I)
     kv = {}
     if m:
         for k, v in re.findall(r"(\w+)\s*=\s*('[^']*'|\"[^\"]*\"|[^\s,/]+)", m.group(1)):

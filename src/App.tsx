@@ -4,8 +4,9 @@ import { loadIndex, loadRun, validateStage, ensemble, diffRuns, zipBundle } from
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
 import { TOOLS, callTool } from "./webmcp";
-import { Viewer } from "./Viewer";
+import { Viewer, Boundary } from "./Viewer";
 
+const show = (v: unknown) => Array.isArray(v) ? v.join(" ") : v == null ? "—" : String(v);
 const fmt = (n: number | null | undefined, d = 2) => n == null ? "—" : n.toFixed(d);
 const Verdict = ({ r }: { r: Report }) => <span className={`badge ${r.hasFail ? "fail" : r.hasWarn ? "warn" : "pass"}`}>{r.hasFail ? "FAIL" : r.hasWarn ? "WARN" : "PASS"}</span>;
 
@@ -18,9 +19,9 @@ export default function App() {
     <div className="app">
       <Header />
       <main>
-        {parts[0] === "run" && parts[1] ? <RunPage id={parts[1]} idx={idx} /> :
+        <Boundary label="Page">{parts[0] === "run" && parts[1] ? <RunPage key={parts[1]} id={parts[1]} idx={idx} /> :
          parts[0] === "compare" && parts[2] ? <ComparePage a={parts[1]} b={parts[2]} idx={idx} /> :
-         <Home idx={idx} />}
+         <Home idx={idx} />}</Boundary>
       </main>
       <Sidebar />
     </div>
@@ -45,7 +46,7 @@ function Home({ idx }: { idx: IndexEntry[] }) {
     <section>
       <h1>Simulation runs</h1>
       <p className="lede">Each card is a molecular-dynamics run rendered from its artifacts: stages, parameters, seeds, results, environment. Open one and ask your agent about it — the page exposes tools to validate stages, compare runs, explain uncertainty, and build a rerun bundle.</p>
-      <table>
+      <table className="runs">
         <thead><tr><th>run</th><th>ligand</th><th>protein atoms</th><th>production</th><th>ΔG MM-GBSA</th><th>PLIP</th></tr></thead>
         <tbody>{idx.map(r => <tr key={r.id} onClick={() => navigate(`/run/${r.id}`)}><td><a href={`#/run/${r.id}`}>{r.title}</a><div className="dim">{r.id}</div></td><td>{r.ligand}</td><td>{r.protein_atoms}</td><td>{r.production_ps} ps</td><td className="num">{fmt(r.delta_g)}</td><td>{r.plip ? "✓" : ""}</td></tr>)}</tbody>
       </table>
@@ -80,7 +81,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
             <dt>engine</dt><dd>{prod?.engine} · AmberTools {m.environment.conda_lock.ambertools} · MMPBSA.py {mm?.mmpbsa_version}</dd>
           </dl>
         </div>
-        {m.structure && <div className="card"><h2>Structure <span className="dim">cluster medoid, dry</span></h2><Viewer url={`/runs/${m.id}/${m.structure}`} ligand={m.system.ligand.resname} /></div>}
+        {m.structure && <Boundary label="Structure"><div className="card"><h2>Structure <span className="dim">cluster medoid, dry</span></h2><Viewer url={`/runs/${m.id}/${m.structure}`} ligand={m.system.ligand.resname} /></div></Boundary>}
       </div>
 
       <div className="card">
@@ -102,7 +103,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
           <h2>Binding free energy <span className="dim">MM-GBSA, single trajectory</span></h2>
           {mm ? <>
             <div className="big">{fmt(mm.delta_total_kcal_mol)} <span className="unit">kcal/mol</span></div>
-            <dl><dt>per-frame</dt><dd>SD {fmt(mm.frame_std)} · SEM {fmt(mm.frame_sem, 3)} over {mm.frames} frames <span className="dim">(frames are correlated; SEM understates uncertainty)</span></dd>
+            <dl><dt>per-frame</dt><dd>SD {fmt(mm.frame_std)} · SEM {fmt(mm.frame_sem, 3)} over {mm.frames} frames <span className="dim">(frame count as MMPBSA.py reports it; frames are correlated, so SEM understates uncertainty)</span></dd>
               <dt>method</dt><dd>igb={mm.igb}, saltcon={mm.saltcon}, {prod?.length_ps} ps production, seed {prod?.realized_seed}</dd>
               {ens && ens.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.n}</b> independent runs of this system: mean {fmt(ens.mean)}, SD {fmt(ens.sd)}, range {fmt(ens.min)} … {fmt(ens.max)} <span className="dim">— production lengths differ across runs; this spread is the uncertainty that matters</span></dd></>}
               <dt>computed</dt><dd>{mm.run_on}</dd></dl>
@@ -139,7 +140,7 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
     <h1>Compare <a href={`#/run/${a}`}>{a}</a> vs <a href={`#/run/${b}`}>{b}</a></h1>
     <div className={`interp ${d.same_system ? "" : "warn"}`}>{d.interpretation}</div>
     <div className="grid2">
-      <div className="card"><h2>System</h2>{d.system.length ? <table><tbody>{d.system.map(s => <tr key={s.field}><td>{s.field}</td><td className="mono">{JSON.stringify(s.a)}</td><td className="mono">{JSON.stringify(s.b)}</td></tr>)}</tbody></table> : <p className="pass">identical prepared system</p>}</div>
+      <div className="card"><h2>System</h2>{d.system.length ? <table><tbody>{d.system.map(s => <tr key={s.field}><td>{s.field}</td><td className="mono">{show(s.a)}</td><td className="mono">{show(s.b)}</td></tr>)}</tbody></table> : <p className="pass">identical prepared system</p>}</div>
       <div className="card"><h2>ΔG</h2><table><tbody><tr><td>{a}</td><td className="num">{fmt(d.delta_g.a)}</td></tr><tr><td>{b}</td><td className="num">{fmt(d.delta_g.b)}</td></tr>
         {d.run_to_run_spread && <tr><td>run-to-run (n={d.run_to_run_spread.n})</td><td className="num">{fmt(d.run_to_run_spread.mean)} ± {fmt(d.run_to_run_spread.sd)}</td></tr>}</tbody></table>
         <div className="dim mono">seeds A: {d.realized_seeds.a.join(" ")}<br />seeds B: {d.realized_seeds.b.join(" ")}</div></div>

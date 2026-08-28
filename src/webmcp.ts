@@ -3,6 +3,7 @@
 // and the in-page Tool Console (so a human can call exactly what an agent can).
 import { loadIndex, loadRun, validateStage, validateAll, explainResult, diffRuns, makeProposal, rerunBundle, ensemble } from "./lib/runs";
 import { get, set, logCall, navigate } from "./store";
+import { checkAmberIn } from "./lib/amberCheck";
 
 export interface Tool { name: string; description: string; inputSchema: object; readOnly: boolean; run: (input: any) => Promise<unknown> }
 const S = (props: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties: props, required });
@@ -19,7 +20,7 @@ export const TOOLS: Tool[] = [
     run: async ({ run_id, stage }) => { const m = await loadRun(run_id); const s = m.stages.find(x => x.name === stage); if (!s) throw new Error(`no stage ${stage}; have ${m.stages.map(x => x.name).join(", ")}`); return { stage: s.name, role: s.role, restart_from: s.restart_from, mdin: s.mdin }; } },
   { name: "validate_stage", readOnly: true, description: "Run the AMBER physics validator on one stage of a run, or on arbitrary mdin text you supply. Checks: dt ≤ 2 fs with SHAKE (1 fs without), SHAKE ntc/ntf coherence, cutoff 8–12 Å, Langevin gamma_ln range, temp0 vs &wt ramp end, irest/ntx restart coherence, barostat/ntp coherence, fixed seeds, iwrap on long runs, non-finite numbers. Returns PASS/WARN/FAIL findings with the reason for each.",
     inputSchema: S({ run_id: str("run id (omit if passing mdin_text)"), stage: str("stage name (omit if passing mdin_text)"), mdin_text: str("raw AMBER .in text to validate instead of a stored stage") }),
-    run: async ({ run_id, stage, mdin_text }) => { if (mdin_text) { const { checkAmberIn } = await import("./lib/amberCheck"); return { stage: "(supplied text)", ...checkAmberIn(mdin_text) }; } if (!run_id) throw new Error("run_id or mdin_text required"); const m = await loadRun(run_id); return stage ? validateStage(m, stage) : validateAll(m); } },
+    run: async ({ run_id, stage, mdin_text }) => { if (mdin_text) { return { stage: "(supplied text)", ...checkAmberIn(mdin_text) }; } if (!run_id) throw new Error("run_id or mdin_text required"); const m = await loadRun(run_id); return stage ? validateStage(m, stage) : validateAll(m); } },
   { name: "explain_result", readOnly: true, description: "What the MM-GBSA ΔG of a run means and how much to trust it: method, frames, per-frame SD/SEM and why SEM understates uncertainty, the requested vs realized random seed, the run-to-run spread across independent runs of the same system (n, mean, SD, range), the sign claim that is actually supported, any MMPBSA warnings verbatim, and provenance (versions, dates).",
     inputSchema: S({ run_id: str("run id") }, ["run_id"]), run: async ({ run_id }) => explainResult(await loadRun(run_id), await loadIndex()) },
   { name: "diff_runs", readOnly: true, description: "Semantic diff of two runs: whether they are the same prepared system (ligand, atom types, protein, solvent, force fields), which &cntrl parameters differ per stage with each parameter's meaning and whether it is scientifically material, the realized seeds, both ΔG values, the run-to-run spread, and an interpretation of whether a ΔG difference is protocol, system, or sampling noise. Also opens the compare view.",
@@ -44,7 +45,7 @@ export async function callTool(name: string, input: unknown): Promise<string> {
 }
 
 export async function registerWebMCP() {
-  const mc: any = (document as any).modelContext ?? (navigator as any).modelContext;
+  const mc: any = (navigator as any).modelContext ?? (window as any).modelContext ?? (document as any).modelContext;
   if (!mc?.registerTool) { set({ webmcp: "unsupported", tools: TOOLS.map(t => t.name) }); return; }
   try {
     for (const t of TOOLS) {
