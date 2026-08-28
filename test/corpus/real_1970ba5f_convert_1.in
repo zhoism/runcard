@@ -1,0 +1,4 @@
+parm system.parm7
+trajin in_1.rst
+autoimage
+trajout snap_1.pdb pdb

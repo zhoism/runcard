@@ -1,0 +1,5 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+reference ../strip/strip.nc 2 [refN]
+rms ref [refN] mass out rmsd_bb.dat :1-21@CA,C,N
+rms ref [refN] mass out rmsd_all.dat :1-21

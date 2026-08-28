@@ -1,0 +1,3 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+atomicfluct out rmsf_byres.dat :1-21 byres

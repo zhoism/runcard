@@ -1,0 +1,4 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+rms first mass out rmsd_bb.dat :1-21@CA,C,N
+rms first mass out rmsd_all.dat :1-21

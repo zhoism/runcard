@@ -1,0 +1,5 @@
+parm comp_dry.top
+trajin dry.nc 270 270 1
+trajout complex_raw.pdb pdb
+run
+quit

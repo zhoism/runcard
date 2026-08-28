@@ -1,0 +1,3 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+hbond HB out hbond.dat :2 avgout hbond_avg.dat

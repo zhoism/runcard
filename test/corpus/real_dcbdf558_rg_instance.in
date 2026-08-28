@@ -1,0 +1,3 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+radgyr out rg_rgc.dat :2-8@CA

@@ -1,0 +1,6 @@
+parm comp_dry.top
+trajin dry.nc
+reference avg.pdb
+rms ToAvg @CA,C,N reference out rms_to_avg.dat
+run
+quit

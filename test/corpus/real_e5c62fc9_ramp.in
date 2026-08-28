@@ -1,0 +1,33 @@
+ &cntrl
+  imin = 0,
+  nstlim = 100000,
+  dt = 0.002,
+  cut = 9.0,
+  ntc = 2, ntf = 2,
+  tempi = 100.0,
+  temp0 = 275.2,
+  nmropt = 1,
+ /
+ &wt
+  type = 'TEMP0',
+  istep1 = 0, istep2 = 10000,
+  value1 = 100.0, value2 = 261.9,
+ /
+ &wt
+  type = 'TEMP0',
+  istep1 = 10000, istep2 = 20000,
+  value1 = 261.9, value2 = 57.3,
+ /
+ &wt
+  type = 'TEMP0',
+  istep1 = 20000, istep2 = 30000,
+  value1 = 57.3, value2 = 253.6,
+ /
+ &wt
+  type = 'TEMP0',
+  istep1 = 30000, istep2 = 40000,
+  value1 = 253.6, value2 = 275.2,
+ /
+ &wt
+  type = 'END',
+ /

@@ -1,0 +1,4 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+reference ../strip/strip.nc 5 [refN]
+rms ref [refN] mass out rmsd_core.dat :2-8@CA

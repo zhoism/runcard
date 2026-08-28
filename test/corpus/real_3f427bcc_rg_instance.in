@@ -1,0 +1,4 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+radgyr out rg_core.dat :2-8@CA
+radgyr out rg_2_8_not_H.dat :2-8&!@H=

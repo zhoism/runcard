@@ -1,0 +1,4 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+rms first mass out rmsd_2_15_CA_not_12_14.dat :2-15@CA&!(:12,14)
+rms first mass out rmsd_core.dat :2-8@CA

@@ -1,0 +1,4 @@
+setOverwrite True
+changeRadii mbondi2
+outparm ../ligand_mbondi2.top
+quit

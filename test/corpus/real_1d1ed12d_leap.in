@@ -1,0 +1,12 @@
+source leaprc.protein.ff19SB
+source leaprc.water.tip3p
+prot = loadpdb protein_clean.pdb
+check prot
+comp = prot
+saveamberparm comp comp_dry.top comp_dry.crd
+solvateoct comp TIP3PBOX 10.0
+addions2 comp Na+ 0
+addions2 comp Cl- 0
+saveamberparm comp comp_oct.top comp_oct.crd
+savepdb comp comp_oct.pdb
+quit

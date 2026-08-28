@@ -1,0 +1,3 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+matrix dist :1-21@CA out distmat.dat byres

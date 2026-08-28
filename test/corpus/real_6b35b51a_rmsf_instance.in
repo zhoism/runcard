@@ -1,0 +1,4 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+atomicfluct out rmsf_core.dat :2-8@CA byres
+atomicfluct out rmsf_2_8_not_H.dat :2-8&!@H= byres

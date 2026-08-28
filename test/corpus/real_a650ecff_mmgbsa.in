@@ -1,0 +1,7 @@
+MM-GBSA binding free energy
+&general
+  startframe=1, endframe=500, interval=5, verbose=1,
+/
+&gb
+  igb=5, saltcon=0.100,
+/

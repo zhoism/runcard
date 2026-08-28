@@ -1,0 +1,7 @@
+parm comp_oct.top
+trajin traj.nc
+strip :WAT,:Na+,:Cl-,:K+
+autoimage
+trajout dry.nc netcdf
+run
+quit

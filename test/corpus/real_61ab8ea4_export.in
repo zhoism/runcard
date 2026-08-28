@@ -1,0 +1,3 @@
+parm ../comp_oct.top
+parmstrip :WAT,:Na+,:Cl-,:K+
+parmwrite out solute.parm7

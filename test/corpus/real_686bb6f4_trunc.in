@@ -1,0 +1,4 @@
+parm comp_oct.top
+trajin full.nc 1 8 1
+trajout short.nc
+run

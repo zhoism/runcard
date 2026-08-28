@@ -1,0 +1,4 @@
+setOverwrite True
+changeRadii mbondi2
+outparm ../comp_dry_mbondi2.top
+quit

@@ -1,0 +1,6 @@
+ &cntrl
+  imin = 1,
+  maxcyc = 6000,
+  ncyc = 2000,
+  cut = 9.0,
+ /

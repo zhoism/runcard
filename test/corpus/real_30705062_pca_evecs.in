@@ -1,0 +1,6 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+rms first :1-20@CA
+matrix covar :1-20@CA name covar
+diagmatrix covar out evecs.dat vecs 10 name evecs
+run

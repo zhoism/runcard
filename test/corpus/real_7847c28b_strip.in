@@ -1,0 +1,5 @@
+parm ../comp_oct.top
+trajin ../traj.nc
+strip :WAT,:Na+,:Cl-,:K+
+autoimage
+trajout strip.nc netcdf

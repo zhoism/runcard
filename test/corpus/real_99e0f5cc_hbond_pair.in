@@ -1,0 +1,3 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+hbond HBC donormask :1 acceptormask :2 out hbond_HBC.dat avgout hbond_HBC_avg.dat

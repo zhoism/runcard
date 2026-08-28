@@ -1,0 +1,6 @@
+min3: unrestrained full-system minimization
+ &cntrl
+  imin=1, ncyc=500, maxcyc=1000, drms=0.001,
+  ntb=1, cut=9.0, ntr=0,
+  ntpr=100, ntwr=1000,
+ /

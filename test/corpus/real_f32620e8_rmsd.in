@@ -1,0 +1,5 @@
+parm ../comp_dry.top
+parm ../reference.pdb
+reference ../reference.pdb parm ../reference.pdb [extref]
+trajin ../strip/strip.nc parm ../comp_dry.top
+rms ref [extref] mass out rmsd_bb.dat :1-21@CA,C,N

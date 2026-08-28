@@ -1,0 +1,6 @@
+parm comp_dry.top
+trajin dry.nc
+rms first @CA,C,N
+average avg.pdb pdb
+run
+quit

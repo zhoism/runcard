@@ -1,0 +1,3 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+rms first mass out rmsd_noexcl.dat :2-15@CA

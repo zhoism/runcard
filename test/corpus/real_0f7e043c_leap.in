@@ -1,0 +1,18 @@
+source leaprc.protein.ff19SB
+source leaprc.water.tip3p
+source leaprc.gaff2
+LIG = loadmol2 MOL.mol2
+loadamberparams MOL.frcmod
+check LIG
+prot = loadpdb protein_clean.pdb
+check prot
+saveamberparm prot protein.top protein.crd
+saveamberparm LIG ligand.top ligand.crd
+comp = combine { prot LIG }
+saveamberparm comp comp_dry.top comp_dry.crd
+solvateoct comp TIP3PBOX 10.0
+addions2 comp Na+ 0
+addions2 comp Cl- 0
+saveamberparm comp comp_oct.top comp_oct.crd
+savepdb comp comp_oct.pdb
+quit

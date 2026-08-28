@@ -1,0 +1,4 @@
+parm ../comp_dry.top
+trajin ../strip/strip.nc
+rms first :1-20@CA
+cluster C0 kmeans clusters 5 randompoint maxit 500 rms :1-20@CA sieve 5 out cnumvtime.dat summary summary.dat info info.dat repout rep repfmt pdb
