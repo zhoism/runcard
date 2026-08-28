@@ -9,7 +9,8 @@ import { Viewer, Boundary } from "./Viewer";
 
 const show = (v: unknown) => Array.isArray(v) ? v.join(" ") : v == null ? "—" : String(v);
 const fmt = (n: number | null | undefined, d = 2) => n == null ? "—" : n.toFixed(d);
-const Verdict = ({ r }: { r: Report }) => <span className={`badge ${r.hasFail ? "fail" : r.hasWarn ? "warn" : "pass"}`}>{r.hasFail ? "FAIL" : r.hasWarn ? "WARN" : "PASS"}</span>;
+/** PASS is deliberately uncoloured: the validator is a sanity check of the input file, not evidence of physical validity. WARN/FAIL are coloured because they need attention. */
+const Verdict = ({ r }: { r: Report }) => <span className={`badge ${r.hasFail ? "fail" : r.hasWarn ? "warn" : ""}`}>{r.hasFail ? "FAIL" : r.hasWarn ? "WARN" : "PASS"}</span>;
 
 export default function App() {
   const route = useStore(s => s.route);
@@ -83,7 +84,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const others = idx.filter(r => r.id !== id);
   return (
     <section className="run">
-      <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span><span className={`badge ${overall.toLowerCase()}`}>all stages {overall}</span>
+      <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
         <select value="" onChange={e => e.target.value && navigate(`/compare/${id}/${e.target.value}`)}><option value="">compare with…</option>{others.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}</select></div>
 
       <div className="grid2">
@@ -102,7 +103,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
       </div>
 
       <div className="card">
-        <h2>Stages <span className="dim">select a stage for its input and validation</span></h2>
+        <h2>Stages <span className={`badge ${overall === "PASS" ? "" : overall.toLowerCase()}`} title="11 rules on each .in file: timestep vs SHAKE, cutoff, thermostat, barostat, restarts, output cadence">input checks {overall}</span> <span className="dim">a sanity check of the input files, not evidence of convergence or physical accuracy — select a stage for its input and findings</span></h2>
         {/* Each stage is a native disclosure button: Tab reaches it, Enter/Space toggle it, aria-expanded carries the state. The arrow is decoration. */}
         <div className="stages">{m.stages.map((s, i) => <div key={s.name} className={`stage ${open === s.name ? "open" : ""}`}>
           {i > 0 && <span className="arrow" aria-hidden="true">→</span>}

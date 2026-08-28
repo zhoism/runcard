@@ -213,13 +213,14 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
   const spread = same && ea ? ensemble(ia, a.id) : null;
   const sdAll = spread?.all.sd ?? null;
   const vsSpread = dg.diff != null && sdAll != null ? `|ΔΔG| = ${Math.abs(dg.diff).toFixed(2)} kcal/mol vs run-to-run SD ${sdAll.toFixed(2)} (${(Math.abs(dg.diff) / sdAll).toFixed(1)}×)` : null;
+  // Descriptive, not evaluative: state what differs and give the reader the scale to judge ΔΔG against. No claim about which run is "better" or converged — that is reported per run by explain_result.
   const interpretation = !same
-    ? "Different prepared systems — the ΔG values are not comparable; the difference reflects the ligand/protein, not the protocol."
+    ? "Different prepared systems (see the system table). The two ΔG values describe different complexes and are not compared here."
     : material.length === 0
-      ? `Same system, same protocol; only ${[...classes].join(" and ") || "seeds"} differ. Any ΔG difference is sampling noise. ${vsSpread ?? ""}`.trim()
+      ? `Same prepared system and protocol; only ${[...classes].join(" and ") || "seeds"} differ, so the two ΔG values are independent samples of the same protocol. ${vsSpread ?? ""}`.trim()
       : material.every(c => c === "sampling_length")
-        ? `Same system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}). A longer run is a better-converged sample of the same ensemble, not a different experiment. ${vsSpread ?? ""}`.trim()
-        : `Same system, protocol differs in ${material.join(", ")} parameters (see stage changes). A ΔG difference may come from the protocol change AND from seed-to-seed sampling; judge it against the run-to-run spread before attributing anything to the parameter. ${vsSpread ?? ""}`.trim();
+        ? `Same prepared system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}), so they are different-length samples of the same protocol. Whether either run is converged is reported per run (drift verdict in explain_result). ${vsSpread ?? ""}`.trim()
+        : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes). The ΔG difference combines that change with seed-to-seed sampling; the run-to-run spread is the scale to judge it against. ${vsSpread ?? ""}`.trim();
   return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, differing_classes: [...classes], material_classes: material,
     realized_seeds: seeds, delta_g: dg, run_to_run_spread: spread, interpretation };
 }
