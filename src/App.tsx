@@ -7,6 +7,8 @@ import { useStore, navigate, setProposalStatus, set } from "./store";
 import { TOOLS, callTool } from "./webmcp";
 import { Viewer, Boundary } from "./Viewer";
 
+/** "run_id=1l2y-regression stage=product" — the call's arguments, readable at a glance. */
+const fmtArgs = (input: unknown) => input && typeof input === "object" && !Array.isArray(input) ? Object.entries(input as Record<string, unknown>).map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`).join(" ") : input == null ? "" : JSON.stringify(input);
 const show = (v: unknown) => Array.isArray(v) ? v.join(" ") : v == null ? "—" : String(v);
 const fmt = (n: number | null | undefined, d = 2) => n == null ? "—" : n.toFixed(d);
 /** PASS is deliberately uncoloured: the validator is a sanity check of the input file, not evidence of physical validity. WARN/FAIL are coloured because they need attention. */
@@ -38,9 +40,9 @@ function Header() {
     <header>
       <a href="#/" className="brand">runcard</a>
       <span className="tag">validated simulation records</span>
-      <span className={`webmcp ${st}`} title={st === "registered" ? "Tools registered with document.modelContext" : st === "unsupported" ? "This browser does not expose WebMCP; use the Tool Console" : "Registration failed"}>
-        WebMCP: {st}
-      </span>
+      {st === "registered" ? <span className="webmcp registered" title="Tools registered with navigator.modelContext">WebMCP: registered · {TOOLS.length} tools</span>
+       : st === "error" ? <span className="webmcp error" title="registerTool threw; see console">WebMCP: registration failed</span>
+       : <a className="webmcp" href="#tool-console" title="This browser does not expose WebMCP. Chrome: chrome://flags/#enable-webmcp-testing. The Tool Console calls the same tools by hand.">no WebMCP here — use the Tool Console ↓</a>}
     </header>
   );
 }
@@ -49,11 +51,11 @@ function Home({ idx }: { idx: IndexEntry[] }) {
   return (
     <section>
       <h1>Simulation runs</h1>
-      <p className="lede">Each card is a molecular-dynamics run rendered from its artifacts: stages, parameters, seeds, results, environment. Open one and ask your agent about it — the page exposes tools to validate stages, compare runs, explain uncertainty, and build a rerun bundle.</p>
-      <table className="runs">
+      <p className="lede">Each row is a molecular-dynamics run rendered from its artifacts: stages, parameters, seeds, results, environment. Open one and ask your agent about it — the page exposes tools to validate stages, compare runs, explain uncertainty, and build a rerun bundle.</p>
+      <div className="tablewrap"><table className="runs">
         <thead><tr><th>run</th><th>ligand</th><th>protein atoms</th><th>production</th><th>ΔG MM-GBSA</th><th>PLIP</th></tr></thead>
         <tbody>{idx.map(r => <tr key={r.id} onClick={() => navigate(`/run/${r.id}`)}><td><a href={`#/run/${r.id}`}>{r.title}</a><div className="dim">{r.id}</div></td><td>{r.ligand}</td><td>{r.protein_atoms}</td><td>{r.production_ps} ps</td><td className="num">{fmt(r.delta_g)}</td><td>{r.plip ? "✓" : ""}</td></tr>)}</tbody>
-      </table>
+      </table></div>
     </section>
   );
 }
@@ -212,7 +214,7 @@ function Sidebar() {
       </div>)}
     </div>
     {bundle && <div className="card"><h2>Rerun bundle</h2><div className="mono small">{Object.keys(bundle.files).join("\n")}</div><button onClick={download}>Download {bundle.name}</button> <button className="ghost" onClick={() => set({ bundle: null })}>clear</button></div>}
-    <div className="card">
+    <div className="card" id="tool-console">
       <h2>Tool console <span className="dim">the same tools an agent sees</span></h2>
       <select value={tool} onChange={e => { setTool(e.target.value); setInput("{}"); }}>{TOOLS.map(t => <option key={t.name} value={t.name}>{t.name}{t.readOnly ? "" : " ✎"}</option>)}</select>
       <div className="dim small">{t.description}</div>
@@ -221,9 +223,8 @@ function Sidebar() {
       <button onClick={async () => { try { setOut(await callTool(tool, JSON.parse(input))); } catch (e: any) { setOut(String(e)); } }}>Call</button>
       {out && <pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre>}
     </div>
-    <div className="card"><h2>Tool calls <span className="dim">what the agent did on this page</span></h2>
-      {calls.length === 0 && <p className="dim">none yet</p>}
-      {calls.map((c, i) => <div key={i} className="call"><span className={c.ok ? "pass" : "fail"}>●</span> <b>{c.tool}</b> <span className="dim mono">{JSON.stringify(c.input)}</span><div className="dim small">{c.summary}</div></div>)}
-    </div>
+    {calls.length > 0 && <div className="card"><h2>Tool calls <span className="dim">what the agent did on this page</span></h2>
+      {calls.map((c, i) => <div key={i} className="call"><span className={c.ok ? "pass" : "fail"}>●</span> <b>{c.tool}</b> <span className="args mono">{fmtArgs(c.input)}</span><div className={`what ${c.ok ? "" : "fail"}`}>{c.summary}</div></div>)}
+    </div>}
   </aside>;
 }

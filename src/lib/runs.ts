@@ -105,8 +105,8 @@ export function ensemble(idx: IndexEntry[], id: string) {
 export function signClaim(st: Stratum): string {
   if (st.n === 0) return "no runs of this system";
   const range = `range ${st.min} to ${st.max} kcal/mol`;
-  if (st.negative === st.n) return `${st.n === 1 ? "the single run gives" : `all ${st.n} independent runs give`} ΔG < 0 (${range}); the sign is ${st.n >= 3 ? "robust" : "not yet established (n < 3)"}, the second decimal is not.`;
-  if (st.negative === 0) return `none of the ${st.n} runs gives ΔG < 0 (${range}).`;
+  if (st.negative === st.n) return `${st.n === 1 ? "The single run gives" : `All ${st.n} independent runs give`} ΔG < 0 (${range}); ${st.n >= 3 ? "the sign is robust, the second decimal is not" : "the sign is not yet established (n < 3)"}.`;
+  if (st.negative === 0) return `None of the ${st.n} runs gives ΔG < 0 (${range}).`;
   return `${st.negative} of ${st.n} runs give ΔG < 0 (${range}); the sign is not robust across runs.`;
 }
 
@@ -156,7 +156,14 @@ export function explainResult(m: Manifest, idx: IndexEntry[]) {
   const which = unc && spreadSd != null
     ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD, n=${ens.all.n}) as the uncertainty of a single run's ΔG. Within this run the correlation-corrected SEM is ${unc.corrected_sem} (N_eff ≈ ${unc.n_eff} of ${unc.n_frames} frames); the naive per-frame SEM ${unc.per_frame_sem} is ${(unc.corrected_sem / unc.per_frame_sem).toFixed(1)}× too small. Run-to-run spread is ${(spreadSd / unc.corrected_sem).toFixed(1)}× the corrected SEM, so seed-to-seed variation, not frame noise, dominates.`
     : unc ? `Within this run the correlation-corrected SEM is ${unc.corrected_sem}; no other runs of this system to estimate run-to-run spread.` : "per-frame data not archived for this run; only MMPBSA.py's naive SEM is available.";
+  const brief = [
+    `ΔG = ${mm.delta_total_kcal_mol} kcal/mol, single-trajectory MM-GBSA over ${mm.frames} frames of a ${prod?.length_ps ?? "?"} ps production run.`,
+    spreadSd != null ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD over ${ens.all.n} independent runs); the within-run SEM (${unc ? unc.corrected_sem : mm.frame_sem}) is not the uncertainty to report.` : `Only one run of this system; within-run SEM ${unc ? unc.corrected_sem : mm.frame_sem} understates the uncertainty.`,
+    unc ? `Convergence: ${unc.verdict} (N_eff ≈ ${unc.n_eff}, halves ${unc.halves.first} → ${unc.halves.second}).` : "Convergence: per-frame data not archived, cannot judge.",
+    signClaim(ens.all),
+  ].join(" ");
   return {
+    brief,
     value_kcal_mol: mm.delta_total_kcal_mol,
     what_it_is: `Single-trajectory MM-GBSA (igb=${mm.igb}, saltcon=${mm.saltcon}) binding free energy, averaged over ${mm.frames} frames (every ${mm.params?.interval ?? "?"}th of ${mm.params?.endframe ?? "?"}) of the ${prod?.length_ps} ps production stage.`,
     per_frame_std: mm.frame_std, per_frame_sem: mm.frame_sem, sd_convention: mm.sd_convention,
