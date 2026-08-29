@@ -13,7 +13,8 @@ import { mean, sd, sem, statisticalInefficiency, integratedAutocorrelationTime, 
 export class RunLoadError extends Error {
   readonly runId: string; readonly reason: string; readonly status: number | null;
   constructor(runId: string, reason: string, status: number | null) {
-    super(`run '${runId}' could not be loaded: ${reason}. Call list_runs (or open the run list at #/) for valid run ids.`);
+    // A transport failure is not a bad id: say "retry", not "check your run ids".
+    super(`run '${runId}' could not be loaded: ${reason}. ${status == null ? "This is a network error, not an unknown run id — retry; if it persists the site's data files are unreachable from here." : "Call list_runs (or open the run list at #/) for valid run ids."}`);
     this.name = "RunLoadError"; this.runId = runId; this.reason = reason; this.status = status;
   }
 }

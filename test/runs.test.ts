@@ -138,6 +138,7 @@ describe("loadRun / loadIndex with mocked fetch", () => {
     await expect(loadRun("qa-500")).rejects.toThrow(/HTTP 500/);
     stub(async () => { throw new TypeError("Failed to fetch"); });
     await expect(loadRun("qa-net")).rejects.toThrow(/network error.*Failed to fetch/);
+    const e: any = await loadRun("qa-net").catch(x => x); expect(e.message).toMatch(/not an unknown run id — retry/); expect(e.message).not.toMatch(/list_runs/);   // a transport failure must not say "check your ids"
   });
   it("valid JSON that is not a manifest → readable error", async () => {
     stub(async () => json({ hello: "world" }));
