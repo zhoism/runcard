@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Manifest, IndexEntry } from "./lib/types";
-import { loadIndex, loadRun, validateStage, ensemble, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf } from "./lib/runs";
+import { loadIndex, loadRun, validateStage, ensemble, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadder } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
@@ -155,6 +155,19 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
         </div>
       </div>
 
+      {idx.length > 0 && (() => { const L = confidenceLadder(m, idx); const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : ""; return <div className="card">
+        <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} rungs verified — each computed from the archived data; a passing input check is not a rung</span></h2>
+        <ol className="ladder">{L.rungs.map(r => <li key={r.rung}><span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b><div className="dim small">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</div></li>)}</ol>
+      </div>; })()}
+
+      <div className="card"><h2>Fork this experiment <span className="dim">reproduce and replicate change nothing and need no approval; extend changes one variable and waits for yours</span></h2>
+        <dl className="fork">
+          <dt>reproduce</dt><dd>rerun the original as exactly as possible: pinned seeds, same build — tests <i>repeatability</i> if executed and compared; it cannot show the result is stable. <button className="ghost" onClick={() => callTool("generate_rerun_bundle", { run_id: m.id, seed: "pinned", target: "local" })}>build pinned bundle</button></dd>
+          <dt>replicate</dt><dd>same protocol, independent seeds (ig=-1) — an executed rerun joins the run-to-run spread, which is the uncertainty to quote. <button className="ghost" onClick={() => callTool("fork_experiment", { run_id: m.id, kind: "replicate" })}>plan a replicate</button></dd>
+          <dt>extend</dt><dd>change one variable, hold the listed controls: the controlled diff is validated and waits for your approval before a bundle exists. <button className="ghost" onClick={() => { set({ console: { tool: "fork_experiment", input: JSON.stringify({ run_id: m.id, kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" }, null, 1) } }); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>draft an extension (temp0 → 310 K)</button></dd>
+        </dl>
+      </div>
+
       <div className="card"><h2>Analyses <span className="dim">cpptraj</span></h2>
         <div className="gallery">{Object.entries(m.analyses).filter(([k]) => k !== "plip").map(([k, a]) => <figure key={k}><img src={`/runs/${m.id}/${a.png}`} alt="" loading="lazy" /><figcaption>{k}</figcaption></figure>)}</div></div>
 
@@ -208,8 +221,10 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
 
 function Sidebar() {
   const proposals = useStore(s => s.proposals); const calls = useStore(s => s.calls); const bundle = useStore(s => s.bundle);
-  const route = useStore(s => s.route); const webmcp = useStore(s => s.webmcp);
+  const route = useStore(s => s.route); const webmcp = useStore(s => s.webmcp); const pre = useStore(s => s.console);
   const [tool, setTool] = useState(TOOLS[0].name); const [input, setInput] = useState("{}"); const [out, setOut] = useState("");
+  // A page button can hand the console a drafted call (the human edits and presses Call — the console is the only path).
+  useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setOut(""); set({ console: null }); } }, [pre]);
   const t = TOOLS.find(x => x.name === tool)!;
   // Prefill run_id with the run on screen, so "pick explain_result, press Call" works on a run page.
   const currentRun = route.split("/")[2] || "";
@@ -221,7 +236,7 @@ function Sidebar() {
       <h2>Proposals <span className="dim">agent proposes, you approve</span></h2>
       {proposals.length === 0 && <p className="dim">None yet. An agent can call <code>propose_change</code>; nothing is applied until you approve it here.</p>}
       {proposals.map(p => <div key={p.id} className={`proposal ${p.status}`}>
-        <div><b>{p.run}</b> / {p.stage} <span className={`badge ${p.status}`}>{p.status}</span></div>
+        <div><b>{p.run}</b> / {p.stage} <span className={`badge ${p.status}`}>{p.status}</span>{p.fork && <span className="dim small"> · fork {p.fork.kind}{p.fork.question ? `: ${p.fork.question}` : ""}</span>}</div>
         <div className="mono">{Object.entries(p.edits).map(([k, v]) => `${k}=${v}`).join(", ")}</div>
         <div className="dim">{p.reason}</div>
         <div>before <Verdict r={p.before} /> → after <Verdict r={p.after} /></div>

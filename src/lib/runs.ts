@@ -385,7 +385,7 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
 }
 
 // ---- proposals (bounded edits, human-approved) -----------------------
-export interface Proposal { id: string; run: string; stage: string; edits: Record<string, string>; reason: string; before: Report; after: Report; mdin_after: string; status: "pending" | "approved" | "rejected" }
+export interface Proposal { id: string; run: string; stage: string; edits: Record<string, string>; reason: string; before: Report; after: Report; mdin_after: string; status: "pending" | "approved" | "rejected"; fork?: ForkMeta }
 export function applyEdits(mdin: string, edits: Record<string, string>): string {
   let out = mdin;
   for (const [k, v] of Object.entries(edits)) {
@@ -454,16 +454,169 @@ export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; targe
     prev = `${s.name}.rst`;
   }
   files["run.sh"] = lines.join("\n");
+  // Lineage, derived from the edits actually applied (never from a proposal's intent): every approved proposal is listed; fork metadata is
+  // grouped by fork id with the stages that were and were not approved, so a partially approved or doubled-up fork is stated, not hidden.
+  const forkIds = [...new Set(opts.approved.filter(p => p.fork).map(p => p.fork!.id))];
+  const forks = forkIds.map(fid => { const meta = opts.approved.find(p => p.fork?.id === fid)!.fork!; const applied = opts.approved.filter(p => p.fork?.id === fid).map(p => p.stage);
+    return { ...meta, stages_applied: applied, stages_not_applied: meta.stages.filter(s => !applied.includes(s)) }; });
+  const lineage = { kind: opts.approved.length ? "extend" as const : opts.seed === "pinned" ? "reproduce" as const : "replicate" as const, parent: m.id, seed: opts.seed,
+    edits_applied: opts.approved.map(p => ({ stage: p.stage, edits: p.edits, fork: p.fork?.id ?? null })), forks,
+    complete: forks.length <= 1 && forks.every(f => f.stages_not_applied.length === 0) };
+  const forkSection = ["## Fork", `- kind: **${lineage.kind}** (parent card: ${m.id}; seed policy ${opts.seed})`,
+    ...forks.flatMap(f => [
+      `- fork ${f.id}${f.question ? ` — question: ${f.question}` : ""}`,
+      ...(f.treatment ? [`  - treatment: ${f.treatment.key}${f.treatment.meaning ? ` (${f.treatment.meaning})` : ""} → ${f.treatment.to} on ${f.stages_applied.join(", ") || "(no stage)"}; before: ${Object.entries(f.treatment.from).map(([s, v]) => `${s}=${v}`).join(", ")}`] : []),
+      ...(f.stages_not_applied.length ? [`  - ⚠ partially approved: ${f.stages_not_applied.join(", ")} NOT changed — this bundle is not the controlled extension as proposed`] : []),
+      ...(f.controls.length ? ["  - controls intended to be held: " + f.controls.join("; ")] : [])]),
+    ...(forks.length > 1 ? [`- ⚠ ${forks.length} forks combined in one bundle; the result answers neither question alone`] : []),
+    ...opts.approved.filter(p => !p.fork).map(p => `- plain edit: ${p.stage} ${JSON.stringify(p.edits)} — ${p.reason}`),
+    "- lineage is recorded in this bundle's manifest.json (`parent`, `fork`); tools/extract_run.py copies it onto the child card when the rerun directory is extracted", ""];
   files["README.md"] = [`# Rerun bundle: ${m.title} (${m.id})`, "",
     `Seed policy: **${opts.seed}** — ${opts.seed === "pinned" ? "each stage's ig is set to the seed pmemd actually used in the original run (exact replay on the same build; different hardware/compilers may still diverge)." : "ig=-1 as in the original; this is an independent sample, expect ΔG within the run-to-run spread, not equal."}`,
-    `Target: ${opts.target}`, "", "## Environment", `- ${m.environment.pmemd ?? m.stages[0].engine}`, ...Object.entries(m.environment.conda_lock).map(([k, v]) => `- ${k}=${v}`), "",
+    `Target: ${opts.target}`, "", ...forkSection, "## Environment", `- ${m.environment.pmemd ?? m.stages[0].engine}`, ...Object.entries(m.environment.conda_lock).map(([k, v]) => `- ${k}=${v}`), "",
     "## Approved changes", ...(opts.approved.length ? opts.approved.map(p => `- ${p.stage}: ${JSON.stringify(p.edits)} — ${p.reason}`) : ["- none"]), "",
     "## Steps", "1. `cd build && tleap -f leap.in` (needs the ligand mol2/frcmod and cleaned protein PDB from the original run's build/ directory)",
     "2. copy comp_oct.top / comp_oct.crd into md/", "3. `bash run.sh`", "", "## Force fields", ...m.system.force_fields.map(f => `- leaprc.${f}`)].join("\n");
-  files["manifest.json"] = JSON.stringify({ ...m, stages: m.stages.map(s => ({ ...s, mdin: undefined })) }, null, 1);
+  files["manifest.json"] = JSON.stringify({ ...m, parent: m.id, fork: lineage, stages: m.stages.map(s => ({ ...s, mdin: undefined })) }, null, 1);
   return files;
 }
 export function zipBundle(files: Record<string, string>): Uint8Array {
   const o: Record<string, Uint8Array> = {}; for (const [k, v] of Object.entries(files)) o[k] = strToU8(v);
   return zipSync(o, { level: 6 });
+}
+
+// ---- confidence ladder: what the archived evidence establishes, rung by rung -------------
+// recomputable → repeatable → independently replicated → robust to reasonable analysis choices → externally supported.
+// Every rung is computed from the manifest; "verified" means the check ran here on archived data, "expected" means the
+// artefacts to do it exist but nothing was executed, "not assessed" means no evidence of that kind is on the card.
+export type RungStatus = "verified" | "expected" | "not established" | "not assessed";
+export interface Rung { rung: string; status: RungStatus; evidence: string; to_climb: string | null }
+export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
+  const mm = m.results.mmgbsa; const pf = mm?.per_frame ?? null;
+  const me = idx.find(r => r.id === m.id) ?? null;
+  const rungs: Rung[] = [];
+  // 1 recomputable — re-derived here: mean and population SD of the archived per-frame energies vs the mmgbsa.dat summary
+  if (!mm) rungs.push({ rung: "recomputable", status: "not established", evidence: "no MM-GBSA result in this run", to_climb: null });
+  else if (!pf) rungs.push({ rung: "recomputable", status: "not established", evidence: "per-frame energies were not archived; only mmgbsa.dat's summary is on the card", to_climb: "archive _MMPBSA_*_gb.mdout.0 and re-extract" });
+  else {
+    const meanPf = mean(pf.delta_total), sdPf = sd(pf.delta_total, 0); const tol = 5e-5;
+    const ok = Math.abs(meanPf - mm.delta_total_kcal_mol) < tol && Math.abs(sdPf - mm.frame_std) < tol;
+    rungs.push({ rung: "recomputable", status: ok ? "verified" : "not established",
+      evidence: `mean of the ${pf.n} archived per-frame energies = ${round(meanPf)} vs mmgbsa.dat ${mm.delta_total_kcal_mol}; population SD ${round(sdPf)} vs ${mm.frame_std} (both re-derived here, tolerance ${tol}; source ${pf.source.join(", ")})${ok ? "" : " — mismatch"}`, to_climb: null });
+  }
+  // 2 repeatable — a pinned-seed replay is possible only if every stochastic stage's realized seed, the environment lock and leap.in are archived; never verified here
+  const dyn = m.stages.filter(s => s.role !== "minimization"); const unseeded = dyn.filter(s => s.realized_seed == null).map(s => s.name);
+  const pins = Object.keys(m.environment.conda_lock).length;
+  const missing = [...(unseeded.length ? [`realized seed missing for ${unseeded.join(", ")}`] : []), ...(pins ? [] : ["no environment lock"]), ...(m.system.leap_in ? [] : ["no leap.in"])];
+  rungs.push(missing.length
+    ? { rung: "repeatable", status: "not established", evidence: `cannot be replayed exactly: ${missing.join("; ")}`, to_climb: "archive the missing seeds / lock / build inputs" }
+    : { rung: "repeatable", status: "expected", evidence: `realized seeds for ${dyn.length}/${dyn.length} dynamics stages, ${pins} environment pins and leap.in are archived; generate_rerun_bundle seed='pinned' replays the run on the same build. Not executed here, and the bundle still needs the original build/ inputs (ligand mol2/frcmod, cleaned PDB)`, to_climb: "run the pinned bundle, extract the result as a card, compare" });
+  // 3 independently replicated — ≥ 3 runs of the same prepared system AND the same production protocol, with distinct realized seeds
+  const peers = me ? idx.filter(r => sameSystem(r, me)) : [];
+  const sameProto = me?.protocol ? peers.filter(r => r.protocol === me.protocol) : [];
+  const seeded = sameProto.filter(r => r.seed != null); const distinct = new Set(seeded.map(r => r.seed)).size;
+  if (!me) rungs.push({ rung: "independently replicated", status: "not established", evidence: "run not in the site index", to_climb: null });
+  else if (!me.protocol) rungs.push({ rung: "independently replicated", status: "not established", evidence: "the run index carries no protocol key (rebuild with tools/build_index.py)", to_climb: null });
+  else if (sameProto.length >= 3 && distinct === sameProto.length && distinct >= 3) {
+    const st = stratum(sameProto); const lengths = [...new Set(sameProto.map(r => r.production_ps))].sort((a, b) => a - b);
+    const long = stratum(sameProto.filter(r => r.production_ps >= LONG_RUN_MIN_PS));
+    rungs.push({ rung: "independently replicated", status: "verified",
+      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. ${signClaim(st)}`, to_climb: null });
+  } else rungs.push({ rung: "independently replicated", status: "not established",
+    evidence: `${peers.length} run${peers.length === 1 ? "" : "s"} of this prepared system on this site, ${sameProto.length} with the same production protocol${seeded.length && distinct < sameProto.length ? ", not all with distinct seeds" : ""}; at least 3 independent runs (ig=-1, same protocol) are needed`, to_climb: "fork_experiment kind='replicate' (plan_sampling gives the number of runs)" });
+  // 4 robust to reasonable analysis choices — analysis-window sensitivity only: each window's ΔG must sit within 2 corrected SEMs (of that window) of the archived value
+  if (pf && mm) {
+    const n = pf.delta_total.length;
+    const windows: { label: string; opts: RecomputeOpts }[] = [
+      { label: "discard first 10 %", opts: { start_frame: Math.floor(n * 0.1) + 1 } }, { label: "discard first 25 %", opts: { start_frame: Math.floor(n * 0.25) + 1 } },
+      { label: "discard first 50 %", opts: { start_frame: Math.floor(n * 0.5) + 1 } }, { label: "every 2nd frame", opts: { interval: 2 } }];
+    const rows = windows.map(w => { try { const r = recomputeResult(m, w.opts); return { window: w.label, delta_g: r.delta_g.mean, diff: r.vs_archived.diff, sigma: r.vs_archived.diff_in_corrected_sem }; } catch { return null; } });
+    const ok = rows.filter((x): x is NonNullable<typeof x> => !!x && Number.isFinite(x.diff) && Number.isFinite(x.sigma));
+    if (ok.length < windows.length) rungs.push({ rung: "robust to reasonable analysis choices", status: "not established", evidence: `only ${ok.length} of ${windows.length} analysis windows could be re-analysed (too few frames)`, to_climb: "longer sampling (plan_sampling)" });
+    else {
+      const maxSigma = Math.max(...ok.map(r => Math.abs(r.sigma)));
+      const spread = ok.map(r => `${r.window}: ${r.delta_g.toFixed(2)} (Δ ${r.diff >= 0 ? "+" : ""}${r.diff.toFixed(2)}, ${Math.abs(r.sigma).toFixed(1)} σ)`).join("; ");
+      rungs.push({ rung: "robust to reasonable analysis choices", status: maxSigma <= 2 ? "verified" : "not established",
+        evidence: `${ok.length} analysis windows re-analysed — ${spread}; largest shift ${maxSigma.toFixed(1)} corrected SEM of its window (criterion ≤ 2)${maxSigma <= 2 ? "" : " — the window choice moves ΔG by more than its statistical uncertainty"}. Analysis-window sensitivity only: force field, protonation, box and the MM-GBSA model (igb, saltcon) were not varied`,
+        to_climb: maxSigma <= 2 ? "vary a modelling choice in a controlled extension (fork_experiment kind='extend')" : "longer sampling (plan_sampling) until the window choice stops mattering" });
+    }
+  } else rungs.push({ rung: "robust to reasonable analysis choices", status: "not established", evidence: "per-frame energies not archived; windows cannot be re-analysed", to_climb: null });
+  // 5 externally supported — nothing of that kind is on the card; never claimed
+  rungs.push({ rung: "externally supported", status: "not assessed", evidence: "no experimental or literature value is linked to this card", to_climb: "link an external reference with its own provenance (not part of this site)" });
+  const verified = rungs.filter(r => r.status === "verified").length;
+  return { run: m.id, rungs, verified_of_assessable: `${verified} of 4`, summary: `${verified} of 4 assessable rungs verified (${rungs.filter(r => r.status === "verified").map(r => r.rung).join(", ") || "none"}); repeatable is at best expected (nothing is executed here); external support is not assessed.`,
+    method: "recomputable: mean and population SD of the archived per-frame energies vs mmgbsa.dat (tolerance 5e-5); repeatable: realized seeds for every dynamics stage + environment lock + leap.in archived (never executed here); replicated: ≥ 3 runs with the same system fingerprint and production-protocol key and distinct realized seeds; robust: ΔG over equilibration-discard (10/25/50 %) and stride-2 windows within 2 corrected SEMs of the archived value — analysis-window sensitivity only; external: not assessed. A passing input sanity check is not a rung." };
+}
+
+// ---- fork this experiment: reproduce / replicate / extend ------------------------------
+export type ForkKind = "reproduce" | "replicate" | "extend";
+export interface ForkMeta { id: string; kind: ForkKind; parent: string; question: string | null; treatment: { key: string; meaning: string | null; class: ParamClass; from: Record<string, string>; to: string } | null; stages: string[]; controls: string[] }
+let forkSeq = 0;
+/** Conditions held fixed in a controlled extension, as strings a reader can check against the stage inputs. */
+function controlsHeld(m: Manifest, treatmentKey: string | null): string[] {
+  const prod = m.stages.find(s => s.role === "production"); const c = prod?.cntrl ?? {};
+  const mm = m.results.mmgbsa;
+  const keys = ["dt", "cut", "ntc", "ntf", "ntt", "gamma_ln", "temp0", "ntp", "barostat", "pres0", "nstlim", "ntwx"].filter(k => k !== treatmentKey && c[k] != null);
+  return [`force fields ${m.system.force_fields.join(" + ")}`, `system ${m.system.ligand.resname ?? "?"} (${m.system.ligand.atoms ?? "?"} atoms, ${m.system.ligand.charge_method ?? "?"} charges) in ${m.system.solvent.model ?? "?"} ${m.system.solvent.box ?? ""} ${m.system.solvent.buffer_A ?? "?"} Å`,
+    ...keys.map(k => `${k}=${c[k]} (${paramClass(k)})`), ...(mm ? [`MM-GBSA igb=${mm.igb}, saltcon=${mm.saltcon}, ${mm.frames} frames (every ${mm.params?.interval ?? "?"}th)`] : [])];
+}
+/** Which stages a treatment applies to: thermodynamic state → equilibration + production (the heating ramp is a schedule, left alone); everything else → production. */
+export function forkStages(m: Manifest, key: string): string[] {
+  const cls = paramClass(key);
+  const dyn = m.stages.filter(s => s.role !== "minimization" && s.cntrl[key] != null);
+  const picked = cls === "thermodynamic_state" ? dyn.filter(s => s.role !== "heating") : dyn.filter(s => s.role === "production");
+  return picked.map(s => s.name);
+}
+export function forkExperiment(m: Manifest, idx: IndexEntry[], opts: { kind: ForkKind; treatment?: { key: string; value: string }; question?: string; stages?: string[] }) {
+  const kinds: ForkKind[] = ["reproduce", "replicate", "extend"];
+  if (!kinds.includes(opts.kind)) throw new Error(`kind must be one of ${kinds.join(", ")}, got ${JSON.stringify(opts.kind)}`);
+  const ens = idx.some(r => r.id === m.id) ? ensemble(idx, m.id) : null;
+  const id = `f${Date.now().toString(36)}${(++forkSeq).toString(36)}`;
+  const approval = "NOTHING is applied until a person clicks Approve in the Proposals panel; the bundle is generated afterwards.";
+  const controlsNote = "controls listed are those intended to be held (production &cntrl physics / thermodynamic state / sampling, system, force fields, MM-GBSA model); the bundle carries the complete inputs, and diff_runs on the child card is the check";
+  if (opts.kind === "reproduce") return { fork_id: id, kind: opts.kind, parent: m.id, tests: "repeatability — if the rerun is executed and its result compared with the archived one, the same setup and seed regenerate the same trajectory on the same build; this does not show the result is stable",
+    seed_policy: "pinned: each stage's ig set to the seed pmemd actually used", controls_held: controlsHeld(m, null), controls_note: controlsNote, proposals: [], next: { tool: "generate_rerun_bundle", input: { run_id: m.id, seed: "pinned", target: "local" } }, note: "No parameter changes, so no approval is needed; the bundle is generated directly. Different hardware or compilers may still diverge." };
+  if (opts.kind === "replicate") {
+    let plan: ReturnType<typeof planSampling> | null = null; try { plan = planSampling(m, idx, {}); } catch { plan = null; }
+    return { fork_id: id, kind: opts.kind, parent: m.id, tests: "independent replication — once executed and extracted, an independent-seed run of the same protocol joins the run-to-run spread, which is the uncertainty to quote",
+      seed_policy: "fresh: ig=-1, an independent sample of the same protocol", controls_held: controlsHeld(m, null), controls_note: controlsNote, proposals: [],
+      runs_recommended: plan ? { additional_runs: plan.run_to_run.additional_runs, min_run_ps: plan.recommended_run_ps, target_uncertainty_kcal: plan.target_uncertainty_kcal, now: ens ? `${ens.all.n} run${ens.all.n === 1 ? "" : "s"} on this site` : null } : null,
+      next: { tool: "generate_rerun_bundle", input: { run_id: m.id, seed: "fresh", target: "local" } }, note: "No parameter changes; no approval needed. Expect ΔG within the run-to-run spread, not equal." };
+  }
+  // extend: one treatment variable, controls fixed, validated, pending human approval
+  const t = opts.treatment;
+  if (!t || typeof t !== "object" || !t.key) throw new Error(`extend needs treatment {key, value}, e.g. {"key":"temp0","value":"310.0"}`);
+  const key = String(t.key).toLowerCase(); const cls = paramClass(key);
+  if (!isMaterial(cls) || cls === "other") throw new Error(`${key} is not a treatment variable (class ${cls}); an extension changes one physics, thermodynamic_state, sampling_length or restraints parameter`);
+  const to = String(t.value ?? "").trim(); const num = Number(to.replace(/[dD]/, "e"));
+  if (!to || !Number.isFinite(num)) throw new Error(`treatment value must be a finite number written as a string (e.g. "310.0"), got ${JSON.stringify(t.value)}`);
+  // Which stages may receive the treatment: dynamics stages that set the key; the heating ramp is a schedule, so it is excluded for thermodynamic-state keys.
+  const allowed = forkStages(m, key);
+  if (!allowed.length) throw new Error(`no dynamics stage of ${m.id} sets ${key}; stages: ${m.stages.map(s => `${s.name} (${s.role})`).join(", ")}`);
+  let stages = allowed;
+  if (opts.stages != null) {
+    if (!Array.isArray(opts.stages) || !opts.stages.length) throw new Error(`stages must be a non-empty list drawn from ${allowed.join(", ")}`);
+    stages = [...new Set(opts.stages.map(String))];
+    const bad = stages.filter(n => !allowed.includes(n));
+    if (bad.length) throw new Error(`stages ${bad.join(", ")} cannot receive ${key} (${cls}); allowed: ${allowed.join(", ")}${cls === "thermodynamic_state" ? " (the heating ramp is left alone; minimization has no dynamics)" : ""}`);
+  }
+  const from: Record<string, string> = {}; for (const n of stages) from[n] = m.stages.find(x => x.name === n)!.cntrl[key] ?? "(unset)";
+  const unchanged = stages.filter(n => from[n] === to);
+  if (unchanged.length) throw new Error(`${key} is already ${to} in ${unchanged.join(", ")}; every treated stage must change`);
+  const question = opts.question?.trim() || null;
+  const meta: ForkMeta = { id, kind: "extend", parent: m.id, question, treatment: { key, meaning: SEMANTIC[key] ?? null, class: cls, from, to }, stages, controls: controlsHeld(m, key) };
+  const proposals: Proposal[] = stages.map(n => ({ ...makeProposal(m, n, { [key]: to }, question ?? `extend: ${key} ${from[n]} → ${to}`), fork: meta }));
+  const heat = m.stages.find(s => s.role === "heating"); const first = m.stages.find(s => s.name === stages[0]);
+  let plan: ReturnType<typeof planSampling> | null = null; try { plan = planSampling(m, idx, {}); } catch { plan = null; }
+  return { fork_id: id, kind: "extend" as const, parent: m.id, question, tests: "a controlled extension — one variable changed, the listed controls held; once executed and extracted, its card links back to this run as a child",
+    treatment: meta.treatment, stages_changed: stages,
+    stages_unchanged_note: cls === "thermodynamic_state" && heat && heat.cntrl[key] != null && !stages.includes(heat.name)
+      ? `${heat.name} keeps its ${key} ramp to ${heat.cntrl[key]} (a schedule, not a condition): the system is heated as before, then jumps to ${to} at the start of ${stages[0]} and equilibrates there${first?.length_ps != null ? ` for ${first.length_ps} ps` : ""} before production — a jump followed by equilibration, not a preparation at ${to} throughout`
+      : null,
+    controls_held: meta.controls, controls_note: controlsNote,
+    proposals: proposals.map(p => ({ id: p.id, stage: p.stage, before: verdictOf(p.before), after: verdictOf(p.after), findings: p.after.findings.filter(f => f.level !== "PASS").map(f => `${f.level} ${f.rule}: ${f.detail}`) })),
+    seed_policy: "fresh (ig=-1) recommended: MD is chaotic, so compare the extension as an ensemble against the parent's run-to-run spread, not one trajectory against one; seed='pinned' replays the parent's seed draw instead",
+    sampling: plan ? { runs_per_condition: Math.max(3, (plan.run_to_run.n_needed ?? 3)), min_run_ps: plan.recommended_run_ps, parent_run_to_run_sd: plan.run_to_run.sd_used } : null,
+    next_steps: [`approve ${proposals.length} proposal${proposals.length === 1 ? "" : "s"} in the Proposals panel (human)`, "generate_rerun_bundle seed='fresh' target='local'|'slurm'", "run it elsewhere; extract the result as a child card"],
+    note: approval, _proposals: proposals };
 }

@@ -7,10 +7,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "public/runs"
 
+# &cntrl keys that define the production protocol (mirrors PARAM_CLASS physics / thermodynamic_state / restraints in src/lib/runs.ts).
+PROTOCOL_KEYS = ("dt", "cut", "ntc", "ntf", "ntb", "nmropt", "temp0", "tempi", "ntt", "gamma_ln", "ntp", "pres0", "barostat", "taup", "ntr", "restraint_wt", "restraintmask")
+
+def protocol_key(prod, mm):
+    """Same string ⇒ same production protocol (sampling length, output cadence and seed excluded); plus the MM-GBSA model."""
+    if not prod: return None
+    c = prod["cntrl"]
+    parts = [f"{k}={c[k]}" for k in PROTOCOL_KEYS if k in c] + [f"igb={mm.get('igb')}", f"saltcon={mm.get('saltcon')}"]
+    return "|".join(parts)
+
 def entry(m):
     prod = next((s for s in m["stages"] if s["role"] == "production"), None)
     sy = m["system"]; mm = m["results"].get("mmgbsa") or {}
     return {
+        "protocol": protocol_key(prod, mm), "seed": prod.get("realized_seed") if prod else None,
         "id": m["id"], "title": m["title"], "ligand": sy["ligand"]["resname"], "protein_atoms": sy["protein"]["atoms"],
         "production_ps": prod["length_ps"] if prod else None, "delta_g": mm.get("delta_total_kcal_mol"),
         "plip": "plip" in m["results"], "engine": m["environment"].get("pmemd") or m["engine"],

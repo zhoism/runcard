@@ -1,5 +1,7 @@
 [
  {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 702337,
   "id": "1l2y-regression",
   "title": "1L2Y + MOL (indole)",
   "ligand": "MOL",
@@ -34,6 +36,8 @@
   }
  },
  {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 707390,
   "id": "1l2y-rep1",
   "title": "1L2Y + MOL, run 1",
   "ligand": "MOL",
@@ -68,6 +72,8 @@
   }
  },
  {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 870563,
   "id": "1l2y-rep2",
   "title": "1L2Y + MOL, run 2",
   "ligand": "MOL",
@@ -102,6 +108,8 @@
   }
  },
  {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 488271,
   "id": "1l2y-rep3",
   "title": "1L2Y + MOL, run 3",
   "ligand": "MOL",
@@ -136,6 +144,8 @@
   }
  },
  {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 239623,
   "id": "1l2y-rep4",
   "title": "1L2Y + MOL, run 4",
   "ligand": "MOL",
@@ -170,6 +180,8 @@
   }
  },
  {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 704051,
   "id": "1l2y-rep5",
   "title": "1L2Y + MOL, run 5",
   "ligand": "MOL",
@@ -204,6 +216,8 @@
   }
  },
  {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 20313,
   "id": "1l2y-rep6",
   "title": "1L2Y + MOL, run 6",
   "ligand": "MOL",
@@ -238,6 +252,8 @@
   }
  },
  {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 426573,
   "id": "1l2y-rep7",
   "title": "1L2Y + MOL, run 7",
   "ligand": "MOL",
@@ -272,6 +288,8 @@
   }
  },
  {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 387943,
   "id": "1l2y-rep8",
   "title": "1L2Y + MOL, run 8",
   "ligand": "MOL",
@@ -306,6 +324,8 @@
   }
  },
  {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 392965,
   "id": "3htb-jz4",
   "title": "3HTB + JZ4",
   "ligand": "JZ4",

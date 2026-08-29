@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, forkExperiment, forkStages } from "../src/lib/runs";
 import { mean, sd } from "../src/lib/stats";
 import { execFileSync } from "node:child_process";
 const load = (id: string) => JSON.parse(readFileSync(`public/runs/${id}/manifest.json`, "utf8"));
@@ -309,5 +309,67 @@ describe("review batch 2026-08-29, part 2", () => {
     expect(pA.within_run.expected_length_for_target_ps).toBeNull(); expect(pA.within_run.expected_length_note).toMatch(/drifting/);
     expect(pA.recommendation).toMatch(/No single-run length is projected/); expect(pA.recommendation).not.toMatch(/≈ \d+(\.\d+)? ps \(expected\)/);
     const pB = planSampling(B, idx, {}); expect(pB.within_run.expected_length_for_target_ps).toBeGreaterThan(0); expect(pB.within_run.expected_length_note).toBeNull();
+  });
+});
+
+describe("confidence ladder", () => {
+  it("rep4: recomputable and replicated verified, repeatable expected, external not assessed; robust computed over 4 windows", () => {
+    const L = confidenceLadder(B, idx); const by = Object.fromEntries(L.rungs.map(r => [r.rung, r]));
+    expect(L.rungs.map(r => r.rung)).toEqual(["recomputable", "repeatable", "independently replicated", "robust to reasonable analysis choices", "externally supported"]);
+    expect(by["recomputable"].status).toBe("verified"); expect(by["recomputable"].evidence).toMatch(/re-derived here/);
+    expect(by["repeatable"].status).toBe("expected"); expect(by["repeatable"].evidence).toMatch(/3\/3 dynamics stages/);
+    expect(by["independently replicated"].status).toBe("verified"); expect(by["independently replicated"].evidence).toMatch(/9 runs of the same prepared system and production protocol with distinct realized seeds/);
+    expect(["verified", "not established"]).toContain(by["robust to reasonable analysis choices"].status); expect(by["robust to reasonable analysis choices"].evidence).toMatch(/4 analysis windows re-analysed/); expect(by["robust to reasonable analysis choices"].evidence).toMatch(/criterion ≤ 2/);
+    const noProto = confidenceLadder(B, idx.map((r: any) => ({ ...r, protocol: undefined }))); expect(noProto.rungs[2].status).toBe("not established"); expect(noProto.rungs[2].evidence).toMatch(/no protocol key/);
+    expect(by["externally supported"].status).toBe("not assessed");
+    expect(L.summary).toMatch(/of 4 assessable rungs verified/);
+  });
+  it("3htb: replicated is not established (n=1) and says so; every run's ladder has 5 rungs", () => {
+    const L = confidenceLadder(C, idx); const rep = L.rungs.find(r => r.rung === "independently replicated")!;
+    expect(rep.status).toBe("not established"); expect(rep.evidence).toMatch(/1 run of this prepared system on this site, 1 with the same production protocol/); expect(rep.to_climb).toMatch(/replicate/);
+    for (const r of idx) expect(confidenceLadder(load(r.id), idx).rungs.length, r.id).toBe(5);
+  });
+});
+
+describe("fork_experiment", () => {
+  it("extend temp0 → 310 K applies to density + product, leaves the heating ramp, holds the controls, creates one pending proposal per stage", () => {
+    const f = forkExperiment(B, idx, { kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" });
+    expect(f.kind).toBe("extend"); expect(f.stages_changed).toEqual(["density", "product"]); expect(f.stages_unchanged_note).toMatch(/heat keeps its temp0 ramp/);
+    expect(f.treatment!.from).toEqual({ density: "300.0", product: "300.0" }); expect(f.treatment!.to).toBe("310.0"); expect(f.treatment!.class).toBe("thermodynamic_state");
+    expect(f.controls_held.join(" ")).toMatch(/dt=0\.002/); expect(f.controls_held.join(" ")).toMatch(/protein\.ff19SB/); expect(f.controls_held.join(" ")).not.toMatch(/temp0=/);
+    expect(f.proposals.length).toBe(2); for (const p of f.proposals) { expect(p.after).toBe("PASS"); }
+    const ps = (f as any)._proposals; expect(ps[0].fork.id).toBe(f.fork_id); expect(ps[0].status).toBe("pending"); expect(ps[1].mdin_after).toMatch(/temp0=310\.0/);
+    expect(f.parent).toBe("1l2y-rep4"); expect(f.note).toMatch(/NOTHING is applied/);
+  });
+  it("extend: nstlim goes to production only; output-cadence keys and unchanged values are rejected; reproduce/replicate need no approval", () => {
+    expect(forkStages(B, "nstlim")).toEqual(["product"]); expect(forkStages(B, "temp0")).toEqual(["density", "product"]);
+    expect(() => forkExperiment(B, idx, { kind: "extend", treatment: { key: "ntwx", value: "10" } })).toThrow(/not a treatment variable/);
+    expect(() => forkExperiment(B, idx, { kind: "extend", treatment: { key: "temp0", value: "300.0" } })).toThrow(/already 300\.0/);
+    expect(() => forkExperiment(B, idx, { kind: "extend" })).toThrow(/treatment \{key, value\}/);
+    expect(() => forkExperiment(B, idx, { kind: "nope" as any })).toThrow(/kind must be/);
+    expect(() => forkExperiment(B, idx, { kind: "extend", treatment: { key: "temp0", value: "" } })).toThrow(/finite number/);
+    expect(() => forkExperiment(B, idx, { kind: "extend", treatment: { key: "temp0", value: "NaN" } })).toThrow(/finite number/);
+    expect(() => forkExperiment(B, idx, { kind: "extend", treatment: { key: "temp0", value: "310.0" }, stages: ["heat"] })).toThrow(/heat cannot receive temp0/);
+    expect(() => forkExperiment(B, idx, { kind: "extend", treatment: { key: "temp0", value: "310.0" }, stages: ["min1"] })).toThrow(/cannot receive/);
+    expect(forkExperiment(B, idx, { kind: "extend", treatment: { key: "temp0", value: "310.0" }, stages: ["product", "product"] }).stages_changed).toEqual(["product"]);
+    expect(forkExperiment(B, idx, { kind: "reproduce" }).tests).toMatch(/if the rerun is executed and its result compared/);
+    const r = forkExperiment(B, idx, { kind: "reproduce" }); expect(r.next).toEqual({ tool: "generate_rerun_bundle", input: { run_id: "1l2y-rep4", seed: "pinned", target: "local" } }); expect(r.proposals).toEqual([]);
+    const p = forkExperiment(B, idx, { kind: "replicate" }); expect(p.next!.input.seed).toBe("fresh"); expect((p as any).runs_recommended.additional_runs).toBeGreaterThanOrEqual(0);
+  });
+  it("an approved extension lands in the bundle with lineage: README ## Fork and manifest parent/fork; plain bundles record reproduce/replicate", () => {
+    const f = forkExperiment(B, idx, { kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" });
+    const approved = (f as any)._proposals.map((p: any) => ({ ...p, status: "approved" }));
+    const files = rerunBundle(B, { seed: "fresh", target: "local", approved });
+    expect(files["md/density.in"]).toMatch(/temp0=310\.0/); expect(files["md/product.in"]).toMatch(/temp0=310\.0/); expect(files["md/heat.in"]).toMatch(/temp0=300\.0/);
+    expect(files["README.md"]).toMatch(/## Fork\n- kind: \*\*extend\*\* \(parent card: 1l2y-rep4; seed policy fresh\)\n- fork f\w+ — question: Does binding weaken at 310 K\?\n  - treatment: temp0 \(target temperature \(K\)\) → 310\.0 on density, product; before: density=300\.0, product=300\.0/);
+    const mf = JSON.parse(files["manifest.json"]); expect(mf.parent).toBe("1l2y-rep4"); expect(mf.fork.kind).toBe("extend"); expect(mf.fork.forks[0].treatment.key).toBe("temp0"); expect(mf.fork.complete).toBe(true);
+    // partial approval and combined forks are stated, not hidden
+    const half = rerunBundle(B, { seed: "fresh", target: "local", approved: [approved[1]] });
+    expect(half["README.md"]).toMatch(/partially approved: density NOT changed/); expect(JSON.parse(half["manifest.json"]).fork.complete).toBe(false);
+    const g = forkExperiment(B, idx, { kind: "extend", treatment: { key: "nstlim", value: "20000" } });
+    const two = rerunBundle(B, { seed: "fresh", target: "local", approved: [...approved, ...(g as any)._proposals.map((p: any) => ({ ...p, status: "approved" }))] });
+    expect(two["README.md"]).toMatch(/2 forks combined/); expect(JSON.parse(two["manifest.json"]).fork.forks.length).toBe(2);
+    expect(JSON.parse(rerunBundle(B, { seed: "pinned", target: "local", approved: [] })["manifest.json"]).fork.kind).toBe("reproduce");
+    expect(JSON.parse(rerunBundle(B, { seed: "fresh", target: "local", approved: [] })["manifest.json"]).fork.kind).toBe("replicate");
   });
 });

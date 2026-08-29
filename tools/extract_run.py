@@ -228,6 +228,16 @@ def main():
         "pipeline": {"stage_envelopes": {f"s{i}": (x or {}).get("ok") for i, x in zip(range(2, 7), (s2, s3, s4, s5, s6)) if x is not None},
                      "skills": [x.get("skill") for x in (s2, s3, s4, s5, s6) if x]},
     }
+    # --- lineage: a rerun made from a runcard bundle carries the parent card's manifest.json (with `parent` and `fork`) in its root ---
+    lin = run / "manifest.json"
+    if lin.exists():
+        try:
+            pj = json.loads(rd(lin))
+            if isinstance(pj, dict) and pj.get("parent"):
+                manifest["parent"] = pj["parent"]; manifest["fork"] = pj.get("fork")
+                print(f"  lineage: parent {pj['parent']} ({(pj.get('fork') or {}).get('kind')})", file=sys.stderr)
+        except Exception as e:  # a malformed lineage file must not break extraction; the card just has no parent
+            print(f"  !! {rid}: manifest.json in the run dir is not a runcard lineage file ({e})", file=sys.stderr)
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1, ensure_ascii=False))
     print(rid, len(stages), "stages", results.get("mmgbsa", {}).get("delta_total_kcal_mol"))
 

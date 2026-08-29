@@ -40,4 +40,6 @@ aside select, aside textarea, .titlebar select { width:100%; background:#0b0f14;
 aside textarea { font-family: ui-monospace, monospace; }
 button { background:var(--acc); color:#04121c; border:0; border-radius:6px; padding:6px 12px; font-weight:600; cursor:pointer; margin:4px 4px 4px 0; } button:disabled { opacity:.4; cursor:not-allowed; } button.ghost { background:transparent; color:var(--dim); border:1px solid var(--line); }
 .proposal { border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px; font-size:13px; } .proposal.approved { border-color:var(--pass); } .proposal.rejected { opacity:.5; }
+.ladder { list-style:none; margin:0; padding:0; font-size:14px; } .ladder li { padding:6px 0; border-bottom:1px solid var(--line); } .ladder li:last-child { border-bottom:0; }
+dl.fork dd button { margin-left:6px; font-size:13px; padding:3px 9px; }
 .row { display:flex; } .call { font-size:13px; padding:5px 0; border-bottom:1px solid var(--line); } .call .args { color:var(--dim); } .call .what { margin-top:2px; }
