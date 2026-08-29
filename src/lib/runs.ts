@@ -387,7 +387,7 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
   const stageDiffs = stages.map(n => {
     const sa = a.stages.find(s => s.name === n)!, sb = b.stages.find(s => s.name === n)!;
     const keys = [...new Set([...Object.keys(sa.cntrl), ...Object.keys(sb.cntrl)])].filter(k => sa.cntrl[k] !== sb.cntrl[k]);
-    const changes = keys.map(k => { const c = paramClass(k); return { key: k, meaning: SEMANTIC[k] ?? null, class: c, material: isMaterial(c), a: sa.cntrl[k] ?? null, b: sb.cntrl[k] ?? null }; });
+    const changes = keys.map(k => { const c = paramClass(k); return { key: k, meaning: SEMANTIC[k] ?? null, class: c, material: same && isMaterial(c), a: sa.cntrl[k] ?? null, b: sb.cntrl[k] ?? null }; });
     return { stage: n, length_ps: { a: sa.length_ps, b: sb.length_ps }, changes };
   }).filter(d => d.changes.length);
   const classes = new Set(stageDiffs.flatMap(d => d.changes.map(c => c.class)));
@@ -405,15 +405,16 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
   const noise = dg.diff != null && sdDiff != null ? { sd_of_difference: round(sdDiff, 2), ratio: round(Math.abs(dg.diff) / sdDiff, 1), consistent_with_sampling_noise: Math.abs(dg.diff) <= 2 * sdDiff } : null;
   const vsSpread = dg.diff != null && sdAll != null && noise ? `|ΔΔG| = ${Math.abs(dg.diff).toFixed(2)} kcal/mol vs the expected spread of a two-run difference √2·SD = ${noise.sd_of_difference} (run-to-run SD ${sdAll.toFixed(2)}, n=${spread!.all.n}): ${noise.ratio}σ → ${noise.consistent_with_sampling_noise ? "consistent with sampling noise" : "larger than sampling noise alone would give (> 2σ)"}` : null;
   // Descriptive, not evaluative: state what differs and give the reader the scale to judge ΔΔG against. No claim about which run is "better" or converged — that is reported per run by explain_result.
+  const verdict = !same ? "different complexes — ΔG not compared" : noise ? (noise.consistent_with_sampling_noise ? `ΔΔG consistent with sampling noise (${noise.ratio}σ of a two-run difference)` : `ΔΔG larger than sampling noise alone (${noise.ratio}σ of a two-run difference)`) : "no run-to-run spread to judge ΔΔG against";
   const interpretation = !same
     ? "Different prepared systems (see the system table). The two ΔG values describe different complexes and are not compared here."
     : material.length === 0
-      ? `Same prepared system and protocol; only ${[...classes].join(" and ") || "seeds"} differ, so the two ΔG values are independent samples of the same protocol. ${vsSpread ?? ""}`.trim()
+      ? `Same prepared system and protocol; only ${[...classes].join(" and ") || "seeds"} differ, so the two ΔG values are independent samples of the same protocol.`
       : material.every(c => c === "sampling_length")
-        ? `Same prepared system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}), so they are different-length samples of the same protocol. Whether either run is converged is reported per run (drift verdict in explain_result). ${vsSpread ?? ""}`.trim()
-        : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes). The ΔG difference combines that change with seed-to-seed sampling; the run-to-run spread is the scale to judge it against. ${vsSpread ?? ""}`.trim();
+        ? `Same prepared system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}), so they are different-length samples of the same protocol. Whether either run is converged is reported per run (drift verdict in explain_result).`
+        : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes). The ΔG difference combines that change with seed-to-seed sampling; the run-to-run spread is the scale to judge it against.`;
   return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, differing_classes: [...classes], material_classes: material,
-    realized_seeds: seeds, delta_g: dg, delta_g_vs_noise: noise, run_to_run_spread: spread, interpretation };
+    realized_seeds: seeds, delta_g: dg, delta_g_vs_noise: noise, run_to_run_spread: spread, verdict, interpretation, scale: vsSpread };
 }
 
 // ---- proposals (bounded edits, human-approved) -----------------------

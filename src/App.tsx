@@ -137,13 +137,13 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
             {/* Headline: this run's ΔG with the uncertainty the page argues for (run-to-run SD), then the rows in order of what matters; the mechanics are one disclosure away. */}
             <div className="big">{fmt(mm.delta_total_kcal_mol)}{spreadSd != null && <> ± {fmt(spreadSd)}</>} <span className="unit">kcal/mol</span></div>
             <p className="dim small">{spreadSd != null
-              ? <>± is the run-to-run SD over {ens!.all.n} independent runs of this system — the uncertainty to quote; the within-run SEM below is not.</>
+              ? <>± is the run-to-run SD (below) — the uncertainty to quote; the within-run SEM is not.</>
               : u ? <>single run of this system: the within-run corrected SEM below does not estimate run-to-run uncertainty — no spread can be quoted until three independent runs exist.</> : null}</p>
             <dl>
               {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
                 {ens.long.n > 0 && ens.long.n < ens.all.n && <><br /><b>n={ens.long.n}</b> runs ≥ {ens.long.min_ps} ps: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</>}
                 <span className="dim"> — seed-to-seed variation over 2–30 ps from one prepared start; production lengths differ across runs</span></dd></>}
-              {u && <><dt>within run</dt><dd>corrected SEM <b>{u.corrected_sem}</b> (g = {u.statistical_inefficiency_g}, N<sub>eff</sub> ≈ {u.n_eff}) · halves {u.halves.first} → {u.halves.second} · <b>{u.verdict}</b></dd></>}
+              {u && <><dt>within run</dt><dd>corrected SEM <b>{fmt(u.corrected_sem, 3)}</b> (g = {u.statistical_inefficiency_g}, N<sub>eff</sub> ≈ {u.n_eff}) · halves {fmt(u.halves.first)} → {fmt(u.halves.second)} · <b>{u.verdict}</b> <span className="dim">(halves test over {prod?.length_ps ?? "?"} ps)</span></dd></>}
               {re && re.run === m.id && <><dt>agent reanalysis</dt><dd>frames {re.start_frame}–{re.end_frame}{re.interval > 1 ? ` every ${re.interval}th` : ""} ({re.frames_used} frames{re.start_ps != null ? `, ${re.start_ps}–${re.end_ps} ps` : ""}) → <b>{fmt(re.mean)} ± {fmt(re.corrected_sem)}</b>, {re.verdict} <span className="dim">(recomputed in the browser from the archived per-frame energies; ± is the corrected SEM; the archived value above is unchanged)</span></dd></>}
               <dt>method</dt><dd>MM-GBSA igb={mm.igb}, saltcon={mm.saltcon} · computed {mm.run_on}</dd></dl>
             {mm.per_frame && <Sparkline x={mm.per_frame.delta_total} lengthPs={prod?.length_ps ?? null} window={re && re.run === m.id ? { start: re.start_frame, end: re.end_frame } : undefined} />}
@@ -164,8 +164,8 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
       </div>
 
       {idx.length > 0 && (() => { const L = confidenceLadder(m, idx); const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : ""; return <div className="card">
-        <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} rungs verified — each computed from the archived data; a passing input check is not a rung</span></h2>
-        <ol className="ladder">{L.rungs.map(r => <li key={r.rung}><span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span>
+        <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} assessed rungs verified · 1 not assessed — each computed from the archived data; a passing input check is not a rung</span></h2>
+        <ol className="ladder">{L.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><span className="dim mono">{i + 1}.</span> <span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span>
           <details className="small"><summary className="dim">evidence</summary><p className="dim">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</p></details></li>)}</ol>
       </div>; })()}
 
@@ -181,7 +181,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
       </div>
 
       <div className="card"><h2>Analyses <span className="dim">cpptraj</span></h2>
-        <div className="gallery">{Object.entries(m.analyses).filter(([k]) => k !== "plip").map(([k, a]) => <figure key={k}><img src={`/runs/${m.id}/${a.png}`} alt="" loading="lazy" /><figcaption>{k}</figcaption></figure>)}</div></div>
+        <div className="gallery">{Object.entries(m.analyses).filter(([k]) => k !== "plip").map(([k, a]) => <figure key={k}><a href={`/runs/${m.id}/${a.png}`} target="_blank" rel="noopener" title={`open ${a.png} full size`}><img src={`/runs/${m.id}/${a.png}`} alt="" loading="lazy" /></a><figcaption>{k} <span className="dim">· {a.png}</span></figcaption></figure>)}</div></div>
 
       <div className="card"><h2>Provenance</h2>
         <dl><dt>pipeline stages</dt><dd className="mono">{Object.entries(m.pipeline.stage_envelopes).map(([k, ok]) => `${k}:${ok ? "ok" : "FAILED"}`).join("  ")} <span className="dim">({m.pipeline.skills.join(" → ")})</span></dd>
@@ -219,15 +219,19 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
   if (!d) return <p className="dim" role="status">comparing…</p>;
   return <section>
     <h1>Compare <a href={`#/run/${a}`}>{a}</a> vs <a href={`#/run/${b}`}>{b}</a></h1>
-    <div className={`interp ${d.same_system ? "" : "warn"}`}>{d.interpretation}</div>
+    {/* The verdict first, in bold; the reasoning under it; the numbers live once, in the table below. */}
+    <div className={`interp ${d.same_system ? "" : "warn"}`}><b>{d.verdict}</b><div className="dim">{d.interpretation}</div></div>
     <div className="grid2">
-      <div className="card"><h2>System</h2>{d.system.length ? <table><thead><tr><th>field</th><th>{a}</th><th>{b}</th></tr></thead><tbody>{d.system.map(s => <tr key={s.field}><td>{s.field.replace(/_/g, " ")}</td><td className="mono">{show(s.a)}</td><td className="mono">{show(s.b)}</td></tr>)}</tbody></table> : <p className="pass">identical prepared system</p>}</div>
-      <div className="card"><h2>ΔG</h2><table><thead><tr><th>run</th><th className="num">ΔG (kcal/mol)</th></tr></thead><tbody><tr><td>{a}</td><td className="num">{fmt(d.delta_g.a)}</td></tr><tr><td>{b}</td><td className="num">{fmt(d.delta_g.b)}</td></tr>
-        {d.run_to_run_spread && <tr><td>run-to-run (n={d.run_to_run_spread.all.n})</td><td className="num">{fmt(d.run_to_run_spread.all.mean)} ± {fmt(d.run_to_run_spread.all.sd)}</td></tr>}
-        {d.delta_g.diff != null && <tr><td>ΔΔG ({a} − {b})</td><td className="num">{fmt(d.delta_g.diff)}</td></tr>}</tbody></table>
-        <div className="dim mono">seeds A: {d.realized_seeds.a.join(" ")}<br />seeds B: {d.realized_seeds.b.join(" ")}</div></div>
+      <div className="card"><h2>ΔG <span className="dim">kcal/mol</span></h2><table><thead><tr><th>run</th><th className="num">ΔG</th></tr></thead><tbody><tr><td>{a}</td><td className="num">{fmt(d.delta_g.a)}</td></tr><tr><td>{b}</td><td className="num">{fmt(d.delta_g.b)}</td></tr>
+        {d.run_to_run_spread && <tr><td>run-to-run mean ± SD (n={d.run_to_run_spread.all.n})</td><td className="num">{fmt(d.run_to_run_spread.all.mean)} ± {fmt(d.run_to_run_spread.all.sd)}</td></tr>}
+        {d.delta_g.diff != null && <tr><td>ΔΔG ({a} − {b}){d.delta_g_vs_noise ? <span className="dim"> · √2·SD = {fmt(d.delta_g_vs_noise.sd_of_difference)}</span> : null}</td><td className="num">{fmt(d.delta_g.diff)}</td></tr>}</tbody></table>
+        <div className="dim mono small">seeds {a}: {d.realized_seeds.a.join(" ")}<br />seeds {b}: {d.realized_seeds.b.join(" ")}</div></div>
+      {d.system.length > 0 && <div className="card"><h2>System</h2><table><thead><tr><th>field</th><th>{a}</th><th>{b}</th></tr></thead><tbody>{d.system.map(s => <tr key={s.field}><td>{s.field.replace(/_/g, " ")}</td><td className="mono">{show(s.a)}</td><td className="mono">{show(s.b)}</td></tr>)}</tbody></table></div>}
     </div>
-    <div className="card"><h2>Stage parameters</h2>{d.stages.length ? d.stages.map(s => <div key={s.stage}><h3>{s.stage}</h3><table><thead><tr><th>key</th><th>meaning</th><th>{a}</th><th>{b}</th><th>material?</th></tr></thead><tbody>{s.changes.map(c => <tr key={c.key} className={c.material ? "" : "dim"}><td className="mono">{c.key}</td><td>{c.meaning}</td><td className="mono">{c.a}</td><td className="mono">{c.b}</td><td>{c.material ? <span className="badge warn">material · {c.class.replace("_", " ")}</span> : <span className="badge">not material · {c.class.replace("_", " ")}</span>}</td></tr>)}</tbody></table></div>) : <p className="pass">no parameter differences (seeds excluded)</p>}</div>
+    {d.system.length === 0 && d.stages.length === 0 && <p className="pass">identical prepared system; no parameter differences (seeds excluded)</p>}
+    {d.system.length === 0 && d.stages.length > 0 && <p className="dim small">identical prepared system</p>}
+    {d.stages.length > 0 && <div className="card"><h2>Stage parameters</h2>{d.stages.map(s => <div key={s.stage}><h3>{s.stage}</h3><table><thead><tr><th>key</th><th>meaning</th><th>{a}</th><th>{b}</th><th>material?</th></tr></thead><tbody>{s.changes.map(c => <tr key={c.key} className={c.material ? "" : "dim"}><td className="mono">{c.key}</td><td>{c.meaning}</td><td className="mono">{c.a}</td><td className="mono">{c.b}</td><td>{c.material ? <span className="badge warn">material · {c.class.replace("_", " ")}</span> : <span className="badge">{d.same_system ? "not material" : "moot across systems"} · {c.class.replace("_", " ")}</span>}</td></tr>)}</tbody></table></div>)}</div>}
+    {d.system.length > 0 && d.stages.length === 0 && <p className="dim small">no parameter differences (seeds excluded)</p>}
   </section>;
 }
 

@@ -400,9 +400,9 @@ describe("judge pass 46ca5ba fixes", () => {
   });
   it("diff_runs: |ΔΔG| is judged against √2·SD with an explicit noise verdict; same run is refused; cross-system flags nothing material", () => {
     const d = diffRuns(A, B, idx); expect(d.delta_g_vs_noise!.sd_of_difference).toBeCloseTo(Math.SQRT2 * d.run_to_run_spread!.all.sd!, 2);
-    expect(typeof d.delta_g_vs_noise!.consistent_with_sampling_noise).toBe("boolean"); expect(d.interpretation).toMatch(/expected spread of a two-run difference √2·SD/);
+    expect(typeof d.delta_g_vs_noise!.consistent_with_sampling_noise).toBe("boolean"); expect(d.scale).toMatch(/expected spread of a two-run difference √2·SD/); expect(d.verdict).toMatch(/^ΔΔG (consistent with|larger than) sampling noise/); expect(d.interpretation).not.toMatch(/√2/);
     expect(() => diffRuns(A, A, idx)).toThrow(/same run/);
-    const x = diffRuns(A, C, idx); expect(x.material_classes).toEqual([]); expect(x.delta_g_vs_noise).toBeNull(); expect(x.system.find(s => s.field === "net_charge")).toBeUndefined();
+    const x = diffRuns(A, C, idx); expect(x.material_classes).toEqual([]); expect(x.delta_g_vs_noise).toBeNull(); expect(x.stages.flatMap(s => s.changes).every(c => !c.material)).toBe(true); expect(x.verdict).toMatch(/different complexes/); expect(x.system.find(s => s.field === "net_charge")).toBeUndefined();
   });
 });
 

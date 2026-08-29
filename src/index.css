@@ -6,8 +6,10 @@ header { display:flex; align-items:center; gap:14px; padding:10px 18px; border-b
 .webmcp { margin-left:auto; font-size:13px; padding:3px 8px; border-radius:99px; border:1px solid var(--line); color:var(--dim); }
 .webmcp.registered { color:var(--pass); border-color:var(--pass); } .webmcp.error { color:var(--fail); }
 .app { display:grid; grid-template-columns: minmax(0,1fr) 380px; grid-template-rows: auto 1fr; grid-template-areas: "h h" "m s"; min-height:100vh; align-items:start; max-width:1720px; margin:0 auto; width:100%; }
-header { grid-area:h; } main { grid-area:m; padding:18px; min-width:0; } aside { grid-area:s; padding:18px 18px 18px 0; border-left:0; }
-@media (max-width: 1000px) { .app { grid-template-columns:minmax(0,1fr); grid-template-areas:"h" "m" "s"; } aside { padding:0 18px 18px; } }
+header { grid-area:h; } main { grid-area:m; padding:18px; min-width:0; }
+/* The rail stays on screen while the page scrolls, so a proposal created by a Fork button (≈1400 px down) is visible where it was triggered; z-index keeps it above the cards. */
+aside { grid-area:s; padding:18px 18px 18px 0; border-left:0; position:sticky; top:0; max-height:100vh; overflow-y:auto; z-index:2; }
+@media (max-width: 1000px) { .app { grid-template-columns:minmax(0,1fr); grid-template-areas:"h" "m" "s"; } aside { padding:0 18px 18px; position:static; max-height:none; } }
 aside { min-width:0; } main, aside { max-width:100%; }
 h1 { font-size:22px; margin:0 0 8px; } h2 { font-size:14px; font-weight:600; color:var(--dim); margin:0 0 10px; } h2 .dim { text-transform:none; letter-spacing:0; font-weight:400; } h3 { font-size:14px; margin:12px 0 6px; }
 .lede { color:var(--dim); max-width:70ch; }
