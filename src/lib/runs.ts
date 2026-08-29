@@ -318,8 +318,10 @@ export function explainResult(m: Manifest, idx: IndexEntry[]) {
   const stratumNote = ens.long.sd != null && ens.long.n < ens.all.n ? `; the ≥ ${LONG_RUN_MIN_PS} ps stratum alone gives ±${ens.long.sd.toFixed(2)}, n=${ens.long.n}, which is what plan_sampling plans on` : "";
   const ratio = unc && spreadSd != null ? spreadSd / unc.corrected_sem : null;
   const dominates = ratio == null ? "" : ratio >= 2 ? "so seed-to-seed variation, not frame noise, dominates" : ratio >= 1.2 ? "so seed-to-seed variation and frame noise are comparable" : "so the run-to-run spread is not distinguishable from this run's frame noise";
+  const byLen = new Map<number, IndexEntry[]>(); for (const r of ens.all.runs.map(x => idx.find(y => y.id === x.id)!).filter(Boolean)) byLen.set(r.production_ps, [...(byLen.get(r.production_ps) ?? []), r]);
+  const matchedSd = [...byLen.entries()].filter(([, rs]) => rs.length >= 3).map(([ps, rs]) => `${ps} ps: n=${rs.length}, SD ±${stratum(rs).sd?.toFixed(2)}`);
   const which = unc && spreadSd != null
-    ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD over all ${ens.all.n} runs${stratumNote}) as the uncertainty of a single run's ΔG. Within this run the correlation-corrected SEM is ${unc.corrected_sem} (N_eff ≈ ${unc.n_eff} of ${unc.n_frames} frames); the naive per-frame SEM ${unc.per_frame_sem} is ${(unc.corrected_sem / unc.per_frame_sem).toFixed(1)}× too small. Run-to-run spread is ${ratio!.toFixed(1)}× the corrected SEM, ${dominates}.`
+    ? `Quote ±${spreadSd.toFixed(2)} kcal/mol — the observed run-to-run spread over all ${ens.all.n} runs of this system at mixed production lengths${stratumNote}${matchedSd.length ? `; matched-length SD where ≥ 3 runs share a length: ${matchedSd.join("; ")}` : ""} — as the spread to quote for a single run's ΔG. Within this run the correlation-corrected SEM is ${unc.corrected_sem} (N_eff ≈ ${unc.n_eff} of ${unc.n_frames} frames); the naive per-frame SEM ${unc.per_frame_sem} is ${(unc.corrected_sem / unc.per_frame_sem).toFixed(1)}× too small. Run-to-run spread is ${ratio!.toFixed(1)}× the corrected SEM, ${dominates}.`
     : unc ? `Within this run the correlation-corrected SEM is ${unc.corrected_sem}; it does not estimate run-to-run uncertainty — no other runs of this system exist to estimate that spread.` : "per-frame data not archived for this run; only MMPBSA.py's naive SEM is available.";
   // Where this run sits among its peers: rank, z-score vs the ensemble mean, and the ensemble mean ± SEM as the protocol-level estimate.
   const peersSorted = [...ens.all.runs].sort((a, b) => a.delta_g - b.delta_g);
@@ -681,7 +683,15 @@ export function forkExperiment(m: Manifest, idx: IndexEntry[], opts: { kind: For
     controls_held: meta.controls, controls_note: controlsNote,
     proposals: proposals.map(p => ({ id: p.id, stage: p.stage, before: verdictOf(p.before), after: verdictOf(p.after), findings: p.after.findings.filter(f => f.level !== "PASS").map(f => `${f.level} ${f.rule}: ${f.detail}`) })),
     seed_policy: "fresh (ig=-1) recommended: MD is chaotic, so compare the extension as an ensemble against the parent's run-to-run spread, not one trajectory against one; seed='pinned' replays the parent's seed draw instead",
-    sampling: plan ? { runs_per_condition: runsPerCondition, min_run_ps: plan.recommended_run_ps, parent_run_to_run_sd: plan.run_to_run.sd_used, note: `one bundle = one member: with seed='fresh' (ig=-1) each execution draws a new seed, so run the bundle ${runsPerCondition} times (in separate copies — outputs share names) to build the treated ensemble; the parent's ${plan.run_to_run.n_now ?? "?"} runs are the control` } : null,
+    sampling: plan ? (() => {
+      // A controlled comparison needs controls at the treated length: count the parent's same-protocol runs at recommended_run_ps and say how many more are needed.
+      const me = idx.find(r => r.id === m.id); const Lrec = plan!.recommended_run_ps;
+      const matchedControls = me ? idx.filter(r => sameSystem(r, me) && r.protocol === me.protocol && r.production_ps === Lrec) : [];
+      const needControls = Math.max(0, (runsPerCondition ?? 3) - matchedControls.length);
+      return { runs_per_condition: runsPerCondition, min_run_ps: Lrec, parent_run_to_run_sd: plan!.run_to_run.sd_used,
+        control: { matched_length_ps: Lrec, parent_runs_at_that_length: matchedControls.map(r => r.id), additional_control_runs_needed: needControls,
+          note: needControls ? `the parent's ${plan!.run_to_run.n_now ?? "?"} runs span several production lengths; a controlled comparison at ${Lrec} ps needs ${runsPerCondition} control runs at ${Lrec} ps too — ${matchedControls.length} exist, so plan ${needControls} more control runs (fork_experiment kind='replicate') or stratify the comparison by production length` : `${matchedControls.length} parent runs at ${Lrec} ps serve as the matched control` },
+        note: `one bundle = one member: with seed='fresh' (ig=-1) each execution draws a new seed, so run the bundle ${runsPerCondition} times (in separate copies — outputs share names) to build the treated ensemble` }; })() : null,
     next_steps: [`approve ${proposals.length} proposal${proposals.length === 1 ? "" : "s"} in the Proposals panel (human)`, "generate_rerun_bundle seed='fresh' target='local'|'slurm'", "run it elsewhere; extract the result as a child card"],
     note: approval, _proposals: proposals };
 }

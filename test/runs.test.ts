@@ -108,7 +108,7 @@ describe("per-frame ΔG (Tier B)", () => {
   });
   it("explain_result carries numbers, not adjectives", () => {
     const e = explainResult(A, idx) as any;
-    expect(e.uncertainty.corrected_sem).toBeGreaterThan(0); expect(e.which_uncertainty_to_quote).toMatch(/Quote ±0\.66 kcal\/mol/);
+    expect(e.uncertainty.corrected_sem).toBeGreaterThan(0); expect(e.which_uncertainty_to_quote).toMatch(/Quote ±0\.66 kcal\/mol — the observed run-to-run spread .* mixed production lengths/); expect(e.which_uncertainty_to_quote).toMatch(/matched-length SD .*: 5 ps: n=3, SD ±/);
     expect(e.warning_note).toMatch(/kcal\/mol per frame/); expect(e.sign_claim.all_runs).toMatch(/^all 9/i);
   });
 });
@@ -341,6 +341,7 @@ describe("fork_experiment", () => {
     expect(f.proposals.length).toBe(2); for (const p of f.proposals) { expect(p.after).toBe("PASS"); }
     const ps = (f as any)._proposals; expect(ps[0].fork.id).toBe(f.fork_id); expect(ps[0].status).toBe("pending"); expect(ps[1].mdin_after).toMatch(/temp0=310\.0/);
     expect(f.parent).toBe("1l2y-rep4"); expect(f.note).toMatch(/NOTHING is applied/);
+    expect(f.sampling!.control.matched_length_ps).toBe(30); expect(f.sampling!.control.parent_runs_at_that_length.length).toBe(2); expect(f.sampling!.control.additional_control_runs_needed).toBe(f.sampling!.runs_per_condition! - 2); expect(f.sampling!.control.note).toMatch(/stratify the comparison by production length/);
   });
   it("extend: nstlim goes to production only; output-cadence keys and unchanged values are rejected; reproduce/replicate need no approval", () => {
     expect(forkStages(B, "nstlim")).toEqual(["product"]); expect(forkStages(B, "temp0")).toEqual(["density", "product"]);
