@@ -80,3 +80,9 @@ The numbers are earned and the tools are not a fetch wrapped in registerTool. re
 
 ---
 tokens: 470553 · agents: 3 judges + merge · note: live moved to 097a01a (ladder + fork) during this pass; costs re-checked against that build before fixing.
+
+
+## Disposition (Claude, f64789f)
+- fixed in 097a01a: cost 2 (header pill scrolls; ladder visible as a card)
+- fixed in f64789f: costs 1, 3, 4, 5, 6, 7, 8 as described above (page hierarchy; MMPBSA residual inline; brief precision/rank/ensemble mean; extend-alone suggestion; count guards + visible controlled diff; √2·SD noise verdict, same-run, cross-system materiality, net-charge tolerance)
+- left for the user (product decisions): headline number (run vs ensemble mean — kept the run's ΔG ± run-to-run SD), Tool Console JSON surface, compare-page pair picker, drifting-run headline styling, generalisation statement on the landing page, 2560 px max width, PASS badge colour
