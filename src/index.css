@@ -5,8 +5,8 @@ header { display:flex; align-items:center; gap:14px; padding:10px 18px; border-b
 .brand { font-weight:700; font-size:18px; color:var(--fg); } .tag { color:var(--dim); font-size:13px; }
 .webmcp { margin-left:auto; font-size:13px; padding:3px 8px; border-radius:99px; border:1px solid var(--line); color:var(--dim); }
 .webmcp.registered { color:var(--pass); border-color:var(--pass); } .webmcp.error { color:var(--fail); }
-.app { display:grid; grid-template-columns: minmax(0,1fr) 380px; grid-template-rows: auto 1fr; grid-template-areas: "h h" "m s"; min-height:100vh; align-items:start; }
-header { grid-area:h; } main { grid-area:m; padding:18px; min-width:0; max-width:1240px; } aside { grid-area:s; padding:18px 18px 18px 0; border-left:0; }
+.app { display:grid; grid-template-columns: minmax(0,1fr) 380px; grid-template-rows: auto 1fr; grid-template-areas: "h h" "m s"; min-height:100vh; align-items:start; max-width:1720px; margin:0 auto; width:100%; }
+header { grid-area:h; } main { grid-area:m; padding:18px; min-width:0; } aside { grid-area:s; padding:18px 18px 18px 0; border-left:0; }
 @media (max-width: 1000px) { .app { grid-template-columns:minmax(0,1fr); grid-template-areas:"h" "m" "s"; } aside { padding:0 18px 18px; } }
 aside { min-width:0; } main, aside { max-width:100%; }
 h1 { font-size:22px; margin:0 0 8px; } h2 { font-size:14px; font-weight:600; color:var(--dim); margin:0 0 10px; } h2 .dim { text-transform:none; letter-spacing:0; font-weight:400; } h3 { font-size:14px; margin:12px 0 6px; }
@@ -43,5 +43,6 @@ aside textarea { font-family: ui-monospace, monospace; }
 button { background:var(--acc); color:#04121c; border:0; border-radius:6px; padding:6px 12px; font-weight:600; cursor:pointer; margin:4px 4px 4px 0; } button:disabled { opacity:.4; cursor:not-allowed; } button.ghost { background:transparent; color:var(--dim); border:1px solid var(--line); }
 .proposal { border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px; font-size:13px; } .proposal.approved { border-color:var(--pass); } .proposal.rejected { opacity:.5; }
 .ladder { list-style:none; margin:0; padding:0; font-size:14px; } .ladder li { padding:6px 0; border-bottom:1px solid var(--line); } .ladder li:last-child { border-bottom:0; }
-dl.fork dd button { margin-left:6px; font-size:13px; padding:3px 9px; }
+dl.fork { grid-template-columns: max-content 1fr max-content; align-items:start; } dl.fork .act { display:block; } dl.fork .act button { margin:0; font-size:13px; padding:3px 9px; white-space:nowrap; }
+.ladder details.small { margin-top:2px; }
 .row { display:flex; } .call { font-size:13px; padding:5px 0; border-bottom:1px solid var(--line); } .call .args { color:var(--dim); } .call .what { margin-top:2px; }

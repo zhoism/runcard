@@ -122,7 +122,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
           <button type="button" className="stagebox" id={`stage-${s.name}`} aria-expanded={open === s.name} aria-controls={open === s.name ? "stagedetail" : undefined} onClick={() => setOpen(open === s.name ? null : s.name)}>
             <span className="stagename">{s.name}</span><span className="dim">{s.role}{s.length_ps != null ? ` · ${s.length_ps} ps` : ""}</span>
             <span className="dim">{s.cntrl.temp0 ? `${s.cntrl.temp0} K` : ""}{s.role === "minimization" ? "" : s.cntrl.ntp === "1" ? " NPT" : s.cntrl.ntb === "1" ? " NVT" : ""}{s.cntrl.ntr === "1" ? " restrained" : ""}</span>
-            <Verdict r={reports[s.name]} /></button></div>)}</div>
+            {verdictOf(reports[s.name]) !== overall || overall !== "PASS" ? <Verdict r={reports[s.name]} /> : null}</button></div>)}</div>
         {open && (() => { const s = m.stages.find(x => x.name === open)!; const r = reports[open]; return <div className="stagedetail" id="stagedetail" role="region" aria-labelledby={`stage-${open}`}>
           <div><h3>{s.name}.in</h3><pre>{s.mdin}</pre>
             <div className="dim">restarts from {s.restart_from || "initial coordinates"} · {s.role === "minimization" ? `seed ${s.realized_seed ?? "n/a"} (unused by minimization)` : `requested ig=${s.requested_seed ?? "unset (pmemd default -1)"} → realized seed ${s.realized_seed ?? "n/a"}`} · wall {s.wall_s ?? "?"} s · {s.finished ? "finished" : "not finished"}{s.envelope?.crashes?.length ? ` · crashes: ${s.envelope.crashes.join(", ")}` : ""}</div></div>
@@ -130,15 +130,15 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
         </div>; })()}
       </div>
 
-      <div className="grid2">
+      <div className={m.results.plip ? "grid2" : ""}>
         <div className="card">
           <h2>Binding free energy <span className="dim">MM-GBSA, single trajectory{mm?.params?.entropy === "0" ? ", no entropy term" : ""}</span></h2>
           {mm ? <>
             {/* Headline: this run's ΔG with the uncertainty the page argues for (run-to-run SD), then the rows in order of what matters; the mechanics are one disclosure away. */}
             <div className="big">{fmt(mm.delta_total_kcal_mol)}{spreadSd != null && <> ± {fmt(spreadSd)}</>} <span className="unit">kcal/mol</span></div>
             <p className="dim small">{spreadSd != null
-              ? <>± is the run-to-run SD over {ens!.all.n} independent runs of this system — the uncertainty to quote. The within-run SEM ({u ? u.corrected_sem : fmt(mm.frame_sem, 3)}) is not.</>
-              : u ? <>single run of this system: the within-run corrected SEM ({u.corrected_sem}) understates the uncertainty — no run-to-run spread yet.</> : null}</p>
+              ? <>± is the run-to-run SD over {ens!.all.n} independent runs of this system — the uncertainty to quote; the within-run SEM below is not.</>
+              : u ? <>single run of this system: the within-run corrected SEM below understates the uncertainty — no run-to-run spread yet.</> : null}</p>
             <dl>
               {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
                 {ens.long.n > 0 && ens.long.n < ens.all.n && <><br /><b>n={ens.long.n}</b> runs ≥ {ens.long.min_ps} ps: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</>}
@@ -155,26 +155,28 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
               <div className="dim">Recorded verbatim from mmgbsa.dat.{resid ? ` Triggered by the internal-term residual: ${resid.total.mean} ± ${resid.total.sd} kcal/mol per frame (${(resid.fraction_of_delta_g * 100).toFixed(3)} % of ΔG), from ${resid.dominant_term}; quantified, not suppressed${quiet ? " — below 0.1 % of ΔG, shown for the record" : ""}.` : " Ask the agent to explain_result for what it means."}</div></div>; })}
           </> : <p className="dim">no MM-GBSA result</p>}
         </div>
-        <div className="card">
+        {m.results.plip && <div className="card">
           <h2>Contacts <span className="dim">PLIP on the medoid frame</span></h2>
-          {m.results.plip ? <>
-            <dl>{Object.entries(m.results.plip.interactions).map(([k, v]) => <div key={k}><dt>{k.replace("_", " ")}</dt><dd>{v.map(x => x.residue).join(", ")}</dd></div>)}</dl>
-            <div className="dim">frame {m.results.plip.frame?.index} of {m.results.plip.frame?.nframes} ({m.results.plip.frame?.policy})</div>
-            {m.analyses.plip && <img src={`/runs/${m.id}/plip.png`} alt="PLIP interaction diagram of the medoid frame" />}
-          </> : <p className="dim">no PLIP profile for this run</p>}
-        </div>
+          <dl>{Object.entries(m.results.plip.interactions).map(([k, v]) => <div key={k}><dt>{k.replace("_", " ")}</dt><dd>{v.map(x => x.residue).join(", ")}</dd></div>)}</dl>
+          <div className="dim">frame {m.results.plip.frame?.index} of {m.results.plip.frame?.nframes} ({m.results.plip.frame?.policy})</div>
+          {m.analyses.plip && <img src={`/runs/${m.id}/plip.png`} alt="PLIP interaction diagram of the medoid frame" />}
+        </div>}
       </div>
 
       {idx.length > 0 && (() => { const L = confidenceLadder(m, idx); const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : ""; return <div className="card">
         <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} rungs verified — each computed from the archived data; a passing input check is not a rung</span></h2>
-        <ol className="ladder">{L.rungs.map(r => <li key={r.rung}><span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b><div className="dim small">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</div></li>)}</ol>
+        <ol className="ladder">{L.rungs.map(r => <li key={r.rung}><span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span>
+          <details className="small"><summary className="dim">evidence</summary><p className="dim">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</p></details></li>)}</ol>
       </div>; })()}
 
-      <div className="card"><h2>Fork this experiment <span className="dim">reproduce and replicate change nothing and need no approval; extend changes one variable and waits for yours</span></h2>
+      <div className="card"><h2>Fork this experiment <span className="dim">Reproduce and replicate need no approval. Extend changes one variable and waits for yours.</span></h2>
         <dl className="fork">
-          <dt>reproduce</dt><dd>rerun the original as exactly as possible: pinned seeds, same build — tests <i>repeatability</i> if executed and compared; it cannot show the result is stable. <button className="ghost" onClick={() => callTool("generate_rerun_bundle", { run_id: m.id, seed: "pinned", target: "local" })}>build pinned bundle</button></dd>
-          <dt>replicate</dt><dd>same protocol, independent seeds (ig=-1) — an executed rerun joins the run-to-run spread, which is the uncertainty to quote. <button className="ghost" onClick={() => callTool("fork_experiment", { run_id: m.id, kind: "replicate" })}>plan a replicate</button></dd>
-          <dt>extend</dt><dd>change one variable, hold the listed controls: the controlled diff is validated and waits for your approval before a bundle exists. <button className="ghost" onClick={() => { set({ console: { tool: "fork_experiment", input: JSON.stringify({ run_id: m.id, kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" }, null, 1) } }); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>draft an extension (temp0 → 310 K)</button></dd>
+          <dt>reproduce</dt><dd>rerun the original as exactly as possible: pinned seeds, same build — tests <i>repeatability</i> if executed and compared; it cannot show the result is stable.</dd>
+          <div className="act"><button className="ghost" onClick={() => callTool("generate_rerun_bundle", { run_id: m.id, seed: "pinned", target: "local" })}>build pinned bundle</button></div>
+          <dt>replicate</dt><dd>same protocol, independent seeds (ig=-1) — {ens && ens.all.n > 1 ? "an executed rerun joins the run-to-run spread, which is the uncertainty to quote" : "an executed rerun would start a run-to-run spread; three are needed before one can be quoted"}.</dd>
+          <div className="act"><button className="ghost" onClick={() => callTool("fork_experiment", { run_id: m.id, kind: "replicate" })}>plan a replicate</button></div>
+          <dt>extend</dt><dd>change one variable, hold the listed controls: the controlled diff is validated and waits for your approval before a bundle exists.</dd>
+          <div className="act"><button className="ghost" onClick={() => { set({ console: { tool: "fork_experiment", input: JSON.stringify({ run_id: m.id, kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" }, null, 1) } }); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>draft an extension (temp0 → 310 K)</button></div>
         </dl>
       </div>
 

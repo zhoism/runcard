@@ -527,18 +527,20 @@ export function zipBundle(files: Record<string, string>): Uint8Array {
 // Every rung is computed from the manifest; "verified" means the check ran here on archived data, "expected" means the
 // artefacts to do it exist but nothing was executed, "not assessed" means no evidence of that kind is on the card.
 export type RungStatus = "verified" | "expected" | "not established" | "not assessed";
-export interface Rung { rung: string; status: RungStatus; evidence: string; to_climb: string | null }
+export interface Rung { rung: string; status: RungStatus; short: string; evidence: string; to_climb: string | null }
 export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
   const mm = m.results.mmgbsa; const pf = mm?.per_frame ?? null;
   const me = idx.find(r => r.id === m.id) ?? null;
+  const prod = m.stages.find(s => s.role === "production");
+  const unc = pf ? uncertaintyFromFrames(pf, prod?.length_ps ?? null) : null;
   const rungs: Rung[] = [];
   // 1 recomputable — re-derived here: mean and population SD of the archived per-frame energies vs the mmgbsa.dat summary
-  if (!mm) rungs.push({ rung: "recomputable", status: "not established", evidence: "no MM-GBSA result in this run", to_climb: null });
-  else if (!pf) rungs.push({ rung: "recomputable", status: "not established", evidence: "per-frame energies were not archived; only mmgbsa.dat's summary is on the card", to_climb: "archive _MMPBSA_*_gb.mdout.0 and re-extract" });
+  if (!mm) rungs.push({ rung: "recomputable", status: "not established", short: "no MM-GBSA result", evidence: "no MM-GBSA result in this run", to_climb: null });
+  else if (!pf) rungs.push({ rung: "recomputable", status: "not established", short: "per-frame energies not archived", evidence: "per-frame energies were not archived; only mmgbsa.dat's summary is on the card", to_climb: "archive _MMPBSA_*_gb.mdout.0 and re-extract" });
   else {
     const meanPf = mean(pf.delta_total), sdPf = sd(pf.delta_total, 0); const tol = 5e-5;
     const ok = Math.abs(meanPf - mm.delta_total_kcal_mol) < tol && Math.abs(sdPf - mm.frame_std) < tol;
-    rungs.push({ rung: "recomputable", status: ok ? "verified" : "not established",
+    rungs.push({ rung: "recomputable", status: ok ? "verified" : "not established", short: ok ? `mean and SD of the ${pf.n} archived per-frame energies reproduce mmgbsa.dat` : "archived per-frame energies do not reproduce mmgbsa.dat",
       evidence: `mean of the ${pf.n} archived per-frame energies = ${round(meanPf)} vs mmgbsa.dat ${mm.delta_total_kcal_mol}; population SD ${round(sdPf)} vs ${mm.frame_std} (both re-derived here, tolerance ${tol}; source ${pf.source.join(", ")})${ok ? "" : " — mismatch"}`, to_climb: null });
   }
   // 2 repeatable — a pinned-seed replay is possible only if every stochastic stage's realized seed, the environment lock and leap.in are archived; never verified here
@@ -546,20 +548,20 @@ export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
   const pins = Object.keys(m.environment.conda_lock).length;
   const missing = [...(unseeded.length ? [`realized seed missing for ${unseeded.join(", ")}`] : []), ...(pins ? [] : ["no environment lock"]), ...(m.system.leap_in ? [] : ["no leap.in"])];
   rungs.push(missing.length
-    ? { rung: "repeatable", status: "not established", evidence: `cannot be replayed exactly: ${missing.join("; ")}`, to_climb: "archive the missing seeds / lock / build inputs" }
-    : { rung: "repeatable", status: "expected", evidence: `realized seeds for ${dyn.length}/${dyn.length} dynamics stages, ${pins} environment pins and leap.in are archived; generate_rerun_bundle seed='pinned' replays the run on the same build. Not executed here, and the bundle still needs the original build/ inputs (ligand mol2/frcmod, cleaned PDB)`, to_climb: "run the pinned bundle, extract the result as a card, compare" });
+    ? { rung: "repeatable", status: "not established", short: `cannot be replayed exactly: ${missing.join("; ")}`, evidence: `cannot be replayed exactly: ${missing.join("; ")}`, to_climb: "archive the missing seeds / lock / build inputs" }
+    : { rung: "repeatable", status: "expected", short: "seeds, environment lock and leap.in archived for a pinned replay — not executed here", evidence: `realized seeds for ${dyn.length}/${dyn.length} dynamics stages, ${pins} environment pins and leap.in are archived; generate_rerun_bundle seed='pinned' replays the run on the same build. Not executed here, and the bundle still needs the original build/ inputs (ligand mol2/frcmod, cleaned PDB)`, to_climb: "run the pinned bundle, extract the result as a card, compare" });
   // 3 independently replicated — ≥ 3 runs of the same prepared system AND the same production protocol, with distinct realized seeds
   const peers = me ? idx.filter(r => sameSystem(r, me)) : [];
   const sameProto = me?.protocol ? peers.filter(r => r.protocol === me.protocol) : [];
   const seeded = sameProto.filter(r => r.seed != null); const distinct = new Set(seeded.map(r => r.seed)).size;
-  if (!me) rungs.push({ rung: "independently replicated", status: "not established", evidence: "run not in the site index", to_climb: null });
-  else if (!me.protocol) rungs.push({ rung: "independently replicated", status: "not established", evidence: "the run index carries no protocol key (rebuild with tools/build_index.py)", to_climb: null });
+  if (!me) rungs.push({ rung: "independently replicated", status: "not established", short: "run not in the site index", evidence: "run not in the site index", to_climb: null });
+  else if (!me.protocol) rungs.push({ rung: "independently replicated", status: "not established", short: "no protocol key in the run index", evidence: "the run index carries no protocol key (rebuild with tools/build_index.py)", to_climb: null });
   else if (sameProto.length >= 3 && distinct === sameProto.length && distinct >= 3) {
     const st = stratum(sameProto); const lengths = [...new Set(sameProto.map(r => r.production_ps))].sort((a, b) => a - b);
     const long = stratum(sameProto.filter(r => r.production_ps >= LONG_RUN_MIN_PS));
-    rungs.push({ rung: "independently replicated", status: "verified",
+    rungs.push({ rung: "independently replicated", status: "verified", short: `${st.n} runs of the same system and protocol with distinct seeds (${lengths[0]}–${lengths[lengths.length - 1]} ps)`,
       evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. ${signClaim(st)}`, to_climb: null });
-  } else rungs.push({ rung: "independently replicated", status: "not established",
+  } else rungs.push({ rung: "independently replicated", status: "not established", short: `${sameProto.length} run${sameProto.length === 1 ? "" : "s"} of this system and protocol on this site; 3 needed`,
     evidence: `${peers.length} run${peers.length === 1 ? "" : "s"} of this prepared system on this site, ${sameProto.length} with the same production protocol${seeded.length && distinct < sameProto.length ? ", not all with distinct seeds" : ""}; at least 3 independent runs (ig=-1, same protocol) are needed`, to_climb: "fork_experiment kind='replicate' (plan_sampling gives the number of runs)" });
   // 4 robust to reasonable analysis choices — analysis-window sensitivity only: each window's ΔG must sit within 2 corrected SEMs (of that window) of the archived value
   if (pf && mm) {
@@ -569,20 +571,24 @@ export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
       { label: "discard first 50 %", opts: { start_frame: Math.floor(n * 0.5) + 1 } }, { label: "every 2nd frame", opts: { interval: 2 } }];
     const rows = windows.map(w => { try { const r = recomputeResult(m, w.opts); return { window: w.label, delta_g: r.delta_g.mean, diff: r.vs_archived.diff, sigma: r.vs_archived.diff_in_corrected_sem }; } catch { return null; } });
     const ok = rows.filter((x): x is NonNullable<typeof x> => !!x && Number.isFinite(x.diff) && Number.isFinite(x.sigma));
-    if (ok.length < windows.length) rungs.push({ rung: "robust to reasonable analysis choices", status: "not established", evidence: `only ${ok.length} of ${windows.length} analysis windows could be re-analysed (too few frames)`, to_climb: "longer sampling (plan_sampling)" });
+    if (ok.length < windows.length) rungs.push({ rung: "robust to reasonable analysis choices", status: "not established", short: `only ${ok.length} of ${windows.length} windows could be re-analysed`, evidence: `only ${ok.length} of ${windows.length} analysis windows could be re-analysed (too few frames)`, to_climb: "longer sampling (plan_sampling)" });
     else {
       const maxSigma = Math.max(...ok.map(r => Math.abs(r.sigma)));
       const spread = ok.map(r => `${r.window}: ${r.delta_g.toFixed(2)} (Δ ${r.diff >= 0 ? "+" : ""}${r.diff.toFixed(2)}, ${Math.abs(r.sigma).toFixed(1)} σ)`).join("; ");
-      rungs.push({ rung: "robust to reasonable analysis choices", status: maxSigma <= 2 ? "verified" : "not established",
-        evidence: `${ok.length} analysis windows re-analysed — ${spread}; largest shift ${maxSigma.toFixed(1)} corrected SEM of its window (criterion ≤ 2)${maxSigma <= 2 ? "" : " — the window choice moves ΔG by more than its statistical uncertainty"}. Analysis-window sensitivity only: force field, protonation, box and the MM-GBSA model (igb, saltcon) were not varied`,
-        to_climb: maxSigma <= 2 ? "vary a modelling choice in a controlled extension (fork_experiment kind='extend')" : "longer sampling (plan_sampling) until the window choice stops mattering" });
+      // A run that is drifting or too short is not stationary, so window agreement cannot establish robustness — the rung says so instead of contradicting the drift verdict.
+      const stationary = unc?.verdict === "no drift detected";
+      const passed = stationary && maxSigma <= 2;
+      rungs.push({ rung: "robust to reasonable analysis choices", status: passed ? "verified" : "not established",
+        short: !stationary ? `not stationary (${unc?.verdict}); window agreement cannot establish robustness` : passed ? `${ok.length} analysis windows agree within 2 corrected SEMs` : "the analysis window moves ΔG by more than its statistical uncertainty",
+        evidence: `${!stationary ? `this run's drift verdict is '${unc?.verdict}', so the windows are not draws from a stationary series. ` : ""}${ok.length} analysis windows re-analysed — ${spread}; largest shift ${maxSigma.toFixed(1)} corrected SEM of its window (criterion ≤ 2 on a stationary run)${maxSigma <= 2 ? "" : " — the window choice moves ΔG by more than its statistical uncertainty"}. Analysis-window sensitivity only: force field, protonation, box and the MM-GBSA model (igb, saltcon) were not varied`,
+        to_climb: passed ? "vary a modelling choice in a controlled extension (fork_experiment kind='extend')" : "longer sampling (plan_sampling) until the series is stationary and the window choice stops mattering" });
     }
-  } else rungs.push({ rung: "robust to reasonable analysis choices", status: "not established", evidence: "per-frame energies not archived; windows cannot be re-analysed", to_climb: null });
+  } else rungs.push({ rung: "robust to reasonable analysis choices", status: "not established", short: "per-frame energies not archived", evidence: "per-frame energies not archived; windows cannot be re-analysed", to_climb: null });
   // 5 externally supported — nothing of that kind is on the card; never claimed
-  rungs.push({ rung: "externally supported", status: "not assessed", evidence: "no experimental or literature value is linked to this card", to_climb: "link an external reference with its own provenance (not part of this site)" });
+  rungs.push({ rung: "externally supported", status: "not assessed", short: "no experimental or literature value linked", evidence: "no experimental or literature value is linked to this card", to_climb: "link an external reference with its own provenance (not part of this site)" });
   const verified = rungs.filter(r => r.status === "verified").length;
   return { run: m.id, rungs, verified_of_assessable: `${verified} of 4`, summary: `${verified} of 4 assessable rungs verified (${rungs.filter(r => r.status === "verified").map(r => r.rung).join(", ") || "none"}); repeatable is at best expected (nothing is executed here); external support is not assessed.`,
-    method: "recomputable: mean and population SD of the archived per-frame energies vs mmgbsa.dat (tolerance 5e-5); repeatable: realized seeds for every dynamics stage + environment lock + leap.in archived (never executed here); replicated: ≥ 3 runs with the same system fingerprint and production-protocol key and distinct realized seeds; robust: ΔG over equilibration-discard (10/25/50 %) and stride-2 windows within 2 corrected SEMs of the archived value — analysis-window sensitivity only; external: not assessed. A passing input sanity check is not a rung." };
+    method: "recomputable: mean and population SD of the archived per-frame energies vs mmgbsa.dat (tolerance 5e-5); repeatable: realized seeds for every dynamics stage + environment lock + leap.in archived (never executed here); replicated: ≥ 3 runs with the same system fingerprint and production-protocol key and distinct realized seeds; robust: drift verdict 'no drift detected' AND ΔG over equilibration-discard (10/25/50 %) and stride-2 windows within 2 corrected SEMs of the archived value — analysis-window sensitivity only; external: not assessed. A passing input sanity check is not a rung." };
 }
 
 // ---- fork this experiment: reproduce / replicate / extend ------------------------------
