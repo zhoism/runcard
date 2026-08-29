@@ -1,7 +1,7 @@
 // WebMCP tool registry. Every tool is a pure function over the run manifests
 // plus the page store; the same table drives document.modelContext.registerTool
 // and the in-page Tool Console (so a human can call exactly what an agent can).
-import { loadIndex, loadRun, validateStage, validateAll, explainResult, diffRuns, makeProposal, rerunBundle, ensemble, recomputeResult, planSampling } from "./lib/runs";
+import { loadIndex, loadRun, validateStage, validateAll, explainResult, diffRuns, makeProposal, rerunBundle, ensemble, recomputeResult, planSampling, verdictOf } from "./lib/runs";
 import { get, set, logCall, navigate } from "./store";
 import { checkAmberIn } from "./lib/amberCheck";
 
@@ -14,7 +14,7 @@ export const TOOLS: Tool[] = [
     inputSchema: S({}), run: async () => loadIndex() },
   { name: "get_run_manifest", readOnly: true, description: "What exactly was simulated in one run? The full validated record: system (protein, ligand atom types and charge method, solvent, force fields), the ordered stage graph with every &cntrl parameter and the realized Langevin seed and wall time pmemd reported, results, environment lock, and pipeline stage envelopes. Also navigates the page to that run.",
     inputSchema: S({ run_id: str("run id from list_runs") }, ["run_id"]),
-    run: async ({ run_id }) => { const m = await loadRun(run_id); navigate(`/run/${run_id}`); return { ...m, stages: m.stages.map(s => ({ ...s, mdin: undefined })), leap_in: undefined }; } },
+    run: async ({ run_id }) => { const m = await loadRun(run_id); navigate(`/run/${run_id}`); return { ...m, stages: m.stages.map(s => ({ ...s, mdin: undefined })) }; } },
   { name: "get_stage_input", readOnly: true, description: "What was the exact input for one stage? The verbatim AMBER .in (mdin) text of that stage, plus what it restarts from.",
     inputSchema: S({ run_id: str("run id"), stage: str("stage name, e.g. min1, heat, density, product") }, ["run_id", "stage"]),
     run: async ({ run_id, stage }) => { const m = await loadRun(run_id); const s = m.stages.find(x => x.name === stage); if (!s) throw new Error(`no stage ${stage}; have ${m.stages.map(x => x.name).join(", ")}`); return { stage: s.name, role: s.role, restart_from: s.restart_from, mdin: s.mdin }; } },
@@ -28,9 +28,9 @@ export const TOOLS: Tool[] = [
     run: async ({ run_a, run_b }) => { const [a, b, i] = await Promise.all([loadRun(run_a), loadRun(run_b), loadIndex()]); navigate(`/compare/${run_a}/${run_b}`); return diffRuns(a, b, i); } },
   { name: "propose_change", readOnly: false, description: "Propose a bounded edit to one stage's &cntrl parameters (e.g. {\"dt\":\"0.001\"} or {\"nstlim\":\"50000\",\"iwrap\":\"1\"}). The proposal is validated before and after and shown to the human in the Proposals panel; NOTHING is applied until a person clicks Approve. Returns the proposal id and both validation reports. Only &cntrl keys are editable; masks and file paths are not.",
     inputSchema: S({ run_id: str("run id"), stage: str("stage name"), edits: { type: "object", description: "map of &cntrl key → new value, as strings", additionalProperties: { type: "string" } }, reason: str("one sentence: why this change") }, ["run_id", "stage", "edits", "reason"]),
-    run: async ({ run_id, stage, edits, reason }) => { const p = makeProposal(await loadRun(run_id), stage, edits, reason); set(s => ({ proposals: [p, ...s.proposals] })); navigate(`/run/${run_id}`); return { proposal_id: p.id, status: p.status, before: p.before, after: p.after, note: "Awaiting human approval in the Proposals panel." }; } },
+    run: async ({ run_id, stage, edits, reason }) => { const p = makeProposal(await loadRun(run_id), stage, edits, reason); set(s => ({ proposals: [p, ...s.proposals] })); navigate(`/run/${run_id}`); return { proposal_id: p.id, status: p.status, before: p.before, after: p.after, note: p.after.hasFail ? "Cannot be approved: the edited stage FAILS validation (see after.findings). Revise the edit and propose again." : "Awaiting human approval in the Proposals panel." }; } },
   { name: "list_proposals", readOnly: true, description: "Which proposals exist on this page and what is their status? Lists them (pending / approved / rejected). Only approved proposals are applied to a rerun bundle.",
-    inputSchema: S({}), run: async () => get().proposals.map(p => ({ id: p.id, run: p.run, stage: p.stage, edits: p.edits, reason: p.reason, status: p.status, after_verdict: p.after.hasFail ? "FAIL" : p.after.hasWarn ? "WARN" : "PASS" })) },
+    inputSchema: S({}), run: async () => get().proposals.map(p => ({ id: p.id, run: p.run, stage: p.stage, edits: p.edits, reason: p.reason, status: p.status, after_verdict: verdictOf(p.after) })) },
   { name: "generate_rerun_bundle", readOnly: false, description: "How do I rerun this simulation? Builds a reproduction bundle: all stage .in files (with any APPROVED proposals applied), leap.in, run.sh for a local machine or a SLURM cluster, the environment pins, and a README. seed='pinned' writes the seed pmemd actually used so the run replays exactly on the same build; seed='fresh' keeps ig=-1 for an independent sample. The bundle appears on the page as a download for the human; the tool returns the file list and the README.",
     inputSchema: S({ run_id: str("run id"), seed: str("pinned or fresh", { enum: ["pinned", "fresh"] }), target: str("local or slurm", { enum: ["local", "slurm"] }) }, ["run_id", "seed", "target"]),
     run: async ({ run_id, seed, target }) => { const m = await loadRun(run_id); const approved = get().proposals.filter(p => p.run === run_id && p.status === "approved"); const files = rerunBundle(m, { seed, target, approved }); set({ bundle: { name: `${run_id}-rerun-${seed}-${target}.zip`, files } }); navigate(`/run/${run_id}`); return { files: Object.keys(files), applied_proposals: approved.map(p => p.id), readme: files["README.md"], run_sh: files["run.sh"] }; } },
@@ -47,7 +47,7 @@ export const TOOLS: Tool[] = [
 /** One readable line per call for the Tool Calls panel, so a human can follow what the agent learned without reading JSON. */
 function summarize(name: string, out: any): string {
   const f = (x: unknown, d = 2) => typeof x === "number" ? x.toFixed(d) : "—";
-  const verdict = (r: any) => r?.hasFail ? "FAIL" : r?.hasWarn ? "WARN" : "PASS";
+  const verdict = (r: any) => verdictOf({ hasFail: !!r?.hasFail, hasWarn: !!r?.hasWarn });
   try {
     switch (name) {
       case "list_runs": return `${out.length} runs`;
@@ -57,9 +57,9 @@ function summarize(name: string, out: any): string {
         ? `${out.run}: ${out.verdict} — ${out.stages.map((s: any) => `${s.stage} ${verdict(s)}`).join(", ")}`
         : `${out.stage}: ${verdict(out)} — ${out.findings.filter((x: any) => x.level !== "PASS").map((x: any) => `${x.level} ${x.rule}`).join(", ") || "no warnings"}`;
       case "explain_result": return out.brief ?? out.error ?? "";
-      case "diff_runs": return `${out.same_system ? "same prepared system" : "different systems"}; material: ${out.material_classes?.join(", ") || "none"}; ΔΔG ${f(out.delta_g?.diff)}; compare view opened`;
+      case "diff_runs": return `${out.same_system ? "same prepared system" : "different systems"}; material: ${out.material_classes?.join(", ") || "none"}; ${out.same_system ? `ΔΔG ${f(out.delta_g?.diff)}` : "ΔΔG n/a (different complexes)"}; compare view opened`;
       case "get_ensemble": return `n=${out.all.n}, mean ${f(out.all.mean)}, SD ${f(out.all.sd)} (≥${out.long.min_ps} ps: n=${out.long.n}, SD ${f(out.long.sd)})`;
-      case "propose_change": return `${out.status}: before ${verdict(out.before)} → after ${verdict(out.after)}; awaiting your Approve`;
+      case "propose_change": return `${out.status}: before ${verdict(out.before)} → after ${verdict(out.after)}; ${out.after?.hasFail ? "cannot be approved (fails validation)" : "awaiting your Approve"}`;
       case "list_proposals": return `${out.length} proposals (${out.filter((p: any) => p.status === "pending").length} pending)`;
       case "generate_rerun_bundle": return `${out.files.length} files, ${out.applied_proposals.length} approved edit${out.applied_proposals.length === 1 ? "" : "s"} applied; download on the page`;
       case "recompute_result": { const w = out.window; return `frames ${w.start_frame}–${w.end_frame}${w.interval > 1 ? ` every ${w.interval}th` : ""} (${w.frames_used}): ΔG ${f(out.delta_g.mean)} ± ${f(out.delta_g.corrected_sem)}, ${out.delta_g.verdict}; Δ vs archived ${f(out.vs_archived.diff)}; shown on the page`; }

@@ -239,3 +239,61 @@ describe("planSampling", () => {
     expect(() => planSampling(A, idx, { min_run_ps: 0 })).toThrow(/min_run_ps/);
   });
 });
+
+describe("review batch 2026-08-29 (workflow findings)", () => {
+  it("two approved proposals on one stage compose, oldest first; both land in the .in", () => {
+    const p1 = { ...makeProposal(A, "product", { dt: "0.001" }, "smaller step"), status: "approved" as const };
+    const p2 = { ...makeProposal(A, "product", { nstlim: "5000" }, "longer"), status: "approved" as const };
+    const f = rerunBundle(A, { seed: "fresh", target: "local", approved: [p2, p1] });   // store order: newest first
+    expect(f["md/product.in"]).toMatch(/dt=0\.001/); expect(f["md/product.in"]).toMatch(/nstlim=5000/);
+    expect(f["md/product.in"].split("\n")[0]).toMatch(/5\.0 ps/);                         // 5000 × 0.001, retitled from the composed text
+  });
+  it("proposal ids are unique within one millisecond", () => {
+    const ids = new Set(Array.from({ length: 50 }, () => makeProposal(A, "product", { nstlim: "5000" }, "x").id));
+    expect(ids.size).toBe(50);
+  });
+  it("SLURM run.sh keeps the shebang first, #SBATCH directives after it", () => {
+    const lines = rerunBundle(A, { seed: "fresh", target: "slurm", approved: [] })["run.sh"].split("\n");
+    expect(lines[0]).toBe("#!/usr/bin/env bash"); expect(lines[1]).toMatch(/^#SBATCH/);
+  });
+  it("rerunBundle rejects off-enum seed/target instead of silently defaulting", () => {
+    expect(() => rerunBundle(A, { seed: "Pinned" as any, target: "local", approved: [] })).toThrow(/seed must be/);
+    expect(() => rerunBundle(A, { seed: "fresh", target: undefined as any, approved: [] })).toThrow(/target must be/);
+  });
+  it("propose_change: empty, string-encoded, array and comma-smuggled edits are rejected with the shape spelled out; JSON-string form is accepted", () => {
+    expect(() => makeProposal(A, "product", {} as any, "x")).toThrow(/non-empty object/);
+    expect(() => makeProposal(A, "product", "dt=0.001" as any, "x")).toThrow(/non-empty object/);
+    expect(() => makeProposal(A, "product", { nstlim: "5000, restraintmask='@CA'" }, "x")).toThrow(/single number or a quoted string/);
+    expect(makeProposal(A, "product", JSON.stringify({ dt: "0.001" }) as any, "x").edits).toEqual({ dt: "0.001" });
+    expect(() => makeProposal(A, "production", { dt: "0.001" }, "x")).toThrow(/product \(production\)/);
+  });
+  it("diff_runs: ΔΔG is null across different prepared systems", () => {
+    expect(diffRuns(A, C, idx).same_system).toBe(false); expect(diffRuns(A, C, idx).delta_g.diff).toBeNull();
+    expect(diffRuns(A, B, idx).delta_g.diff).toBeCloseTo(A.results.mmgbsa.delta_total_kcal_mol - B.results.mmgbsa.delta_total_kcal_mol, 4);
+  });
+  it("drift test is 2σ of the half-difference: se_of_diff ≈ 2 × full-series corrected SEM on a stationary series, threshold stated", () => {
+    const u = uncertaintyFromFrames(B.results.mmgbsa.per_frame, 30);
+    expect(u.halves.se_of_diff).toBeGreaterThan(1.5 * u.corrected_sem); expect(u.halves.se_of_diff).toBeLessThan(2.5 * u.corrected_sem);
+    expect(u.verdict).toBe(u.halves.diff_in_sigma > 2 ? "drifting" : "no drift detected"); expect(u.thresholds.drifting_if).toMatch(/SEM₁² \+ SEM₂²/);
+    for (const r of idx) { const m = load(r.id); const v = uncertaintyFromFrames(m.results.mmgbsa.per_frame, 30).verdict; expect(["drifting", "no drift detected", "too short to judge"]).toContain(v); }
+  });
+  it("block SEM at block 1 equals the naive per-frame SEM (same ddof)", () => {
+    const u = uncertaintyFromFrames(B.results.mmgbsa.per_frame, 30);
+    expect(u.block_averaging.sem_by_block[0].sem).toBeCloseTo(u.per_frame_sem, 4);
+  });
+  it("ensemble: single-run system gets a one-run caveat and stratum-aware sign claims; bad id names the recovery", () => {
+    const e = ensemble(idx, "3htb-jz4"); expect(e.caveat).toMatch(/Only one run/); expect(e.caveat).not.toMatch(/mixes short and long/);
+    expect(signClaim(e.long, "≥ 10 ps")).toBe("no runs ≥ 10 ps of this system"); expect(signClaim(e.all)).toMatch(/single run gives ΔG < 0 \(ΔG = -27/);
+    expect(signClaim(ensemble(idx, "1l2y-rep4").all)).toMatch(/pinned to about ±0\.7 kcal\/mol/);
+    expect(() => ensemble(idx, "nope")).toThrow(/list_runs/);
+  });
+  it("explain_result names the stratum, gates the 'dominates' clause on the ratio", () => {
+    const e = explainResult(B, idx) as any;
+    expect(e.which_uncertainty_to_quote).toMatch(/≥ 10 ps stratum alone gives ±0\.79, n=5/);
+    expect(e.which_uncertainty_to_quote).toMatch(/dominates|comparable|not distinguishable/);
+    const e3 = explainResult(load("1l2y-rep3"), idx) as any; expect(e3.which_uncertainty_to_quote).not.toMatch(/1\.0× the corrected SEM, so seed-to-seed variation, not frame noise, dominates/);
+  });
+  it("recompute_result: discard_ps beyond the run names the argument and the length", () => {
+    expect(() => recomputeResult(A, { discard_ps: 100 })).toThrow(/discard_ps 100 ≥ the 5 ps production length/);
+  });
+});

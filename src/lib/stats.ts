@@ -51,7 +51,7 @@ export function blockAverageSem(x: number[], blockSizes = [1, 2, 4, 5, 10, 20, 2
   for (const b of blockSizes) {
     const nb = Math.floor(x.length / b); if (nb < 4) continue;
     const means = Array.from({ length: nb }, (_, i) => mean(x.slice(i * b, (i + 1) * b)));
-    out.push({ block: b, blocks: nb, sem: sem(means) });
+    out.push({ block: b, blocks: nb, sem: sem(means, 0) });   // ddof=0 like every other statistic here, so block 1 reproduces the naive SEM
   }
   return out;
 }

@@ -36,7 +36,7 @@ describe("block averaging", () => {
   it("plateau of block SEM for AR(1) approaches the corrected SEM", () => {
     const x = ar1(4000, 0.5, 5);
     const blocks = blockAverageSem(x, [1, 2, 4, 8, 16, 32, 64, 128]);
-    expect(blocks[0].sem).toBeCloseTo(sem(x), 12);
+    expect(blocks[0].sem).toBeCloseTo(sem(x, 0), 12);   // block 1 = naive SEM, same ddof as the rest of the output
     const plateau = blocks[blocks.length - 1].sem, target = correctedSem(x);
     expect(plateau / target).toBeGreaterThan(0.7); expect(plateau / target).toBeLessThan(1.4);
   });
