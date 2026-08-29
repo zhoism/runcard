@@ -372,7 +372,19 @@ export function applyEdits(mdin: string, edits: Record<string, string>): string 
     if (re.test(out)) out = out.replace(re, `$1${v}`);
     else out = out.replace(/(&cntrl[^\n]*\n)/i, `$1  ${k}=${v},\n`);
   }
-  return out;
+  return retitleDuration(out, edits);
+}
+/** The AMBER title line is free text and ours state the stage length ("…, 5.0 ps"). When an edit changes nstlim or dt, that number must follow nstlim·dt, or the file claims two durations. Untouched otherwise (byte-identical). */
+function retitleDuration(mdin: string, edits: Record<string, string>): string {
+  if (!Object.keys(edits).some(k => /^(nstlim|dt)$/i.test(k))) return mdin;
+  const num = (k: string) => { const m = mdin.match(new RegExp(`\\b${k}\\s*=\\s*([-+0-9.eEdD]+)`, "i")); return m ? Number(m[1].replace(/[dD]/, "e")) : null; };
+  const dt = num("dt"), nstlim = num("nstlim");
+  if (dt == null || nstlim == null || !Number.isFinite(dt * nstlim)) return mdin;
+  const nl = mdin.indexOf("\n"); const title = nl < 0 ? mdin : mdin.slice(0, nl);
+  if (/^\s*&/.test(title)) return mdin;                                   // no title line
+  const re = /(\d+(?:\.\d+)?)\s*ps\b/i; const hit = title.match(re); if (!hit) return mdin;
+  const decimals = hit[1].includes(".") ? hit[1].split(".")[1].length : 0;
+  return title.replace(re, `${(dt * nstlim).toFixed(decimals)} ps`) + (nl < 0 ? "" : mdin.slice(nl));
 }
 const EDITABLE = new Set(["dt", "nstlim", "ntc", "ntf", "cut", "ntt", "gamma_ln", "temp0", "tempi", "ntp", "barostat", "taup", "pres0", "ig", "iwrap", "ntwx", "ntpr", "ntwr", "ntr", "restraint_wt", "irest", "ntx", "nmropt"]);
 export function makeProposal(m: Manifest, stage: string, edits: Record<string, string>, reason: string): Proposal {

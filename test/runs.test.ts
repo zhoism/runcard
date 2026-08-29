@@ -12,6 +12,18 @@ describe("applyEdits", () => {
     const out = applyEdits("t\n &cntrl\n  dt=0.002, cut=9.0,\n /\n", { dt: "0.001", iwrap: "1" });
     expect(out).toContain("dt=0.001,"); expect(out).toContain("cut=9.0"); expect(out).toContain("iwrap=1,");
   });
+  it("RC-003: a duration edit re-derives the '<n> ps' in the title from nstlim·dt; other edits leave the title byte-identical", () => {
+    const prod = A.stages.find((s: any) => s.role === "production"); const first = (t: string) => t.split("\n")[0];
+    expect(first(prod.mdin)).toMatch(/5\.0 ps/);
+    const longer = applyEdits(prod.mdin, { nstlim: "5000" });
+    expect(first(longer)).toBe(first(prod.mdin).replace("5.0 ps", "10.0 ps")); expect(longer).toMatch(/nstlim=5000,/); expect(longer).toMatch(/dt=0\.002/);
+    expect(longer.split("\n").slice(1).join("\n")).toBe(prod.mdin.replace(/nstlim=2500/, "nstlim=5000").split("\n").slice(1).join("\n"));
+    expect(first(applyEdits(prod.mdin, { dt: "0.001" }))).toMatch(/2\.5 ps/);          // 2500 × 0.001
+    expect(applyEdits(prod.mdin, { ig: "702337" }).split("\n")[0]).toBe(first(prod.mdin));   // seed pin: title untouched
+    expect(applyEdits("t\n &cntrl\n  nstlim=10, dt=0.002,\n /\n", { nstlim: "20" })).toMatch(/^t\n/);   // no ps token: untouched
+    const heat = A.stages.find((s: any) => s.name === "heat");                                     // its title states no duration → untouched
+    expect(first(applyEdits(heat.mdin, { nstlim: String(Number(heat.cntrl.nstlim) * 2) }))).toBe(first(heat.mdin));
+  });
   it("does not touch a key inside a quoted mask", () => {
     const out = applyEdits(" &cntrl\n restraintmask='!:WAT', dt=0.002,\n /\n", { dt: "0.004" });
     expect(out).toContain("restraintmask='!:WAT'"); expect(out).toContain("dt=0.004");
@@ -54,6 +66,16 @@ describe("diff/ensemble", () => {
   });
 });
 describe("bundle", () => {
+  it("RC-003: an approved nstlim=5000 proposal yields a product.in that says 10.0 ps, nstlim=5000, dt=0.002, pinned ig; no approved edit → archived mdin verbatim", () => {
+    const prod = A.stages.find((s: any) => s.role === "production");
+    const p = { ...makeProposal(A, "product", { nstlim: "5000" }, "extend to 10 ps"), status: "approved" as const };
+    expect(p.mdin_after.split("\n")[0]).toMatch(/10\.0 ps/);
+    const withEdit = rerunBundle(A, { seed: "pinned", target: "local", approved: [p] })["md/product.in"];
+    expect(withEdit.split("\n")[0]).toMatch(/10\.0 ps/); expect(withEdit).not.toMatch(/5\.0 ps/);
+    expect(withEdit).toMatch(/nstlim=5000,/); expect(withEdit).toMatch(/dt=0\.002/); expect(withEdit).toMatch(new RegExp(`ig=${prod.realized_seed}\\b`));
+    expect(rerunBundle(A, { seed: "fresh", target: "local", approved: [] })["md/product.in"]).toBe(prod.mdin);
+    expect(rerunBundle(A, { seed: "pinned", target: "local", approved: [] })["md/product.in"].split("\n")[0]).toBe(prod.mdin.split("\n")[0]);
+  });
   it("pinned seed writes the realized ig; fresh keeps -1; approved edit lands", () => {
     const p = { ...makeProposal(A, "product", { nstlim: "50000" }, "longer"), status: "approved" as const };
     const f = rerunBundle(A, { seed: "pinned", target: "local", approved: [p] });
