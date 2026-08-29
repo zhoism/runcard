@@ -228,6 +228,15 @@ def main():
         "pipeline": {"stage_envelopes": {f"s{i}": (x or {}).get("ok") for i, x in zip(range(2, 7), (s2, s3, s4, s5, s6)) if x is not None},
                      "skills": [x.get("skill") for x in (s2, s3, s4, s5, s6) if x]},
     }
+    # --- build inputs referenced by leap.in (ligand mol2/frcmod, cleaned protein PDB): archived next to the card when the run dir has them,
+    #     so a rerun bundle can carry them; whatever is not in the run dir is recorded as missing, never invented ---
+    refs = re.findall(r"(?:loadmol2|loadamberparams|loadpdb)\s+(\S+)", system.get("leap_in") or "")
+    present, missing = [], []
+    for name in refs:
+        hit = next((f for f in run.rglob(name) if "analysis" not in f.parts and f.is_file() and f.stat().st_size > 0), None)
+        if hit: (out / "build").mkdir(exist_ok=True); shutil.copy(hit, out / "build" / name); present.append(name)
+        else: missing.append(name)
+    system["build_inputs"] = {"present": present, "missing": missing, "note": "files leap.in loads; present ones are archived under build/ and shipped in rerun bundles; missing ones were not in the run directory"}
     # --- lineage: a rerun made from a runcard bundle carries the parent card's manifest.json (with `parent` and `fork`) in its root ---
     lin = run / "manifest.json"
     if lin.exists():

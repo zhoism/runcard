@@ -228,6 +228,9 @@ export function planSampling(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}
   const s = st?.sd ?? null, nNow = st?.n ?? null;
   const semNow = s != null && nNow ? s / Math.sqrt(nNow) : null;
   const nNeeded = s != null ? Math.ceil((s / T) ** 2) : null;
+  // The SD itself is estimated from nNow runs: relative SE ≈ 1/√(2(n−1)); n_needed ∝ SD², so carry that through as a range rather than one number.
+  const sdRel = nNow != null && nNow > 1 ? 1 / Math.sqrt(2 * (nNow - 1)) : null;
+  const nNeededRange = s != null && sdRel != null ? { low: Math.ceil((s * Math.max(0, 1 - sdRel) / T) ** 2), high: Math.ceil((s * (1 + sdRel) / T) ** 2), sd_relative_se: round(sdRel, 2), note: `plug-in estimate: SD ${round(s, 2)} from ${nNow} runs has relative SE ≈ ${round(sdRel, 2)}; n_needed scales with SD², so ±1 SE on the SD spans this range` } : null;
   const additional = nNeeded != null && nNow != null ? Math.max(0, nNeeded - nNow) : null;
   const semAfter = s != null && nNow != null && nNeeded != null ? s / Math.sqrt(Math.max(nNow, nNeeded)) : null;
   const targetMet = semNow != null ? semNow <= T : false;
@@ -267,7 +270,7 @@ export function planSampling(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}
     ? `expected: no run-to-run estimate — this is the only run of its prepared system. Within this run the corrected SEM is ${unc.corrected_sem} kcal/mol at ${L0} ps; ${lengthForTarget != null ? `one run would reach ±${T} at ≈ ${lengthForTarget} ps (expected, stationary)` : `no single-run length is projected (verdict: ${unc.verdict})`}. Seed-to-seed spread cannot be estimated from one run: at least 3 independent runs (ig=-1) of ≥ ${Lrec} ps are needed before an ensemble uncertainty can be quoted.`
     : targetMet
       ? `expected: target ±${T} kcal/mol on the ensemble mean is already met on the ${plannedOn} stratum (n=${nNow}, SD ${round(s!, 2)}, SEM of mean ${round(semNow!, 2)}); 0 more runs needed.`
-      : `expected: ${additional} more independent run${additional === 1 ? "" : "s"} (ig=-1) of ≥ ${Lrec} ps each → n=${nNeeded}, SEM of the ensemble mean ≈ ${round(semAfter!, 2)} ≤ ${T} kcal/mol. ${lengthForTarget != null ? `Extending this run alone reaches ±${T} at ≈ ${lengthForTarget} ps (expected)` : `No single-run length is projected for this run (verdict: ${unc.verdict})`}; run-to-run SD ${round(s!, 2)} is ${spreadOverWithin}× this run's corrected SEM, ${spreadOverWithin! >= 2 ? "so seed spread, not frame noise, limits the estimate" : spreadOverWithin! >= 1.2 ? "so seed spread and frame noise are comparable" : "so the run-to-run spread is not distinguishable from this run's frame noise"}.`;
+      : `expected: ${additional} more independent run${additional === 1 ? "" : "s"} (ig=-1) of ≥ ${Lrec} ps each → n=${nNeeded}${nNeededRange ? ` (plug-in estimate; ±1 SE on the SD gives n = ${nNeededRange.low}–${nNeededRange.high})` : ""}, SEM of the ensemble mean ≈ ${round(semAfter!, 2)} ≤ ${T} kcal/mol. ${lengthForTarget != null ? `Extending this run alone reaches ±${T} at ≈ ${lengthForTarget} ps (expected)` : `No single-run length is projected for this run (verdict: ${unc.verdict})`}; run-to-run SD ${round(s!, 2)} is ${spreadOverWithin}× this run's corrected SEM, ${spreadOverWithin! >= 2 ? "so seed spread, not frame noise, limits the estimate" : spreadOverWithin! >= 1.2 ? "so seed spread and frame noise are comparable" : "so the run-to-run spread is not distinguishable from this run's frame noise"}.`;
   const assumptions = [
     plannedOn ? `The sample SD across the ${plannedOn} stratum (${nNow} runs) holds for new runs of ≥ ${Lrec} ps; it includes within-run noise (not decomposed), so it may shrink slightly with longer runs — not modelled.` : "No run-to-run SD is available from a single run.",
     "New runs are independent samples (ig=-1) of the same prepared system and protocol.",
@@ -280,7 +283,7 @@ export function planSampling(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}
     what_the_target_means: "the standard error of the ensemble-mean ΔG (run-to-run SD / √n): how well the mean over independent runs is pinned down — not the spread to quote for a single run (explain_result gives that)",
     min_run_ps: minPs,
     run_to_run: { planned_on: plannedOn, strata: { all: stratumRow(ens.all), long: { min_ps: ens.long.min_ps, ...stratumRow(ens.long) } },
-      sd_used: s != null ? round(s) : null, n_now: nNow, sem_of_mean_now: semNow != null ? round(semNow) : null, n_needed: nNeeded, additional_runs: additional,
+      sd_used: s != null ? round(s) : null, n_now: nNow, sem_of_mean_now: semNow != null ? round(semNow) : null, n_needed: nNeeded, n_needed_range: nNeededRange, additional_runs: additional,
       expected_sem_of_mean_after: semAfter != null ? round(semAfter) : null, target_met: targetMet, sign_claim: signClaim(st ?? ens.all) },
     within_run: { this_run: { production_ps: L0, per_frame_sd: unc.per_frame_sd, g: unc.statistical_inefficiency_g, tau_ps: unc.integrated_autocorrelation_time_ps, frame_interval_ps: round(dPs, 3), corrected_sem: unc.corrected_sem, n_eff: unc.n_eff, verdict: unc.verdict },
       formula: "expected SEM(L) = SD · √(g·Δ/L) = SD · √((Δ + 2τ)/L), N = L/Δ frames",
@@ -317,20 +320,20 @@ export function explainResult(m: Manifest, idx: IndexEntry[]) {
   const dominates = ratio == null ? "" : ratio >= 2 ? "so seed-to-seed variation, not frame noise, dominates" : ratio >= 1.2 ? "so seed-to-seed variation and frame noise are comparable" : "so the run-to-run spread is not distinguishable from this run's frame noise";
   const which = unc && spreadSd != null
     ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD over all ${ens.all.n} runs${stratumNote}) as the uncertainty of a single run's ΔG. Within this run the correlation-corrected SEM is ${unc.corrected_sem} (N_eff ≈ ${unc.n_eff} of ${unc.n_frames} frames); the naive per-frame SEM ${unc.per_frame_sem} is ${(unc.corrected_sem / unc.per_frame_sem).toFixed(1)}× too small. Run-to-run spread is ${ratio!.toFixed(1)}× the corrected SEM, ${dominates}.`
-    : unc ? `Within this run the correlation-corrected SEM is ${unc.corrected_sem}; no other runs of this system to estimate run-to-run spread.` : "per-frame data not archived for this run; only MMPBSA.py's naive SEM is available.";
+    : unc ? `Within this run the correlation-corrected SEM is ${unc.corrected_sem}; it does not estimate run-to-run uncertainty — no other runs of this system exist to estimate that spread.` : "per-frame data not archived for this run; only MMPBSA.py's naive SEM is available.";
   // Where this run sits among its peers: rank, z-score vs the ensemble mean, and the ensemble mean ± SEM as the protocol-level estimate.
   const peersSorted = [...ens.all.runs].sort((a, b) => a.delta_g - b.delta_g);
   const vsEnsemble = ens.all.n > 1 && ens.all.mean != null && ens.all.sd != null ? {
     rank_most_negative: peersSorted.findIndex(r => r.id === m.id) + 1, n: ens.all.n,
     z_vs_ensemble_mean: round((mm.delta_total_kcal_mol - ens.all.mean) / ens.all.sd, 2),
     ensemble_mean: round(ens.all.mean, 2), ensemble_sem: round(ens.all.sd / Math.sqrt(ens.all.n), 2),
-    note: "the ensemble mean ± SEM is the protocol-level estimate; this run's value is one draw from the run-to-run spread" } : null;
+    note: `the ensemble mean ± SEM is the estimate for this protocol conditional on this short-run ensemble (${[...new Set(ens.all.runs.map(r => r.production_ps))].sort((a, b) => a - b).join("–")} ps from one prepared start; seed variation, not a survey of conformational space); this run's value is one draw from the run-to-run spread` } : null;
   const brief = [
     spreadSd != null
       ? `ΔG = ${round(mm.delta_total_kcal_mol, 1)} ± ${round(spreadSd, 1)} kcal/mol for this run (single-trajectory MM-GBSA, ${mm.frames} frames of ${prod?.length_ps ?? "?"} ps; ± = run-to-run SD over ${ens.all.n} independent runs of the same prepared system; archived value ${mm.delta_total_kcal_mol}).`
       : `ΔG = ${mm.delta_total_kcal_mol} kcal/mol, single-trajectory MM-GBSA over ${mm.frames} frames of a ${prod?.length_ps ?? "?"} ps production run.`,
-    spreadSd != null ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD over all ${ens.all.n} independent runs${stratumNote}); the within-run SEM (${unc ? unc.corrected_sem : mm.frame_sem}) is not the uncertainty to report.` : `Only one run of this system; within-run SEM ${unc ? unc.corrected_sem : mm.frame_sem} understates the uncertainty.`,
-    ...(vsEnsemble ? [`This run is ${vsEnsemble.rank_most_negative} of ${vsEnsemble.n} (most negative first), z = ${vsEnsemble.z_vs_ensemble_mean} vs the ensemble mean ${vsEnsemble.ensemble_mean} ± ${vsEnsemble.ensemble_sem} (SEM, n=${vsEnsemble.n}), which is the protocol-level estimate.`] : []),
+    spreadSd != null ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD over all ${ens.all.n} independent runs${stratumNote}); the within-run SEM (${unc ? unc.corrected_sem : mm.frame_sem}) is not the uncertainty to report.` : `Only one run of this system: the within-run SEM ${unc ? unc.corrected_sem : mm.frame_sem} does not estimate run-to-run uncertainty; no spread can be quoted until ≥ 3 independent runs exist.`,
+    ...(vsEnsemble ? [`This run is ${vsEnsemble.rank_most_negative} of ${vsEnsemble.n} (most negative first), z = ${vsEnsemble.z_vs_ensemble_mean} vs the ensemble mean ${vsEnsemble.ensemble_mean} ± ${vsEnsemble.ensemble_sem} (SEM, n=${vsEnsemble.n}) — the protocol's estimate conditional on this short-run ensemble (seed variation over picoseconds from one prepared start).`] : []),
     unc ? `Convergence: ${unc.verdict} (N_eff ≈ ${unc.n_eff}, halves ${unc.halves.first} → ${unc.halves.second}).` : "Convergence: per-frame data not archived, cannot judge.",
     signClaim(ens.all),
   ].join(" ");
@@ -467,11 +470,18 @@ export function makeProposal(m: Manifest, stage: string, edits: Record<string, s
 const COUNT_KEYS = new Set(["nstlim", "ntwx", "ntpr", "ntwr"]);
 
 // ---- rerun bundle ---------------------------------------------------
-export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; target: "local" | "slurm"; approved: Proposal[] }) {
+/** Files leap.in loads (ligand mol2/frcmod, cleaned protein PDB), from the leap.in text itself. */
+export function leapInputs(m: Manifest): string[] { return m.system.leap_in.match(/(?:loadmol2|loadamberparams|loadpdb)\s+(\S+)/g)?.map(x => x.split(/\s+/)[1]) ?? []; }
+/** What a rerun still needs from outside the bundle: every leap.in input not actually shipped in `have` (all of them when nothing is shipped). */
+export function bundleGaps(m: Manifest, have: Record<string, string> = {}): string[] { return leapInputs(m).filter(n => !(n in have)); }
+export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; target: "local" | "slurm"; approved: Proposal[]; buildFiles?: Record<string, string> }) {
   // The browser's WebMCP does not enforce the JSON schema's enums; an off-enum value must not silently become "fresh"/"local".
   if (opts.seed !== "pinned" && opts.seed !== "fresh") throw new Error(`seed must be 'pinned' or 'fresh', got ${JSON.stringify(opts.seed)}`);
   if (opts.target !== "local" && opts.target !== "slurm") throw new Error(`target must be 'local' or 'slurm', got ${JSON.stringify(opts.target)}`);
   const files: Record<string, string> = {};
+  // Archived build inputs (ligand mol2/frcmod …) travel with the bundle; what was never archived is named in the README, not papered over.
+  for (const [name, text] of Object.entries(opts.buildFiles ?? {})) files[`build/${name}`] = text;
+  const gaps = bundleGaps(m, opts.buildFiles ?? {});
   for (const s of m.stages) {
     let text = s.mdin;
     // Approved proposals compose: the store lists newest first, so apply oldest → newest, each on top of the previous.
@@ -513,7 +523,10 @@ export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; targe
     `Seed policy: **${opts.seed}** — ${opts.seed === "pinned" ? "each stage's ig is set to the seed pmemd actually used in the original run (exact replay on the same build; different hardware/compilers may still diverge)." : "ig=-1 as in the original; this is an independent sample, expect ΔG within the run-to-run spread, not equal."}`,
     `Target: ${opts.target}`, "", ...forkSection, "## Environment", `- ${m.environment.pmemd ?? m.stages[0].engine}`, ...Object.entries(m.environment.conda_lock).map(([k, v]) => `- ${k}=${v}`), "",
     "## Approved changes", ...(opts.approved.length ? opts.approved.map(p => `- ${p.stage}: ${JSON.stringify(p.edits)} — ${p.reason}`) : ["- none"]), "",
-    "## Steps", "1. `cd build && tleap -f leap.in` (needs the ligand mol2/frcmod and cleaned protein PDB from the original run's build/ directory)",
+    "## What this bundle is", gaps.length
+      ? `A rerun recipe, not a self-contained archive: leap.in also loads **${gaps.join(", ")}**, not included here — ${gaps.every(g => m.system.build_inputs?.present.includes(g)) ? "archived with the card but not fetched into this bundle" : "not archived with the run"}; it must come from the original build/ directory. Included: ${Object.keys(opts.buildFiles ?? {}).join(", ") || "none"}.`
+      : `Self-contained: every file leap.in loads is included under build/ (${Object.keys(opts.buildFiles ?? {}).join(", ")}).`, "",
+    "## Steps", `1. \`cd build && tleap -f leap.in\`${gaps.length ? ` (after adding ${gaps.join(", ")})` : ""}`,
     "2. copy comp_oct.top / comp_oct.crd into md/", "3. `bash run.sh`", "", "## Force fields", ...m.system.force_fields.map(f => `- leaprc.${f}`)].join("\n");
   files["manifest.json"] = JSON.stringify({ ...m, parent: m.id, fork: lineage, stages: m.stages.map(s => ({ ...s, mdin: undefined })) }, null, 1);
   return files;
@@ -524,7 +537,7 @@ export function zipBundle(files: Record<string, string>): Uint8Array {
 }
 
 // ---- confidence ladder: what the archived evidence establishes, rung by rung -------------
-// recomputable → repeatable → independently replicated → robust to reasonable analysis choices → externally supported.
+// recomputable → repeatable → independently replicated → robust to analysis-window choices (the narrow, earned form of 'robust to reasonable choices') → externally supported.
 // Every rung is computed from the manifest; "verified" means the check ran here on archived data, "expected" means the
 // artefacts to do it exist but nothing was executed, "not assessed" means no evidence of that kind is on the card.
 export type RungStatus = "verified" | "expected" | "not established" | "not assessed";
@@ -550,7 +563,7 @@ export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
   const missing = [...(unseeded.length ? [`realized seed missing for ${unseeded.join(", ")}`] : []), ...(pins ? [] : ["no environment lock"]), ...(m.system.leap_in ? [] : ["no leap.in"])];
   rungs.push(missing.length
     ? { rung: "repeatable", status: "not established", short: `cannot be replayed exactly: ${missing.join("; ")}`, evidence: `cannot be replayed exactly: ${missing.join("; ")}`, to_climb: "archive the missing seeds / lock / build inputs" }
-    : { rung: "repeatable", status: "expected", short: "seeds, environment lock and leap.in archived for a pinned replay — not executed here", evidence: `realized seeds for ${dyn.length}/${dyn.length} dynamics stages, ${pins} environment pins and leap.in are archived; generate_rerun_bundle seed='pinned' replays the run on the same build. Not executed here, and the bundle still needs the original build/ inputs (ligand mol2/frcmod, cleaned PDB)`, to_climb: "run the pinned bundle, extract the result as a card, compare" });
+    : { rung: "repeatable", status: "expected", short: `seeds, environment lock, leap.in${m.system.build_inputs?.present.length ? " and its inputs" : ""} archived for a pinned replay — not executed here${m.system.build_inputs?.missing.length ? `; ${m.system.build_inputs.missing.join(", ")} not archived` : ""}`, evidence: `realized seeds for ${dyn.length}/${dyn.length} dynamics stages, ${pins} environment pins, leap.in${m.system.build_inputs?.present.length ? ` and ${m.system.build_inputs.present.join(", ")}` : ""} are archived; generate_rerun_bundle seed='pinned' replays the run on the same build. Not executed here${m.system.build_inputs?.missing.length ? `, and the bundle is a recipe: ${m.system.build_inputs.missing.join(", ")} must come from the original build/ directory` : ""}`, to_climb: "run the pinned bundle, extract the result as a card, compare" });
   // 3 independently replicated — ≥ 3 runs of the same prepared system AND the same production protocol, with distinct realized seeds
   const peers = me ? idx.filter(r => sameSystem(r, me)) : [];
   const sameProto = me?.protocol ? peers.filter(r => r.protocol === me.protocol) : [];
@@ -572,19 +585,19 @@ export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
       { label: "discard first 50 %", opts: { start_frame: Math.floor(n * 0.5) + 1 } }, { label: "every 2nd frame", opts: { interval: 2 } }];
     const rows = windows.map(w => { try { const r = recomputeResult(m, w.opts); return { window: w.label, delta_g: r.delta_g.mean, diff: r.vs_archived.diff, sigma: r.vs_archived.diff_in_corrected_sem }; } catch { return null; } });
     const ok = rows.filter((x): x is NonNullable<typeof x> => !!x && Number.isFinite(x.diff) && Number.isFinite(x.sigma));
-    if (ok.length < windows.length) rungs.push({ rung: "robust to reasonable analysis choices", status: "not established", short: `only ${ok.length} of ${windows.length} windows could be re-analysed`, evidence: `only ${ok.length} of ${windows.length} analysis windows could be re-analysed (too few frames)`, to_climb: "longer sampling (plan_sampling)" });
+    if (ok.length < windows.length) rungs.push({ rung: "robust to analysis-window choices", status: "not established", short: `only ${ok.length} of ${windows.length} windows could be re-analysed`, evidence: `only ${ok.length} of ${windows.length} analysis windows could be re-analysed (too few frames)`, to_climb: "longer sampling (plan_sampling)" });
     else {
       const maxSigma = Math.max(...ok.map(r => Math.abs(r.sigma)));
       const spread = ok.map(r => `${r.window}: ${r.delta_g.toFixed(2)} (Δ ${r.diff >= 0 ? "+" : ""}${r.diff.toFixed(2)}, ${Math.abs(r.sigma).toFixed(1)} σ)`).join("; ");
       // A run that is drifting or too short is not stationary, so window agreement cannot establish robustness — the rung says so instead of contradicting the drift verdict.
       const stationary = unc?.verdict === "no drift detected";
       const passed = stationary && maxSigma <= 2;
-      rungs.push({ rung: "robust to reasonable analysis choices", status: passed ? "verified" : "not established",
+      rungs.push({ rung: "robust to analysis-window choices", status: passed ? "verified" : "not established",
         short: !stationary ? `not stationary (${unc?.verdict}); window agreement cannot establish robustness` : passed ? `${ok.length} analysis windows agree within 2 corrected SEMs` : "the analysis window moves ΔG by more than its statistical uncertainty",
         evidence: `${!stationary ? `this run's drift verdict is '${unc?.verdict}', so the windows are not draws from a stationary series. ` : ""}${ok.length} analysis windows re-analysed — ${spread}; largest shift ${maxSigma.toFixed(1)} corrected SEM of its window (criterion ≤ 2 on a stationary run)${maxSigma <= 2 ? "" : " — the window choice moves ΔG by more than its statistical uncertainty"}. Analysis-window sensitivity only: force field, protonation, box and the MM-GBSA model (igb, saltcon) were not varied`,
         to_climb: passed ? "vary a modelling choice in a controlled extension (fork_experiment kind='extend')" : "longer sampling (plan_sampling) until the series is stationary and the window choice stops mattering" });
     }
-  } else rungs.push({ rung: "robust to reasonable analysis choices", status: "not established", short: "per-frame energies not archived", evidence: "per-frame energies not archived; windows cannot be re-analysed", to_climb: null });
+  } else rungs.push({ rung: "robust to analysis-window choices", status: "not established", short: "per-frame energies not archived", evidence: "per-frame energies not archived; windows cannot be re-analysed", to_climb: null });
   // 5 externally supported — nothing of that kind is on the card; never claimed
   rungs.push({ rung: "externally supported", status: "not assessed", short: "no experimental or literature value linked", evidence: "no experimental or literature value is linked to this card", to_climb: "link an external reference with its own provenance (not part of this site)" });
   const verified = rungs.filter(r => r.status === "verified").length;

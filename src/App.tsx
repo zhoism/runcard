@@ -138,7 +138,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
             <div className="big">{fmt(mm.delta_total_kcal_mol)}{spreadSd != null && <> ± {fmt(spreadSd)}</>} <span className="unit">kcal/mol</span></div>
             <p className="dim small">{spreadSd != null
               ? <>± is the run-to-run SD over {ens!.all.n} independent runs of this system — the uncertainty to quote; the within-run SEM below is not.</>
-              : u ? <>single run of this system: the within-run corrected SEM below understates the uncertainty — no run-to-run spread yet.</> : null}</p>
+              : u ? <>single run of this system: the within-run corrected SEM below does not estimate run-to-run uncertainty — no spread can be quoted until three independent runs exist.</> : null}</p>
             <dl>
               {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
                 {ens.long.n > 0 && ens.long.n < ens.all.n && <><br /><b>n={ens.long.n}</b> runs ≥ {ens.long.min_ps} ps: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</>}

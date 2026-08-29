@@ -42,7 +42,16 @@
    "water.tip3p",
    "gaff2"
   ],
-  "leap_in": "source leaprc.protein.ff19SB\nsource leaprc.water.tip3p\nsource leaprc.gaff2\nLIG = loadmol2 JZ4.mol2\nloadamberparams JZ4.frcmod\ncheck LIG\nprot = loadpdb protein_clean.pdb\ncheck prot\nsaveamberparm prot protein.top protein.crd\nsaveamberparm LIG ligand.top ligand.crd\ncomp = combine { prot LIG }\nsaveamberparm comp comp_dry.top comp_dry.crd\nsolvateoct comp TIP3PBOX 10.0\naddions2 comp Na+ 0\naddions2 comp Cl- 0\nsaveamberparm comp comp_oct.top comp_oct.crd\nsavepdb comp comp_oct.pdb\nquit\n"
+  "leap_in": "source leaprc.protein.ff19SB\nsource leaprc.water.tip3p\nsource leaprc.gaff2\nLIG = loadmol2 JZ4.mol2\nloadamberparams JZ4.frcmod\ncheck LIG\nprot = loadpdb protein_clean.pdb\ncheck prot\nsaveamberparm prot protein.top protein.crd\nsaveamberparm LIG ligand.top ligand.crd\ncomp = combine { prot LIG }\nsaveamberparm comp comp_dry.top comp_dry.crd\nsolvateoct comp TIP3PBOX 10.0\naddions2 comp Na+ 0\naddions2 comp Cl- 0\nsaveamberparm comp comp_oct.top comp_oct.crd\nsavepdb comp comp_oct.pdb\nquit\n",
+  "build_inputs": {
+   "present": [
+    "JZ4.mol2",
+    "JZ4.frcmod",
+    "protein_clean.pdb"
+   ],
+   "missing": [],
+   "note": "files leap.in loads; present ones are archived under build/ and shipped in rerun bundles; missing ones were not in the run directory"
+  }
  },
  "stages": [
   {

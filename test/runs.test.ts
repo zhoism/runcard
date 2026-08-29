@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, forkExperiment, forkStages } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, forkExperiment, forkStages } from "../src/lib/runs";
 import { mean, sd } from "../src/lib/stats";
 import { execFileSync } from "node:child_process";
 const load = (id: string) => JSON.parse(readFileSync(`public/runs/${id}/manifest.json`, "utf8"));
@@ -316,11 +316,11 @@ describe("review batch 2026-08-29, part 2", () => {
 describe("confidence ladder", () => {
   it("rep4: recomputable and replicated verified, repeatable expected, external not assessed; robust computed over 4 windows", () => {
     const L = confidenceLadder(B, idx); const by = Object.fromEntries(L.rungs.map(r => [r.rung, r]));
-    expect(L.rungs.map(r => r.rung)).toEqual(["recomputable", "repeatable", "independently replicated", "robust to reasonable analysis choices", "externally supported"]);
+    expect(L.rungs.map(r => r.rung)).toEqual(["recomputable", "repeatable", "independently replicated", "robust to analysis-window choices", "externally supported"]);
     expect(by["recomputable"].status).toBe("verified"); expect(by["recomputable"].evidence).toMatch(/re-derived here/);
     expect(by["repeatable"].status).toBe("expected"); expect(by["repeatable"].evidence).toMatch(/3\/3 dynamics stages/);
     expect(by["independently replicated"].status).toBe("verified"); expect(by["independently replicated"].evidence).toMatch(/9 runs of the same prepared system and production protocol with distinct realized seeds/);
-    expect(["verified", "not established"]).toContain(by["robust to reasonable analysis choices"].status); expect(by["robust to reasonable analysis choices"].evidence).toMatch(/4 analysis windows re-analysed/); expect(by["robust to reasonable analysis choices"].evidence).toMatch(/criterion ≤ 2/);
+    expect(["verified", "not established"]).toContain(by["robust to analysis-window choices"].status); expect(by["robust to analysis-window choices"].evidence).toMatch(/4 analysis windows re-analysed/); expect(by["robust to analysis-window choices"].evidence).toMatch(/criterion ≤ 2/);
     const noProto = confidenceLadder(B, idx.map((r: any) => ({ ...r, protocol: undefined }))); expect(noProto.rungs[2].status).toBe("not established"); expect(noProto.rungs[2].evidence).toMatch(/no protocol key/);
     expect(by["externally supported"].status).toBe("not assessed");
     expect(L.summary).toMatch(/of 4 assessable rungs verified/);
@@ -402,5 +402,26 @@ describe("judge pass 46ca5ba fixes", () => {
     expect(typeof d.delta_g_vs_noise!.consistent_with_sampling_noise).toBe("boolean"); expect(d.interpretation).toMatch(/expected spread of a two-run difference √2·SD/);
     expect(() => diffRuns(A, A, idx)).toThrow(/same run/);
     const x = diffRuns(A, C, idx); expect(x.material_classes).toEqual([]); expect(x.delta_g_vs_noise).toBeNull(); expect(x.system.find(s => s.field === "net_charge")).toBeUndefined();
+  });
+});
+
+describe("Codex judge ff85e2f fixes", () => {
+  it("every manifest archives the three leap.in inputs; a bundle with them is self-contained, without them it says what is still needed", () => {
+    for (const r of idx) { const m = load(r.id); expect(m.system.build_inputs.missing, r.id).toEqual([]); expect(m.system.build_inputs.present.length, r.id).toBe(3); expect(bundleGaps(m)).toEqual(["MOL.mol2", "MOL.frcmod", "protein_clean.pdb"].map(x => r.id.startsWith("3htb") ? x.replace("MOL", "JZ4") : x)); expect(bundleGaps(m, { "MOL.mol2": "", "MOL.frcmod": "", "protein_clean.pdb": "", "JZ4.mol2": "", "JZ4.frcmod": "" })).toEqual([]); }
+    const bf = { "MOL.mol2": "@<TRIPOS>MOLECULE\n", "MOL.frcmod": "remark\n", "protein_clean.pdb": "ATOM\n" };
+    const full = rerunBundle(B, { seed: "fresh", target: "local", approved: [], buildFiles: bf });
+    expect(Object.keys(full).filter(k => k.startsWith("build/")).sort()).toEqual(["build/MOL.frcmod", "build/MOL.mol2", "build/leap.in", "build/protein_clean.pdb"]);
+    expect(full["README.md"]).toMatch(/Self-contained: every file leap.in loads is included/);
+    const partial = rerunBundle(B, { seed: "fresh", target: "local", approved: [], buildFiles: { "MOL.mol2": "x", "MOL.frcmod": "y" } });
+    expect(partial["README.md"]).toMatch(/A rerun recipe, not a self-contained archive: leap.in also loads \*\*protein_clean.pdb\*\*/);
+    expect(rerunBundle(B, { seed: "fresh", target: "local", approved: [] })["README.md"]).toMatch(/\*\*MOL.mol2, MOL.frcmod, protein_clean.pdb\*\*, not included here — archived with the card but not fetched/);
+  });
+  it("plan_sampling: n_needed carries a plug-in range from the SD's own sampling uncertainty; ladder rung 4 is named for what it tests; singleton wording", () => {
+    const p = planSampling(A, idx, {}); expect(p.run_to_run.n_needed_range).toMatchObject({ sd_relative_se: 0.35 });
+    expect(p.run_to_run.n_needed_range!.low).toBeLessThanOrEqual(p.run_to_run.n_needed!); expect(p.run_to_run.n_needed_range!.high).toBeGreaterThanOrEqual(p.run_to_run.n_needed!);
+    expect(p.recommendation).toMatch(/plug-in estimate; ±1 SE on the SD gives n = \d+–\d+/);
+    expect(confidenceLadder(B, idx).rungs[3].rung).toBe("robust to analysis-window choices");
+    const e = explainResult(C, idx) as any; expect(e.brief).toMatch(/does not estimate run-to-run uncertainty/); expect(e.brief).not.toMatch(/understates/);
+    expect((explainResult(B, idx) as any).this_run_vs_ensemble.note).toMatch(/conditional on this short-run ensemble/);
   });
 });

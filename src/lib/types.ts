@@ -15,6 +15,8 @@ export interface Manifest {
     ligand: { resname: string | null; atoms: number | null; atom_types: string[] | null; charge_method: string | null; net_charge: number | null; frcmod_missing: string[] | null };
     solvent: { box: string | null; model: string | null; buffer_A: number | null; residues_added: number[] | null; solvated_atoms: number | null; dry_atoms: number | null };
     force_fields: string[]; leap_in: string;
+    /** Files leap.in loads (ligand mol2/frcmod, cleaned protein PDB). `present` are archived under public/runs/<id>/build/ and shipped in rerun bundles; `missing` were not in the run directory. */
+    build_inputs?: { present: string[]; missing: string[]; note?: string };
   };
   stages: Stage[];
   results: {
