@@ -208,8 +208,18 @@ export function recomputeResult(m: Manifest, opts: RecomputeOpts = {}) {
 export const PLAN_LENGTHS_PS = [5, 10, 20, 50, 100];
 /** Default target for the SEM of the ensemble mean. 0.5 is already met on the 1L2Y ensemble (n=5 long runs, SD 0.79 → 0.35), so 0.25 makes the tool say something. */
 export const PLAN_DEFAULT_TARGET_KCAL = 0.25;
-export interface PlanOpts { target_uncertainty_kcal?: number; min_run_ps?: number }
+export interface PlanOpts { target_uncertainty_kcal?: number; min_run_ps?: number; detail?: boolean }
+/** Compact by default: the recommendation, the run-to-run arithmetic and the suggested edit. `detail: true` adds the per-length table, formulas and every assumption. */
 export function planSampling(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}) {
+  const full = planSamplingFull(m, idx, opts);
+  if (opts.detail) return full;
+  return { label: full.label, run: full.run, target_uncertainty_kcal: full.target_uncertainty_kcal, recommendation: full.recommendation,
+    run_to_run: { planned_on: full.run_to_run.planned_on, n_now: full.run_to_run.n_now, sd_used: full.run_to_run.sd_used, sem_of_mean_now: full.run_to_run.sem_of_mean_now, n_needed: full.run_to_run.n_needed, n_needed_range: full.run_to_run.n_needed_range, additional_runs: full.run_to_run.additional_runs, target_met: full.run_to_run.target_met },
+    within_run: { corrected_sem_now: full.within_run.this_run.corrected_sem, verdict: full.within_run.this_run.verdict, expected_length_for_target_ps: full.within_run.expected_length_for_target_ps, expected_length_note: full.within_run.expected_length_note },
+    recommended_run_ps: full.recommended_run_ps, suggested_edits: full.suggested_edits, rerun_note: full.rerun_note, assumptions: full.assumptions,
+    detail: "compact by default; call with detail: true for the per-length SEM table, strata, formulas and method" };
+}
+function planSamplingFull(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}) {
   const T = opts.target_uncertainty_kcal ?? PLAN_DEFAULT_TARGET_KCAL;
   if (typeof T !== "number" || !Number.isFinite(T) || T <= 0) throw new Error("target_uncertainty_kcal must be a number > 0");
   const minPs = opts.min_run_ps ?? LONG_RUN_MIN_PS;
@@ -304,7 +314,18 @@ export function internalResidual(pf: PerFrame, deltaG: number) {
     fraction_of_delta_g: round(Math.abs(mean(tot)) / Math.abs(deltaG), 6), dominant_term: dominant,
     note: `In single-trajectory MM-GBSA the internal terms of complex − receptor − ligand should cancel exactly. Here ${dominant} is the term that does not (max |Δ| ${by[dominant].max_abs} kcal/mol per frame); the others cancel to print precision. The residual's mean is ${round(mean(tot))} kcal/mol against ΔG = ${deltaG}. The cause is not recorded in the artifacts.` };
 }
-export function explainResult(m: Manifest, idx: IndexEntry[]) {
+/** Compact by default: the brief and the numbers that decide things. `detail: true` returns the full record (per-frame stats, block averaging, run list, provenance). */
+export function explainResult(m: Manifest, idx: IndexEntry[], detail = false) {
+  const full = explainResultFull(m, idx);
+  if (detail || "error" in full) return full;
+  const f = full as Exclude<typeof full, { error: string }>;
+  return { brief: f.brief, value_kcal_mol: f.value_kcal_mol,
+    uncertainty_to_quote: f.run_to_run.all.sd != null ? { run_to_run_sd: round(f.run_to_run.all.sd), n: f.run_to_run.all.n, production_ps: [...new Set(f.run_to_run.all.runs.map(r => r.production_ps))].sort((a, b) => a - b), long_stratum: f.run_to_run.long.n >= 2 ? { min_ps: f.run_to_run.long.min_ps, n: f.run_to_run.long.n, sd: f.run_to_run.long.sd != null ? round(f.run_to_run.long.sd) : null } : null } : null,
+    within_run: f.uncertainty ? { corrected_sem: f.uncertainty.corrected_sem, naive_sem: f.uncertainty.per_frame_sem, n_eff: f.uncertainty.n_eff, verdict: f.uncertainty.verdict } : null,
+    which_uncertainty_to_quote: f.which_uncertainty_to_quote, this_run_vs_ensemble: f.this_run_vs_ensemble, sign_claim: f.sign_claim.all_runs, entropy_term: f.entropy_term, warning_note: f.warning_note ?? null,
+    detail: "compact by default; call with detail: true for per-frame statistics, block averaging, the run list, seeds, the MMPBSA residual by term and provenance" };
+}
+function explainResultFull(m: Manifest, idx: IndexEntry[]) {
   const mm = m.results.mmgbsa; if (!mm) return { error: "no MM-GBSA result in this run" };
   const prod = m.stages.find(s => s.role === "production");
   const ens = ensemble(idx, m.id);
@@ -544,9 +565,14 @@ export function zipBundle(files: Record<string, string>): Uint8Array {
 // recomputable → repeatable → independently replicated → robust to analysis-window choices (the narrow, earned form of 'robust to reasonable choices') → externally supported.
 // Every rung is computed from the manifest; "verified" means the check ran here on archived data, "expected" means the
 // artefacts to do it exist but nothing was executed, "not assessed" means no evidence of that kind is on the card.
-export type RungStatus = "verified" | "expected" | "not established" | "not assessed";
+export type RungStatus = "verified" | "partly established" | "expected" | "not established" | "not assessed";
 export interface Rung { rung: string; status: RungStatus; short: string; evidence: string; to_climb: string | null }
-export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
+export function confidenceLadder(m: Manifest, idx: IndexEntry[], detail = true) {
+  const full = confidenceLadderFull(m, idx);
+  if (detail) return full;
+  return { run: full.run, rungs: full.rungs.map(r => ({ rung: r.rung, status: r.status, short: r.short, to_climb: r.to_climb })), verified_of_assessable: full.verified_of_assessable, summary: full.summary, detail: "compact by default; call with detail: true for each rung's evidence (numbers, windows, source files) and the method" };
+}
+export function confidenceLadderFull(m: Manifest, idx: IndexEntry[]) {
   const mm = m.results.mmgbsa; const pf = mm?.per_frame ?? null;
   const me = idx.find(r => r.id === m.id) ?? null;
   const prod = m.stages.find(s => s.role === "production");
@@ -577,13 +603,14 @@ export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
   else if (sameProto.length >= 3 && distinct === sameProto.length && distinct >= 3) {
     const st = stratum(sameProto); const lengths = [...new Set(sameProto.map(r => r.production_ps))].sort((a, b) => a - b);
     const long = stratum(sameProto.filter(r => r.production_ps >= LONG_RUN_MIN_PS));
-    // Seed replication is earned; matched-length replication (≥ 3 runs of one production length) is a stricter claim and is reported separately.
-    const byLen = new Map<number, IndexEntry[]>(); for (const r of sameProto) byLen.set(r.production_ps, [...(byLen.get(r.production_ps) ?? []), r]);
-    const matched = [...byLen.entries()].filter(([, rs]) => rs.length >= 3).map(([ps, rs]) => ({ ps, n: rs.length, sd: stratum(rs).sd }));
-    rungs.push({ rung: "independently replicated", status: "verified",
-      short: `${st.n} same-protocol runs with distinct seeds at mixed lengths (${lengths[0]}–${lengths[lengths.length - 1]} ps): seed-replicated${matched.length ? `; matched-length replication at ${matched.map(x => `${x.ps} ps (n=${x.n})`).join(", ")}` : "; no matched-length group of ≥ 3 runs"}`,
-      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. What this earns: the sign and the spread are robust to the seed; the numerical estimate is not replicated at one length${matched.length ? ` except at ${matched.map(x => `${x.ps} ps (n=${x.n}, SD ±${x.sd?.toFixed(2)})`).join(", ")}` : ""}. ${signClaim(st).split("; the observed")[0].replace(/\.?$/, ".")}`,
-      to_climb: matched.length ? null : "≥ 3 independent runs at one production length (fork_experiment kind='replicate')" });
+    // Two levels, stated separately: seed replication (distinct seeds, any length) is earned by the cohort; replication AT THIS RUN'S LENGTH
+    // (≥ 3 runs of the same production length) is what "verified" means for this card. Anything less is "partly established", and the rung says which part.
+    const myPs = me.production_ps; const atMyLen = sameProto.filter(r => r.production_ps === myPs);
+    const verifiedHere = atMyLen.length >= 3; const sdHere = verifiedHere ? stratum(atMyLen).sd : null;
+    rungs.push({ rung: "independently replicated", status: verifiedHere ? "verified" : "partly established",
+      short: `seed-replicated ✓ (${st.n} same-protocol runs, ${lengths[0]}–${lengths[lengths.length - 1]} ps) · at this run's length (${myPs} ps): ${atMyLen.length} of 3 needed ${verifiedHere ? "✓" : "✗"}`,
+      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. What this earns: the sign and the spread are robust to the seed. Replication of this run's number at its own length (${myPs} ps): ${atMyLen.length} run${atMyLen.length === 1 ? "" : "s"}${verifiedHere ? ` (SD ±${sdHere?.toFixed(2)})` : " — fewer than the 3 needed"}. ${signClaim(st).split("; the observed")[0].replace(/\.?$/, ".")}`,
+      to_climb: verifiedHere ? null : `${3 - atMyLen.length} more independent run${3 - atMyLen.length === 1 ? "" : "s"} at ${myPs} ps (fork_experiment kind='replicate')` });
   } else rungs.push({ rung: "independently replicated", status: "not established", short: `${sameProto.length} run${sameProto.length === 1 ? "" : "s"} of this system and protocol on this site; 3 needed`,
     evidence: `${peers.length} run${peers.length === 1 ? "" : "s"} of this prepared system on this site, ${sameProto.length} with the same production protocol${seeded.length && distinct < sameProto.length ? ", not all with distinct seeds" : ""}; at least 3 independent runs (ig=-1, same protocol) are needed`, to_climb: "fork_experiment kind='replicate' (plan_sampling gives the number of runs)" });
   // 4 robust to reasonable analysis choices — analysis-window sensitivity only: each window's ΔG must sit within 2 corrected SEMs (of that window) of the archived value
@@ -609,9 +636,9 @@ export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
   } else rungs.push({ rung: "robust to analysis-window choices", status: "not established", short: "per-frame energies not archived", evidence: "per-frame energies not archived; windows cannot be re-analysed", to_climb: null });
   // 5 externally supported — nothing of that kind is on the card; never claimed
   rungs.push({ rung: "externally supported", status: "not assessed", short: "no experimental or literature value linked", evidence: "no experimental or literature value is linked to this card", to_climb: "link an external reference with its own provenance (not part of this site)" });
-  const verified = rungs.filter(r => r.status === "verified").length;
-  return { run: m.id, rungs, verified_of_assessable: `${verified} of 4`, summary: `${verified} of 4 assessable rungs verified (${rungs.filter(r => r.status === "verified").map(r => r.rung).join(", ") || "none"}); repeatable is at best expected (nothing is executed here); external support is not assessed.`,
-    method: "recomputable: mean and population SD of the archived per-frame energies vs mmgbsa.dat (tolerance 5e-5); repeatable: realized seeds for every dynamics stage + environment lock + leap.in archived (never executed here); replicated: ≥ 3 runs with the same system fingerprint and production-protocol key and distinct realized seeds; robust: drift verdict 'no drift detected' AND ΔG over equilibration-discard (10/25/50 %) and stride-2 windows within 2 corrected SEMs of the archived value — analysis-window sensitivity only; external: not assessed. A passing input sanity check is not a rung." };
+  const verified = rungs.filter(r => r.status === "verified").length; const partly = rungs.filter(r => r.status === "partly established").length;
+  return { run: m.id, rungs, verified_of_assessable: `${verified} of 4`, summary: `${verified} of 4 assessable rungs verified (${rungs.filter(r => r.status === "verified").map(r => r.rung).join(", ") || "none"})${partly ? `, ${partly} partly established (${rungs.filter(r => r.status === "partly established").map(r => `${r.rung}: ${r.short}`).join("; ")})` : ""}; repeatable is at best expected (nothing is executed here); external support is not assessed.`,
+    method: "recomputable: mean and population SD of the archived per-frame energies vs mmgbsa.dat (tolerance 5e-5); repeatable: realized seeds for every dynamics stage + environment lock + leap.in archived (never executed here); replicated: verified = ≥ 3 same-fingerprint, same-protocol, distinct-seed runs at THIS run's production length; partly established = seed-replicated across the cohort but not at this length; robust: drift verdict 'no drift detected' AND ΔG over equilibration-discard (10/25/50 %) and stride-2 windows within 2 corrected SEMs of the archived value — analysis-window sensitivity only; external: not assessed. A passing input sanity check is not a rung." };
 }
 
 // ---- fork this experiment: reproduce / replicate / extend ------------------------------

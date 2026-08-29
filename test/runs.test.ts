@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, forkExperiment, forkStages } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages } from "../src/lib/runs";
 import { mean, sd } from "../src/lib/stats";
 import { execFileSync } from "node:child_process";
 const load = (id: string) => JSON.parse(readFileSync(`public/runs/${id}/manifest.json`, "utf8"));
@@ -50,7 +50,7 @@ describe("diff/ensemble", () => {
   it("ensemble: all 9 1L2Y runs, long stratum ≥ 10 ps is smaller, all ΔG < 0", () => {
     const e = ensemble(idx, "1l2y-regression"); expect(e.all.n).toBe(9); expect(e.all.max).toBeLessThan(0);
     expect(LONG_RUN_MIN_PS).toBe(10); expect(e.long.n).toBe(5); expect(e.long.runs.every(r => r.production_ps >= 10)).toBe(true);
-    expect(explainResult(A, idx).run_to_run.all.n).toBe(9);
+    expect(explainResult(A, idx, true).run_to_run.all.n).toBe(9);
   });
   it("sign claim is computed from the data", () => {
     const st = (g: number[]) => ({ n: g.length, mean: 0, sd: 0, min: Math.min(...g), max: Math.max(...g), negative: g.filter(x => x < 0).length, runs: [] });
@@ -107,7 +107,7 @@ describe("per-frame ΔG (Tier B)", () => {
     expect(r.by_term.BOND.max_abs).toBeLessThanOrEqual(0.0002);
   });
   it("explain_result carries numbers, not adjectives", () => {
-    const e = explainResult(A, idx) as any;
+    const e = explainResult(A, idx, true) as any;
     expect(e.uncertainty.corrected_sem).toBeGreaterThan(0); expect(e.which_uncertainty_to_quote).toMatch(/Quote ±0\.66 kcal\/mol — the observed run-to-run spread .* mixed production lengths/); expect(e.which_uncertainty_to_quote).toMatch(/matched-length SD .*: 5 ps: n=3, SD ±/);
     expect(e.warning_note).toMatch(/kcal\/mol per frame/); expect(e.sign_claim.all_runs).toMatch(/^all 9/i);
   });
@@ -207,7 +207,7 @@ describe("recomputeResult", () => {
 // ---- plan_sampling: expected sampling for a target uncertainty ----
 describe("planSampling", () => {
   it("plans on the ≥10 ps stratum: n_needed = ⌈(SD/target)²⌉, suggests nstlim for a 10 ps rerun, proposes nothing", () => {
-    const p = planSampling(A, idx, { target_uncertainty_kcal: 0.25 }); const e = ensemble(idx, A.id);
+    const p = planSampling(A, idx, { target_uncertainty_kcal: 0.25, detail: true }); const e = ensemble(idx, A.id);
     expect(p.label).toBe("expected"); expect(p.run_to_run.planned_on).toBe("long");
     expect(p.run_to_run.n_needed).toBe(Math.ceil((e.long.sd! / 0.25) ** 2)); expect(p.run_to_run.n_needed).toBe(11);
     expect(p.run_to_run.additional_runs).toBe(6); expect(p.run_to_run.target_met).toBe(false);
@@ -221,21 +221,21 @@ describe("planSampling", () => {
     expect(p.assumptions.some((a: string) => /Nothing was run/.test(a))).toBe(true);
   });
   it("a target that is already met asks for 0 more runs and no edit for a run that is already long enough", () => {
-    const p = planSampling(B, idx, { target_uncertainty_kcal: 0.5 });
+    const p = planSampling(B, idx, { target_uncertainty_kcal: 0.5, detail: true });
     expect(p.run_to_run.target_met).toBe(true); expect(p.run_to_run.additional_runs).toBe(0);
     expect(p.recommendation).toMatch(/already met/); expect(p.suggested_edits).toBeNull(); expect(p.rerun_note).toMatch(/seed='fresh'/);
   });
   it("single run of its system: no run-to-run plan, within-run projection only, nstlim for 10 ps", () => {
-    const p = planSampling(C, idx, {});
+    const p = planSampling(C, idx, { detail: true });
     expect(p.target_uncertainty_kcal).toBe(0.25); expect(p.run_to_run.planned_on).toBeNull(); expect(p.run_to_run.n_needed).toBeNull();
     expect(p.recommendation).toMatch(/only run of its prepared system/); expect(p.within_run.expected_length_for_target_ps).toBeGreaterThan(0);
     expect(p.suggested_edits!.edits.nstlim).toBe("5000");
   });
   it("the within-run projection reproduces this run's corrected SEM at its current length, for every run", () => {
-    for (const r of idx) { const p = planSampling(load(r.id), idx, {}); expect(p.within_run.at_current_length.expected_sem, r.id).toBeCloseTo(p.within_run.this_run.corrected_sem, 3); }
+    for (const r of idx) { const p = planSampling(load(r.id), idx, { detail: true }); expect(p.within_run.at_current_length.expected_sem, r.id).toBeCloseTo(p.within_run.this_run.corrected_sem, 3); }
   });
   it("rejects non-positive targets and lengths", () => {
-    expect(() => planSampling(A, idx, { target_uncertainty_kcal: 0 })).toThrow(/> 0/);
+    expect(() => planSampling(A, idx, { target_uncertainty_kcal: 0, detail: true })).toThrow(/> 0/);
     expect(() => planSampling(A, idx, { target_uncertainty_kcal: -1 })).toThrow(/> 0/);
     expect(() => planSampling(A, idx, { min_run_ps: 0 })).toThrow(/min_run_ps/);
   });
@@ -289,10 +289,10 @@ describe("review batch 2026-08-29 (workflow findings)", () => {
     expect(() => ensemble(idx, "nope")).toThrow(/list_runs/);
   });
   it("explain_result names the stratum, gates the 'dominates' clause on the ratio", () => {
-    const e = explainResult(B, idx) as any;
+    const e = explainResult(B, idx, true) as any;
     expect(e.which_uncertainty_to_quote).toMatch(/≥ 10 ps stratum alone gives ±0\.79, n=5/);
     expect(e.which_uncertainty_to_quote).toMatch(/dominates|comparable|not distinguishable/);
-    const e3 = explainResult(load("1l2y-rep3"), idx) as any; expect(e3.which_uncertainty_to_quote).not.toMatch(/1\.0× the corrected SEM, so seed-to-seed variation, not frame noise, dominates/);
+    const e3 = explainResult(load("1l2y-rep3"), idx, true) as any; expect(e3.which_uncertainty_to_quote).not.toMatch(/1\.0× the corrected SEM, so seed-to-seed variation, not frame noise, dominates/);
   });
   it("recompute_result: discard_ps beyond the run names the argument and the length", () => {
     expect(() => recomputeResult(A, { discard_ps: 100 })).toThrow(/discard_ps 100 ≥ the 5 ps production length/);
@@ -302,33 +302,34 @@ describe("review batch 2026-08-29 (workflow findings)", () => {
 describe("review batch 2026-08-29, part 2", () => {
   it("entropy: every manifest records entropy=0 from _MMPBSA_info and explain_result states the caveat", () => {
     for (const r of idx) expect(load(r.id).results.mmgbsa.params.entropy, r.id).toBe("0");
-    const e = explainResult(B, idx) as any;
+    const e = explainResult(B, idx, true) as any;
     expect(e.entropy_term).toMatch(/not computed/); expect(e.what_it_is).toMatch(/No entropy term .* not an absolute binding free energy/);
   });
   it("plan_sampling: a drifting run gets no single-run length projection, with the reason; a stationary run keeps it", () => {
-    const pA = planSampling(A, idx, {}); expect(uncertaintyFromFrames(A.results.mmgbsa.per_frame, 5).verdict).toBe("drifting");
+    const pA = planSampling(A, idx, { detail: true }); expect(uncertaintyFromFrames(A.results.mmgbsa.per_frame, 5).verdict).toBe("drifting");
     expect(pA.within_run.expected_length_for_target_ps).toBeNull(); expect(pA.within_run.expected_length_note).toMatch(/drifting/);
     expect(pA.recommendation).toMatch(/No single-run length is projected/); expect(pA.recommendation).not.toMatch(/≈ \d+(\.\d+)? ps \(expected\)/);
-    const pB = planSampling(B, idx, {}); expect(pB.within_run.expected_length_for_target_ps).toBeGreaterThan(0); expect(pB.within_run.expected_length_note).toBeNull();
+    const pB = planSampling(B, idx, { detail: true }); expect(pB.within_run.expected_length_for_target_ps).toBeGreaterThan(0); expect(pB.within_run.expected_length_note).toBeNull();
   });
 });
 
 describe("confidence ladder", () => {
   it("rep4: recomputable and replicated verified, repeatable expected, external not assessed; robust computed over 4 windows", () => {
-    const L = confidenceLadder(B, idx); const by = Object.fromEntries(L.rungs.map(r => [r.rung, r]));
+    const L = confidenceLadderFull(B, idx); const by = Object.fromEntries(L.rungs.map(r => [r.rung, r]));
     expect(L.rungs.map(r => r.rung)).toEqual(["recomputable", "repeatable", "independently replicated", "robust to analysis-window choices", "externally supported"]);
-    expect(by["recomputable"].status).toBe("verified"); expect(by["recomputable"].evidence).toMatch(/re-derived here/);
+    expect(by["recomputable"].status).toBe("verified"); expect(by["recomputable"].evidence).toMatch(/re-derived here/); expect(L.summary).toMatch(/1 partly established \(independently replicated: seed-replicated ✓/);
     expect(by["repeatable"].status).toBe("expected"); expect(by["repeatable"].evidence).toMatch(/3\/3 dynamics stages/);
-    expect(by["independently replicated"].status).toBe("verified"); expect(by["independently replicated"].evidence).toMatch(/9 runs of the same prepared system and production protocol with distinct realized seeds/); expect(by["independently replicated"].short).toMatch(/seed-replicated; (matched-length replication at|no matched-length group)/);
+    expect(by["independently replicated"].status).toBe("partly established"); expect(by["independently replicated"].evidence).toMatch(/9 runs of the same prepared system and production protocol with distinct realized seeds/); expect(by["independently replicated"].short).toBe("seed-replicated ✓ (9 same-protocol runs, 2–30 ps) · at this run's length (30 ps): 2 of 3 needed ✗"); expect(by["independently replicated"].to_climb).toMatch(/1 more independent run at 30 ps/);
+    const reg = confidenceLadderFull(A, idx).rungs[2]; expect(reg.status).toBe("verified"); expect(reg.short).toMatch(/at this run's length \(5 ps\): 3 of 3 needed ✓/);
     expect(["verified", "not established"]).toContain(by["robust to analysis-window choices"].status); expect(by["robust to analysis-window choices"].evidence).toMatch(/4 analysis windows re-analysed/); expect(by["robust to analysis-window choices"].evidence).toMatch(/criterion ≤ 2/);
-    const noProto = confidenceLadder(B, idx.map((r: any) => ({ ...r, protocol: undefined }))); expect(noProto.rungs[2].status).toBe("not established"); expect(noProto.rungs[2].evidence).toMatch(/no protocol key/);
+    const noProto = confidenceLadderFull(B, idx.map((r: any) => ({ ...r, protocol: undefined }))); expect(noProto.rungs[2].status).toBe("not established"); expect(noProto.rungs[2].evidence).toMatch(/no protocol key/);
     expect(by["externally supported"].status).toBe("not assessed");
     expect(L.summary).toMatch(/of 4 assessable rungs verified/);
   });
   it("3htb: replicated is not established (n=1) and says so; every run's ladder has 5 rungs", () => {
-    const L = confidenceLadder(C, idx); const rep = L.rungs.find(r => r.rung === "independently replicated")!;
+    const L = confidenceLadderFull(C, idx); const rep = L.rungs.find(r => r.rung === "independently replicated")!;
     expect(rep.status).toBe("not established"); expect(rep.evidence).toMatch(/1 run of this prepared system on this site, 1 with the same production protocol/); expect(rep.to_climb).toMatch(/replicate/);
-    for (const r of idx) expect(confidenceLadder(load(r.id), idx).rungs.length, r.id).toBe(5);
+    for (const r of idx) expect(confidenceLadderFull(load(r.id), idx).rungs.length, r.id).toBe(5);
   });
 });
 
@@ -379,18 +380,18 @@ describe("fork_experiment", () => {
 
 describe("judge pass 46ca5ba fixes", () => {
   it("explain_result: brief rounds to the precision it defends, ranks the run in its ensemble, names the ensemble mean ± SEM", () => {
-    const e = explainResult(B, idx) as any;
+    const e = explainResult(B, idx, true) as any;
     expect(e.brief).toMatch(/^ΔG = -19\.2 ± 0\.7 kcal\/mol for this run/); expect(e.brief).toMatch(/archived value -19\.1953/);
     expect(e.this_run_vs_ensemble).toMatchObject({ rank_most_negative: 1, n: 9 }); expect(e.this_run_vs_ensemble.z_vs_ensemble_mean).toBeLessThan(-1.5);
     expect(e.brief).toMatch(/This run is 1 of 9 .* vs the ensemble mean -18\.01 ± 0\.22 \(SEM, n=9\)/);
     expect(e.run_to_run.caveat).toMatch(/from one prepared start/); expect(e.sign_claim.all_runs).toMatch(/robust to seed variation/);
-    expect((explainResult(C, idx) as any).this_run_vs_ensemble).toBeNull();
+    expect((explainResult(C, idx, true) as any).this_run_vs_ensemble).toBeNull();
   });
   it("plan_sampling: a run already ≥ min_run_ps whose target is not met gets an 'extend this run alone' suggested edit; a met target gets none", () => {
-    const p = planSampling(B, idx, {}); expect(p.run_to_run.target_met).toBe(false);
+    const p = planSampling(B, idx, { detail: true }); expect(p.run_to_run.target_met).toBe(false);
     expect(p.suggested_edits).toMatchObject({ run_id: "1l2y-rep4", stage: "product", purpose: "extend this run alone to the projected length" });
     expect(Number(p.suggested_edits!.edits.nstlim) * 0.002).toBeCloseTo(p.within_run.expected_length_for_target_ps!, 0);
-    expect(planSampling(B, idx, { target_uncertainty_kcal: 0.5 }).suggested_edits).toBeNull();
+    expect(planSampling(B, idx, { target_uncertainty_kcal: 0.5, detail: true }).suggested_edits).toBeNull();
   });
   it("propose_change: counts must be positive integers; the controlled diff (before → after, class, material) is returned", () => {
     expect(() => makeProposal(A, "product", { nstlim: "-5" }, "x")).toThrow(/nstlim must be a positive integer/);
@@ -419,11 +420,28 @@ describe("Codex judge ff85e2f fixes", () => {
     expect(rerunBundle(B, { seed: "fresh", target: "local", approved: [] })["README.md"]).toMatch(/\*\*MOL.mol2, MOL.frcmod, protein_clean.pdb\*\*, not included here — archived with the card but not fetched/);
   });
   it("plan_sampling: n_needed carries a plug-in range from the SD's own sampling uncertainty; ladder rung 4 is named for what it tests; singleton wording", () => {
-    const p = planSampling(A, idx, {}); expect(p.run_to_run.n_needed_range).toMatchObject({ sd_relative_se: 0.35 });
+    const p = planSampling(A, idx, { detail: true }); expect(p.run_to_run.n_needed_range).toMatchObject({ sd_relative_se: 0.35 });
     expect(p.run_to_run.n_needed_range!.low).toBeLessThanOrEqual(p.run_to_run.n_needed!); expect(p.run_to_run.n_needed_range!.high).toBeGreaterThanOrEqual(p.run_to_run.n_needed!);
     expect(p.recommendation).toMatch(/plug-in estimate; ±1 SE on the SD gives n = \d+–\d+/);
-    expect(confidenceLadder(B, idx).rungs[3].rung).toBe("robust to analysis-window choices");
-    const e = explainResult(C, idx) as any; expect(e.brief).toMatch(/does not estimate run-to-run uncertainty/); expect(e.brief).not.toMatch(/understates/);
-    expect((explainResult(B, idx) as any).this_run_vs_ensemble.note).toMatch(/conditional on this short-run ensemble/);
+    expect(confidenceLadderFull(B, idx).rungs[3].rung).toBe("robust to analysis-window choices");
+    const e = explainResult(C, idx, true) as any; expect(e.brief).toMatch(/does not estimate run-to-run uncertainty/); expect(e.brief).not.toMatch(/understates/);
+    expect((explainResult(B, idx, true) as any).this_run_vs_ensemble.note).toMatch(/conditional on this short-run ensemble/);
+  });
+});
+
+
+describe("compact by default, detail on request", () => {
+  it("explain_result: compact carries the brief and the deciding numbers; detail:true is the full record and is much larger", () => {
+    const c = explainResult(B, idx) as any, f = explainResult(B, idx, true) as any;
+    expect(c.brief).toBe(f.brief); expect(c.uncertainty_to_quote).toMatchObject({ run_to_run_sd: 0.656, n: 9, production_ps: [2, 5, 10, 20, 30] }); expect(c.within_run.corrected_sem).toBe(f.uncertainty.corrected_sem);
+    expect(typeof c.sign_claim).toBe("string"); expect(c.detail).toMatch(/detail: true/); expect(c.uncertainty).toBeUndefined(); expect(c.provenance).toBeUndefined();
+    expect(JSON.stringify(c).length).toBeLessThan(JSON.stringify(f).length / 2); expect(f.uncertainty.block_averaging).toBeTruthy();
+    expect((explainResult(C, idx) as any).uncertainty_to_quote).toBeNull();
+  });
+  it("plan_sampling and confidence_ladder: compact keeps what an agent acts on; detail adds tables/evidence", () => {
+    const c = planSampling(A, idx, {}) as any, f = planSampling(A, idx, { detail: true }) as any;
+    expect(c.recommendation).toBe(f.recommendation); expect(c.suggested_edits).toEqual(f.suggested_edits); expect(c.run_to_run.n_needed_range).toEqual(f.run_to_run.n_needed_range); expect(c.within_run.expected_sem_by_length).toBeUndefined(); expect(f.within_run.expected_sem_by_length.length).toBe(5);
+    const l = confidenceLadder(B, idx, false) as any, lf = confidenceLadder(B, idx) as any;
+    expect(l.rungs.length).toBe(5); expect(l.rungs[0].evidence).toBeUndefined(); expect(lf.rungs[0].evidence).toMatch(/re-derived here/); expect(l.summary).toBe(lf.summary);
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Manifest, IndexEntry } from "./lib/types";
-import { loadIndex, loadRun, validateStage, ensemble, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadder, internalResidual } from "./lib/runs";
+import { loadIndex, loadRun, validateStage, ensemble, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, internalResidual } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
@@ -105,7 +105,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
             {/* Headline: this run's ΔG with the uncertainty the page argues for (run-to-run SD), then the rows in order of what matters; the mechanics are one disclosure away. */}
             <div className="big">{fmt(mm.delta_total_kcal_mol)}{spreadSd != null && <> ± {fmt(spreadSd)}</>} <span className="unit">kcal/mol</span>{u && u.verdict !== "no drift detected" && <> <span className="badge warn" title="halves test within the archived window">{u.verdict}</span></>}</div>
             <p className="dim small">{spreadSd != null
-              ? <>± is the run-to-run SD (below) — the uncertainty to quote; the within-run SEM is not.</>
+              ? <>± is the run-to-run SD over n={ens!.all.n} independent runs at {[...new Set(ens!.all.runs.map(r => r.production_ps))].sort((x, y) => x - y).join(", ")} ps — the uncertainty to quote; the within-run SEM is not.</>
               : u ? <>single run of this system: the within-run corrected SEM below does not estimate run-to-run uncertainty — no spread can be quoted until three independent runs exist.</> : null}</p>
             <dl>
               {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
@@ -163,8 +163,8 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
         {m.structure && <Boundary label="Structure"><div className="card"><h2>Structure <span className="dim">cluster medoid, dry</span></h2><Viewer url={`/runs/${m.id}/${m.structure}`} ligand={m.system.ligand.resname} /></div></Boundary>}
       </div>
 
-      {idx.length > 0 && (() => { const L = confidenceLadder(m, idx); const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : ""; return <div className="card">
-        <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} assessed rungs verified · 1 not assessed · computed from the archived data</span></h2>
+      {idx.length > 0 && (() => { const L = confidenceLadderFull(m, idx); const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
+        <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} assessed rungs verified{L.rungs.some(r => r.status === "partly established") ? ` · ${L.rungs.filter(r => r.status === "partly established").length} partly established` : ""} · 1 not assessed · computed from the archived data</span></h2>
         <ol className="ladder">{L.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><span className="dim mono">{i + 1}.</span> <span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span>
           <details className="small"><summary className="dim">evidence</summary><p className="dim">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</p></details></li>)}</ol>
       </div>; })()}

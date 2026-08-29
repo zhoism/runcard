@@ -20,7 +20,7 @@ table { width:100%; border-collapse:collapse; font-size:14px; } table.runs { wid
 dl { display:grid; grid-template-columns: max-content 1fr; gap:4px 14px; margin:0; font-size:14px; } dl > div { display:contents; } dt { color:var(--dim); } dd { margin:0; min-width:0; overflow-wrap:anywhere; }
 .badge { display:inline-block; font-size:13px; padding:1px 7px; border-radius:99px; border:1px solid var(--line); color:var(--dim); font-weight:600; letter-spacing:0; }
 .badge.pass { color:var(--pass); border-color:var(--pass); } .badge.warn { color:var(--warn); border-color:var(--warn); } .badge.fail { color:var(--fail); border-color:var(--fail); }
-.badge.approved { color:var(--pass); border-color:var(--pass); } .badge.rejected { color:var(--fail); } .badge.pending { color:var(--warn); border-color:var(--warn); }
+.badge.partly { color:var(--fg); border-color:var(--dim); } .badge.approved { color:var(--pass); border-color:var(--pass); } .badge.rejected { color:var(--fail); } .badge.pending { color:var(--warn); border-color:var(--warn); }
 .pass { color:var(--pass); } .fail { color:var(--fail); }
 .titlebar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; } .titlebar select { margin-left:auto; }
 .stages { display:flex; flex-wrap:wrap; align-items:center; gap:6px; } .stage { display:flex; align-items:center; gap:6px; } .arrow { color:var(--dim); } @media (max-width:600px) { .arrow { display:none; } }
