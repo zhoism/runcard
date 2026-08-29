@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Manifest, IndexEntry } from "./lib/types";
-import { loadIndex, loadRun, validateStage, ensemble, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadder } from "./lib/runs";
+import { loadIndex, loadRun, validateStage, ensemble, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadder, internalResidual } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
@@ -90,6 +90,9 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const overall = verdictOf({ hasFail: Object.values(reports).some(r => r.hasFail), hasWarn: Object.values(reports).some(r => r.hasWarn) });
   const others = idx.filter(r => r.id !== id);
   const netCharge = m.system.ligand.net_charge;
+  const u = mm?.per_frame ? uncertaintyFromFrames(mm.per_frame, prod?.length_ps ?? null) : null;
+  const resid = mm?.per_frame ? internalResidual(mm.per_frame, mm.delta_total_kcal_mol) : null;
+  const spreadSd = ens && ens.all.n > 1 ? ens.all.sd : null;
   return (
     <section className="run">
       <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
@@ -131,18 +134,25 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
         <div className="card">
           <h2>Binding free energy <span className="dim">MM-GBSA, single trajectory{mm?.params?.entropy === "0" ? ", no entropy term" : ""}</span></h2>
           {mm ? <>
-            <div className="big">{fmt(mm.delta_total_kcal_mol)} <span className="unit">kcal/mol</span></div>
-            <dl><dt>per-frame</dt><dd>SD {fmt(mm.frame_std)} · SEM {fmt(mm.frame_sem, 3)} over {mm.frames} frames <span className="dim">(population SD; frames are correlated, so this SEM understates uncertainty{mm.frames_header_text && mm.frames_header_text !== String(mm.frames) ? `; the mmgbsa.dat header prints "${mm.frames_header_text}" — (endframe−startframe)/interval+1 un-floored; the count here is from the per-frame blocks` : ""})</span></dd>
-              {mm.per_frame && (() => { const u = uncertaintyFromFrames(mm.per_frame, prod?.length_ps ?? null); return <><dt>corrected</dt><dd>SEM <b>{u.corrected_sem}</b> after autocorrelation (g = {u.statistical_inefficiency_g}, τ = {u.integrated_autocorrelation_time_frames} frames, N<sub>eff</sub> ≈ {u.n_eff}) · halves {u.halves.first} → {u.halves.second} · <b>{u.verdict}</b> <span className="dim">(reconstructed from the per-frame mdout; reproduces mmgbsa.dat exactly)</span></dd></>; })()}
-              {re && re.run === m.id && <><dt>agent reanalysis</dt><dd>frames {re.start_frame}–{re.end_frame}{re.interval > 1 ? ` every ${re.interval}th` : ""} ({re.frames_used} frames{re.start_ps != null ? `, ${re.start_ps}–${re.end_ps} ps` : ""}) → <b>{fmt(re.mean)} ± {fmt(re.corrected_sem)}</b>, {re.verdict} <span className="dim">(recomputed in the browser from the archived per-frame energies; ± is the corrected SEM; the archived value above is unchanged)</span></dd></>}
-              <dt>method</dt><dd>igb={mm.igb}, saltcon={mm.saltcon}, {prod?.length_ps} ps production, seed {prod?.realized_seed}</dd>
-              {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b> independent runs of this system: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
+            {/* Headline: this run's ΔG with the uncertainty the page argues for (run-to-run SD), then the rows in order of what matters; the mechanics are one disclosure away. */}
+            <div className="big">{fmt(mm.delta_total_kcal_mol)}{spreadSd != null && <> ± {fmt(spreadSd)}</>} <span className="unit">kcal/mol</span></div>
+            <p className="dim small">{spreadSd != null
+              ? <>± is the run-to-run SD over {ens!.all.n} independent runs of this system — the uncertainty to quote. The within-run SEM ({u ? u.corrected_sem : fmt(mm.frame_sem, 3)}) is not.</>
+              : u ? <>single run of this system: the within-run corrected SEM ({u.corrected_sem}) understates the uncertainty — no run-to-run spread yet.</> : null}</p>
+            <dl>
+              {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
                 {ens.long.n > 0 && ens.long.n < ens.all.n && <><br /><b>n={ens.long.n}</b> runs ≥ {ens.long.min_ps} ps: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</>}
-                <span className="dim"> — production lengths differ across runs; this spread is the uncertainty that matters</span></dd></>}
-              {ens && ens.all.n === 1 && <><dt>run-to-run</dt><dd className="dim">only run of this prepared system — no run-to-run spread; the corrected SEM above is a within-run estimate and understates the uncertainty</dd></>}
-              <dt>computed</dt><dd>{mm.run_on}</dd></dl>
+                <span className="dim"> — seed-to-seed variation over 2–30 ps from one prepared start; production lengths differ across runs</span></dd></>}
+              {u && <><dt>within run</dt><dd>corrected SEM <b>{u.corrected_sem}</b> (g = {u.statistical_inefficiency_g}, N<sub>eff</sub> ≈ {u.n_eff}) · halves {u.halves.first} → {u.halves.second} · <b>{u.verdict}</b></dd></>}
+              {re && re.run === m.id && <><dt>agent reanalysis</dt><dd>frames {re.start_frame}–{re.end_frame}{re.interval > 1 ? ` every ${re.interval}th` : ""} ({re.frames_used} frames{re.start_ps != null ? `, ${re.start_ps}–${re.end_ps} ps` : ""}) → <b>{fmt(re.mean)} ± {fmt(re.corrected_sem)}</b>, {re.verdict} <span className="dim">(recomputed in the browser from the archived per-frame energies; ± is the corrected SEM; the archived value above is unchanged)</span></dd></>}
+              <dt>method</dt><dd>MM-GBSA igb={mm.igb}, saltcon={mm.saltcon} · computed {mm.run_on}</dd></dl>
             {mm.per_frame && <Sparkline x={mm.per_frame.delta_total} lengthPs={prod?.length_ps ?? null} window={re && re.run === m.id ? { start: re.start_frame, end: re.end_frame } : undefined} />}
-            {mm.warnings.map((w, i) => <div key={i} className="warnbox">⚠ {w}<div className="dim">Recorded verbatim from mmgbsa.dat. Ask the agent to explain_result for what it means.</div></div>)}
+            <details className="small"><summary className="dim">how these numbers were computed</summary>
+              <p className="dim">Per-frame: population SD {fmt(mm.frame_std)}, naive SEM {fmt(mm.frame_sem, 3)} over {mm.frames} frames (every {mm.params?.interval ?? "?"}th of {mm.params?.endframe ?? "?"}); frames are correlated, so the naive SEM understates the within-run uncertainty.{mm.frames_header_text && mm.frames_header_text !== String(mm.frames) ? ` The mmgbsa.dat header prints "${mm.frames_header_text}" — (endframe−startframe)/interval+1 un-floored; the count here is from the per-frame blocks.` : ""}</p>
+              {u && <p className="dim">Corrected SEM = SD·√(g/N) with g = 1 + 2Σ(1−t/N)C(t) (τ = {u.integrated_autocorrelation_time_frames} frames); drift verdict: {u.thresholds.drifting_if}; too short if {u.thresholds.too_short_if}. Reconstructed from the per-frame mdout files; the full window reproduces mmgbsa.dat exactly.</p>}
+            </details>
+            {mm.warnings.map((w, i) => { const quiet = resid != null && resid.fraction_of_delta_g < 1e-3; return <div key={i} className={`warnbox ${quiet ? "quiet" : ""}`}>⚠ {w}
+              <div className="dim">Recorded verbatim from mmgbsa.dat.{resid ? ` Triggered by the internal-term residual: ${resid.total.mean} ± ${resid.total.sd} kcal/mol per frame (${(resid.fraction_of_delta_g * 100).toFixed(3)} % of ΔG), from ${resid.dominant_term}; quantified, not suppressed${quiet ? " — below 0.1 % of ΔG, shown for the record" : ""}.` : " Ask the agent to explain_result for what it means."}</div></div>; })}
           </> : <p className="dim">no MM-GBSA result</p>}
         </div>
         <div className="card">
@@ -188,7 +198,7 @@ function Sparkline({ x, lengthPs, window }: { x: number[]; lengthPs: number | nu
   return <figure className="spark"><svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="per-frame ΔG">
       {window && <rect x={sx(window.start - 1)} y={0} width={Math.max(1, sx(window.end - 1) - sx(window.start - 1))} height={H} fill="var(--acc)" opacity="0.12" />}
       <path d={path(x)} fill="none" stroke="var(--dim)" strokeWidth="1" /><path d={path(rm)} fill="none" stroke="var(--acc)" strokeWidth="1.5" /></svg>
-    <figcaption>per-frame ΔG over {x.length} frames{lengthPs != null ? ` (${lengthPs} ps)` : ""}: grey = frame values ({lo.toFixed(1)} … {hi.toFixed(1)}), blue = running mean → {rm[rm.length - 1].toFixed(2)} kcal/mol</figcaption></figure>;
+    <figcaption>per-frame ΔG over {x.length} frames{lengthPs != null ? ` (${lengthPs} ps)` : ""}: grey = frame values ({lo.toFixed(1)} … {hi.toFixed(1)} kcal/mol), blue = running mean</figcaption></figure>;
 }
 
 function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] }) {
@@ -237,7 +247,7 @@ function Sidebar() {
       {proposals.length === 0 && <p className="dim">None yet. An agent can call <code>propose_change</code>; nothing is applied until you approve it here.</p>}
       {proposals.map(p => <div key={p.id} className={`proposal ${p.status}`}>
         <div><b>{p.run}</b> / {p.stage} <span className={`badge ${p.status}`}>{p.status}</span>{p.fork && <span className="dim small"> · fork {p.fork.kind}{p.fork.question ? `: ${p.fork.question}` : ""}</span>}</div>
-        <div className="mono">{Object.entries(p.edits).map(([k, v]) => `${k}=${v}`).join(", ")}</div>
+        <div className="mono">{(p.changes ?? []).map(c => `${c.key}: ${c.before ?? "(unset)"} → ${c.after}`).join(" · ") || Object.entries(p.edits).map(([k, v]) => `${k}=${v}`).join(", ")}{p.material_classes?.length ? <> <span className="badge warn">material · {p.material_classes.map(c => c.replace("_", " ")).join(", ")}</span></> : null}</div>
         <div className="dim">{p.reason}</div>
         <div>before <Verdict r={p.before} /> → after <Verdict r={p.after} /></div>
         {p.after.findings.filter(f => f.level !== "PASS").map((f, i) => <div key={i} className="dim small">{f.level}: {f.rule} — {f.detail}</div>)}

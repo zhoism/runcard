@@ -103,14 +103,15 @@ export function ensemble(idx: IndexEntry[], id: string) {
     sd_convention: "sample SD (n−1) across runs",
     caveat: peers.length < 2
       ? `Only one run of this prepared system (${me.production_ps} ps); no run-to-run spread can be estimated. At least 3 independent runs (ig=-1) are needed before an ensemble uncertainty can be quoted.`
-      : `Independent runs of the same prepared system (ig=-1 Langevin, different realized seeds). Production lengths differ (${[...new Set(peers.map(r => r.production_ps))].sort((a, b) => a - b).join(", ")} ps), so 'all' mixes short and long runs; 'long' keeps runs ≥ ${LONG_RUN_MIN_PS} ps. Run-to-run spread, not the per-frame SEM, is the uncertainty to quote.` };
+      : `Independent runs of the same prepared system — same build inputs, force fields and protocol, different realized seeds (ig=-1 Langevin). Production lengths differ (${[...new Set(peers.map(r => r.production_ps))].sort((a, b) => a - b).join(", ")} ps), so 'all' mixes short and long runs; 'long' keeps runs ≥ ${LONG_RUN_MIN_PS} ps. The spread is seed-to-seed variation over picoseconds from one prepared start, not a survey of conformational space. Run-to-run spread, not the per-frame SEM, is the uncertainty to quote.` };
 }
 /** "all 9 runs give ΔG < 0" / "7 of 9" / "none" — computed, never assumed. `label` names the stratum when it is empty ("no runs ≥ 10 ps of this system"). */
 export function signClaim(st: Stratum, label = ""): string {
   if (st.n === 0) return `no runs${label ? ` ${label}` : ""} of this system`;
   const range = st.n === 1 ? `ΔG = ${st.min} kcal/mol` : `range ${st.min} to ${st.max} kcal/mol`;
-  const pinned = st.sd != null ? `; the value is pinned to about ±${st.sd.toFixed(1)} kcal/mol (run-to-run SD; range width ${(st.max! - st.min!).toFixed(1)})` : "";
-  if (st.negative === st.n) return `${st.n === 1 ? "The single run gives" : `All ${st.n} independent runs give`} ΔG < 0 (${range}); ${st.n >= 3 ? `the sign is robust${pinned}` : "the sign is not yet established (n < 3)"}.`;
+  const ps = st.runs.map(r => r.production_ps).filter(x => x != null); const psRange = ps.length ? `${Math.min(...ps)}–${Math.max(...ps)} ps` : "";
+  const pinned = st.sd != null ? `; the value is known to about ±${st.sd.toFixed(1)} kcal/mol (run-to-run SD over ${psRange} runs; range width ${(st.max! - st.min!).toFixed(1)})` : "";
+  if (st.negative === st.n) return `${st.n === 1 ? "The single run gives" : `All ${st.n} independent runs give`} ΔG < 0 (${range}); ${st.n >= 3 ? `the sign is robust to seed variation${pinned}` : "the sign is not yet established (n < 3)"}.`;
   if (st.negative === 0) return `None of the ${st.n} runs gives ΔG < 0 (${range}).`;
   return `${st.negative} of ${st.n} runs give ΔG < 0 (${range}); the sign is not robust across runs.`;
 }
@@ -242,15 +243,25 @@ export function planSampling(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}
   const dt = Number(prod.cntrl.dt), nstlimNow = Number(prod.cntrl.nstlim), ntwx = Number(prod.cntrl.ntwx) || null;
   const nstlimNew = Math.round(Lrec / dt);
   const mmInterval = Number(mm.params?.interval) || 1;
+  // Two possible edits for propose_change: bring a short run up to the stratum minimum, or — when the run is already long enough but the target is not met —
+  // extend this run alone to the projected length. The primary recommendation stays "more independent runs"; the extension is labelled as the single-run route.
+  const extendAlone = !targetMet && nstlimNew === nstlimNow && lengthForTarget != null && lengthForTarget > L0 ? Math.round(lengthForTarget / dt) : null;
   const suggested = nstlimNew !== nstlimNow ? {
-    run_id: m.id, stage: prod.name,
+    run_id: m.id, stage: prod.name, purpose: "join the ≥ min_run_ps stratum" as const,
     edits: { nstlim: String(nstlimNew), ...(prod.cntrl.ig !== "-1" ? { ig: "-1" } : {}) },
     reason: `extend production from ${L0} to ${Lrec} ps (${nstlimNew} steps at dt=${dt}) so the run joins the ≥ ${minPs} ps stratum`,
     expected_frames_written: ntwx ? Math.floor(nstlimNew / ntwx) : null,
     expected_frames_analysed: ntwx ? Math.floor(Math.floor(nstlimNew / ntwx) / mmInterval) : null,
     note: "Data for propose_change; nothing has been proposed. ntwx is unchanged, so the frame cadence Δ is unchanged and the analysed frame count scales with length.",
+  } : extendAlone != null ? {
+    run_id: m.id, stage: prod.name, purpose: "extend this run alone to the projected length" as const,
+    edits: { nstlim: String(extendAlone) },
+    reason: `extend production from ${L0} to ≈ ${lengthForTarget} ps (${extendAlone} steps at dt=${dt}) so one run alone reaches ±${T} (expected, stationary); more independent runs is the primary recommendation`,
+    expected_frames_written: ntwx ? Math.floor(extendAlone / ntwx) : null,
+    expected_frames_analysed: ntwx ? Math.floor(Math.floor(extendAlone / ntwx) / mmInterval) : null,
+    note: "Data for propose_change; nothing has been proposed. This is the single-run route; the run-to-run recommendation above is the primary one.",
   } : null;
-  const rerunNote = suggested ? null : `This run is already ≥ ${Lrec} ps; independent samples need no &cntrl edit — generate_rerun_bundle with seed='fresh' (ig=-1) for each new run.`;
+  const rerunNote = suggested ? null : `This run is already ≥ ${Lrec} ps${targetMet ? " and the target is met" : ""}; independent samples need no &cntrl edit — generate_rerun_bundle with seed='fresh' (ig=-1) for each new run.`;
   const recommendation = plannedOn == null
     ? `expected: no run-to-run estimate — this is the only run of its prepared system. Within this run the corrected SEM is ${unc.corrected_sem} kcal/mol at ${L0} ps; ${lengthForTarget != null ? `one run would reach ±${T} at ≈ ${lengthForTarget} ps (expected, stationary)` : `no single-run length is projected (verdict: ${unc.verdict})`}. Seed-to-seed spread cannot be estimated from one run: at least 3 independent runs (ig=-1) of ≥ ${Lrec} ps are needed before an ensemble uncertainty can be quoted.`
     : targetMet
@@ -306,14 +317,24 @@ export function explainResult(m: Manifest, idx: IndexEntry[]) {
   const which = unc && spreadSd != null
     ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD over all ${ens.all.n} runs${stratumNote}) as the uncertainty of a single run's ΔG. Within this run the correlation-corrected SEM is ${unc.corrected_sem} (N_eff ≈ ${unc.n_eff} of ${unc.n_frames} frames); the naive per-frame SEM ${unc.per_frame_sem} is ${(unc.corrected_sem / unc.per_frame_sem).toFixed(1)}× too small. Run-to-run spread is ${ratio!.toFixed(1)}× the corrected SEM, ${dominates}.`
     : unc ? `Within this run the correlation-corrected SEM is ${unc.corrected_sem}; no other runs of this system to estimate run-to-run spread.` : "per-frame data not archived for this run; only MMPBSA.py's naive SEM is available.";
+  // Where this run sits among its peers: rank, z-score vs the ensemble mean, and the ensemble mean ± SEM as the protocol-level estimate.
+  const peersSorted = [...ens.all.runs].sort((a, b) => a.delta_g - b.delta_g);
+  const vsEnsemble = ens.all.n > 1 && ens.all.mean != null && ens.all.sd != null ? {
+    rank_most_negative: peersSorted.findIndex(r => r.id === m.id) + 1, n: ens.all.n,
+    z_vs_ensemble_mean: round((mm.delta_total_kcal_mol - ens.all.mean) / ens.all.sd, 2),
+    ensemble_mean: round(ens.all.mean, 2), ensemble_sem: round(ens.all.sd / Math.sqrt(ens.all.n), 2),
+    note: "the ensemble mean ± SEM is the protocol-level estimate; this run's value is one draw from the run-to-run spread" } : null;
   const brief = [
-    `ΔG = ${mm.delta_total_kcal_mol} kcal/mol, single-trajectory MM-GBSA over ${mm.frames} frames of a ${prod?.length_ps ?? "?"} ps production run.`,
+    spreadSd != null
+      ? `ΔG = ${round(mm.delta_total_kcal_mol, 1)} ± ${round(spreadSd, 1)} kcal/mol for this run (single-trajectory MM-GBSA, ${mm.frames} frames of ${prod?.length_ps ?? "?"} ps; ± = run-to-run SD over ${ens.all.n} independent runs of the same prepared system; archived value ${mm.delta_total_kcal_mol}).`
+      : `ΔG = ${mm.delta_total_kcal_mol} kcal/mol, single-trajectory MM-GBSA over ${mm.frames} frames of a ${prod?.length_ps ?? "?"} ps production run.`,
     spreadSd != null ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD over all ${ens.all.n} independent runs${stratumNote}); the within-run SEM (${unc ? unc.corrected_sem : mm.frame_sem}) is not the uncertainty to report.` : `Only one run of this system; within-run SEM ${unc ? unc.corrected_sem : mm.frame_sem} understates the uncertainty.`,
+    ...(vsEnsemble ? [`This run is ${vsEnsemble.rank_most_negative} of ${vsEnsemble.n} (most negative first), z = ${vsEnsemble.z_vs_ensemble_mean} vs the ensemble mean ${vsEnsemble.ensemble_mean} ± ${vsEnsemble.ensemble_sem} (SEM, n=${vsEnsemble.n}), which is the protocol-level estimate.`] : []),
     unc ? `Convergence: ${unc.verdict} (N_eff ≈ ${unc.n_eff}, halves ${unc.halves.first} → ${unc.halves.second}).` : "Convergence: per-frame data not archived, cannot judge.",
     signClaim(ens.all),
   ].join(" ");
   return {
-    brief,
+    brief, this_run_vs_ensemble: vsEnsemble,
     value_kcal_mol: mm.delta_total_kcal_mol,
     what_it_is: `Single-trajectory MM-GBSA (igb=${mm.igb}, saltcon=${mm.saltcon}) binding free energy, averaged over ${mm.frames} frames (every ${mm.params?.interval ?? "?"}th of ${mm.params?.endframe ?? "?"}) of the ${prod?.length_ps} ps production stage.${entropyNote ? " " + entropyNote : ""}`,
     entropy_term: mm.params?.entropy == null ? null : mm.params.entropy === "0" ? "not computed (entropy=0 in _MMPBSA_info)" : `computed (entropy=${mm.params.entropy})`,
@@ -352,8 +373,11 @@ export const PARAM_CLASS: Record<string, ParamClass> = {
 export const paramClass = (k: string): ParamClass => PARAM_CLASS[k.toLowerCase()] ?? "other";
 export const isMaterial = (c: ParamClass) => c !== "output_cadence" && c !== "stochastic";
 export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
+  if (a.id === b.id) throw new Error(`run_a and run_b are the same run (${a.id}); pick two different runs (list_runs)`);
   const ka = systemKey(a), kb = systemKey(b);
-  const systemDiff = (Object.keys(ka) as (keyof SystemKey)[]).filter(k => JSON.stringify(ka[k]) !== JSON.stringify(kb[k])).map(k => ({ field: k, a: ka[k], b: kb[k] }));
+  // net charge is compared at the precision it is displayed (1e-3 e): antechamber writes −0.000001 for a neutral ligand
+  const eq = (k: keyof SystemKey) => k === "net_charge" ? Math.abs((ka[k] ?? 0) - (kb[k] ?? 0)) < 1e-3 : JSON.stringify(ka[k]) === JSON.stringify(kb[k]);
+  const systemDiff = (Object.keys(ka) as (keyof SystemKey)[]).filter(k => !eq(k)).map(k => ({ field: k, a: ka[k], b: kb[k] }));
   const same = systemFingerprint(ka) === systemFingerprint(kb);
   const stages = a.stages.map(s => s.name).filter(n => b.stages.some(t => t.name === n));
   const stageDiffs = stages.map(n => {
@@ -363,7 +387,8 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
     return { stage: n, length_ps: { a: sa.length_ps, b: sb.length_ps }, changes };
   }).filter(d => d.changes.length);
   const classes = new Set(stageDiffs.flatMap(d => d.changes.map(c => c.class)));
-  const material = [...classes].filter(isMaterial);
+  // Materiality is a within-system notion: across different complexes every parameter difference is moot, so none is flagged material.
+  const material = same ? [...classes].filter(isMaterial) : [];
   const seeds = { a: a.stages.map(s => s.realized_seed), b: b.stages.map(s => s.realized_seed) };
   const ea = ia.find(r => r.id === a.id);
   // ΔΔG only between runs of the same prepared system; across different complexes the difference is meaningless and is not reported.
@@ -371,7 +396,10 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
     diff: same && a.results.mmgbsa && b.results.mmgbsa ? +(a.results.mmgbsa.delta_total_kcal_mol - b.results.mmgbsa.delta_total_kcal_mol).toFixed(4) : null };
   const spread = same && ea ? ensemble(ia, a.id) : null;
   const sdAll = spread?.all.sd ?? null;
-  const vsSpread = dg.diff != null && sdAll != null ? `|ΔΔG| = ${Math.abs(dg.diff).toFixed(2)} kcal/mol vs run-to-run SD ${sdAll.toFixed(2)} (${(Math.abs(dg.diff) / sdAll).toFixed(1)}×)` : null;
+  // The difference of two independent draws has spread √2·SD; a |ΔΔG| within 2·√2·SD is consistent with sampling noise. Stated, not implied.
+  const sdDiff = sdAll != null ? Math.SQRT2 * sdAll : null;
+  const noise = dg.diff != null && sdDiff != null ? { sd_of_difference: round(sdDiff, 2), ratio: round(Math.abs(dg.diff) / sdDiff, 1), consistent_with_sampling_noise: Math.abs(dg.diff) <= 2 * sdDiff } : null;
+  const vsSpread = dg.diff != null && sdAll != null && noise ? `|ΔΔG| = ${Math.abs(dg.diff).toFixed(2)} kcal/mol vs the expected spread of a two-run difference √2·SD = ${noise.sd_of_difference} (run-to-run SD ${sdAll.toFixed(2)}, n=${spread!.all.n}): ${noise.ratio}σ → ${noise.consistent_with_sampling_noise ? "consistent with sampling noise" : "larger than sampling noise alone would give (> 2σ)"}` : null;
   // Descriptive, not evaluative: state what differs and give the reader the scale to judge ΔΔG against. No claim about which run is "better" or converged — that is reported per run by explain_result.
   const interpretation = !same
     ? "Different prepared systems (see the system table). The two ΔG values describe different complexes and are not compared here."
@@ -381,11 +409,12 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
         ? `Same prepared system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}), so they are different-length samples of the same protocol. Whether either run is converged is reported per run (drift verdict in explain_result). ${vsSpread ?? ""}`.trim()
         : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes). The ΔG difference combines that change with seed-to-seed sampling; the run-to-run spread is the scale to judge it against. ${vsSpread ?? ""}`.trim();
   return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, differing_classes: [...classes], material_classes: material,
-    realized_seeds: seeds, delta_g: dg, run_to_run_spread: spread, interpretation };
+    realized_seeds: seeds, delta_g: dg, delta_g_vs_noise: noise, run_to_run_spread: spread, interpretation };
 }
 
 // ---- proposals (bounded edits, human-approved) -----------------------
-export interface Proposal { id: string; run: string; stage: string; edits: Record<string, string>; reason: string; before: Report; after: Report; mdin_after: string; status: "pending" | "approved" | "rejected"; fork?: ForkMeta }
+export interface ProposalChange { key: string; before: string | null; after: string; class: ParamClass; material: boolean; meaning: string | null }
+export interface Proposal { id: string; run: string; stage: string; edits: Record<string, string>; reason: string; before: Report; after: Report; mdin_after: string; status: "pending" | "approved" | "rejected"; changes: ProposalChange[]; material_classes: ParamClass[]; fork?: ForkMeta }
 export function applyEdits(mdin: string, edits: Record<string, string>): string {
   let out = mdin;
   for (const [k, v] of Object.entries(edits)) {
@@ -423,10 +452,18 @@ export function makeProposal(m: Manifest, stage: string, edits: Record<string, s
   }
   const bad = Object.keys(clean).filter(k => !EDITABLE.has(k.toLowerCase()));
   if (bad.length) throw new Error(`not an editable &cntrl key: ${bad.join(", ")}. Editable: ${[...EDITABLE].join(", ")}`);
+  // Cheap shape guards that are not physics rules (those stay in the oracle-pinned validator): step and cadence counts must be positive integers.
+  for (const [k, v] of Object.entries(clean)) {
+    if (COUNT_KEYS.has(k.toLowerCase()) && !(/^\d+$/.test(v) && Number(v) > 0)) throw new Error(`${k} must be a positive integer (got ${v})`);
+  }
   const after = applyEdits(s.mdin, clean);
+  // The controlled diff: each edited key's archived value → new value, with its class, so the human and the agent both see what changes.
+  const changes = Object.entries(clean).map(([k, v]) => { const c = paramClass(k); return { key: k, before: s.cntrl[k] ?? null, after: v, class: c, material: isMaterial(c), meaning: SEMANTIC[k] ?? null }; });
   // Unique even when two proposals land in the same millisecond (agents dispatch tool calls in parallel).
-  return { id: `p${Date.now().toString(36)}${(++proposalSeq).toString(36)}`, run: m.id, stage, edits: clean, reason, before: checkAmberIn(s.mdin), after: checkAmberIn(after), mdin_after: after, status: "pending" };
+  return { id: `p${Date.now().toString(36)}${(++proposalSeq).toString(36)}`, run: m.id, stage, edits: clean, reason, before: checkAmberIn(s.mdin), after: checkAmberIn(after), mdin_after: after, status: "pending",
+    changes, material_classes: [...new Set(changes.filter(c => c.material).map(c => c.class))] };
 }
+const COUNT_KEYS = new Set(["nstlim", "ntwx", "ntpr", "ntwr"]);
 
 // ---- rerun bundle ---------------------------------------------------
 export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; target: "local" | "slurm"; approved: Proposal[] }) {
@@ -469,7 +506,7 @@ export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; targe
       ...(f.stages_not_applied.length ? [`  - ⚠ partially approved: ${f.stages_not_applied.join(", ")} NOT changed — this bundle is not the controlled extension as proposed`] : []),
       ...(f.controls.length ? ["  - controls intended to be held: " + f.controls.join("; ")] : [])]),
     ...(forks.length > 1 ? [`- ⚠ ${forks.length} forks combined in one bundle; the result answers neither question alone`] : []),
-    ...opts.approved.filter(p => !p.fork).map(p => `- plain edit: ${p.stage} ${JSON.stringify(p.edits)} — ${p.reason}`),
+    ...opts.approved.filter(p => !p.fork).map(p => `- plain edit: ${p.stage} ${(p.changes ?? []).map(c => `${c.key} ${c.before ?? "(unset)"} → ${c.after}`).join(", ") || JSON.stringify(p.edits)} — ${p.reason}`),
     "- lineage is recorded in this bundle's manifest.json (`parent`, `fork`); tools/extract_run.py copies it onto the child card when the rerun directory is extracted", ""];
   files["README.md"] = [`# Rerun bundle: ${m.title} (${m.id})`, "",
     `Seed policy: **${opts.seed}** — ${opts.seed === "pinned" ? "each stage's ig is set to the seed pmemd actually used in the original run (exact replay on the same build; different hardware/compilers may still diverge)." : "ig=-1 as in the original; this is an independent sample, expect ΔG within the run-to-run spread, not equal."}`,

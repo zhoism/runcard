@@ -284,7 +284,7 @@ describe("review batch 2026-08-29 (workflow findings)", () => {
   it("ensemble: single-run system gets a one-run caveat and stratum-aware sign claims; bad id names the recovery", () => {
     const e = ensemble(idx, "3htb-jz4"); expect(e.caveat).toMatch(/Only one run/); expect(e.caveat).not.toMatch(/mixes short and long/);
     expect(signClaim(e.long, "≥ 10 ps")).toBe("no runs ≥ 10 ps of this system"); expect(signClaim(e.all)).toMatch(/single run gives ΔG < 0 \(ΔG = -27/);
-    expect(signClaim(ensemble(idx, "1l2y-rep4").all)).toMatch(/pinned to about ±0\.7 kcal\/mol/);
+    expect(signClaim(ensemble(idx, "1l2y-rep4").all)).toMatch(/known to about ±0\.7 kcal\/mol \(run-to-run SD over 2–30 ps runs/);
     expect(() => ensemble(idx, "nope")).toThrow(/list_runs/);
   });
   it("explain_result names the stratum, gates the 'dominates' clause on the ratio", () => {
@@ -371,5 +371,35 @@ describe("fork_experiment", () => {
     expect(two["README.md"]).toMatch(/2 forks combined/); expect(JSON.parse(two["manifest.json"]).fork.forks.length).toBe(2);
     expect(JSON.parse(rerunBundle(B, { seed: "pinned", target: "local", approved: [] })["manifest.json"]).fork.kind).toBe("reproduce");
     expect(JSON.parse(rerunBundle(B, { seed: "fresh", target: "local", approved: [] })["manifest.json"]).fork.kind).toBe("replicate");
+  });
+});
+
+describe("judge pass 46ca5ba fixes", () => {
+  it("explain_result: brief rounds to the precision it defends, ranks the run in its ensemble, names the ensemble mean ± SEM", () => {
+    const e = explainResult(B, idx) as any;
+    expect(e.brief).toMatch(/^ΔG = -19\.2 ± 0\.7 kcal\/mol for this run/); expect(e.brief).toMatch(/archived value -19\.1953/);
+    expect(e.this_run_vs_ensemble).toMatchObject({ rank_most_negative: 1, n: 9 }); expect(e.this_run_vs_ensemble.z_vs_ensemble_mean).toBeLessThan(-1.5);
+    expect(e.brief).toMatch(/This run is 1 of 9 .* vs the ensemble mean -18\.01 ± 0\.22 \(SEM, n=9\)/);
+    expect(e.run_to_run.caveat).toMatch(/from one prepared start/); expect(e.sign_claim.all_runs).toMatch(/robust to seed variation/);
+    expect((explainResult(C, idx) as any).this_run_vs_ensemble).toBeNull();
+  });
+  it("plan_sampling: a run already ≥ min_run_ps whose target is not met gets an 'extend this run alone' suggested edit; a met target gets none", () => {
+    const p = planSampling(B, idx, {}); expect(p.run_to_run.target_met).toBe(false);
+    expect(p.suggested_edits).toMatchObject({ run_id: "1l2y-rep4", stage: "product", purpose: "extend this run alone to the projected length" });
+    expect(Number(p.suggested_edits!.edits.nstlim) * 0.002).toBeCloseTo(p.within_run.expected_length_for_target_ps!, 0);
+    expect(planSampling(B, idx, { target_uncertainty_kcal: 0.5 }).suggested_edits).toBeNull();
+  });
+  it("propose_change: counts must be positive integers; the controlled diff (before → after, class, material) is returned", () => {
+    expect(() => makeProposal(A, "product", { nstlim: "-5" }, "x")).toThrow(/nstlim must be a positive integer/);
+    expect(() => makeProposal(A, "product", { ntwx: "0" }, "x")).toThrow(/ntwx must be a positive integer/);
+    const p = makeProposal(A, "product", { temp0: "600.0" }, "x");
+    expect(p.changes).toEqual([{ key: "temp0", before: "300.0", after: "600.0", class: "thermodynamic_state", material: true, meaning: "target temperature (K)" }]);
+    expect(p.material_classes).toEqual(["thermodynamic_state"]); expect(makeProposal(A, "product", { ntwx: "10" }, "x").material_classes).toEqual([]);
+  });
+  it("diff_runs: |ΔΔG| is judged against √2·SD with an explicit noise verdict; same run is refused; cross-system flags nothing material", () => {
+    const d = diffRuns(A, B, idx); expect(d.delta_g_vs_noise!.sd_of_difference).toBeCloseTo(Math.SQRT2 * d.run_to_run_spread!.all.sd!, 2);
+    expect(typeof d.delta_g_vs_noise!.consistent_with_sampling_noise).toBe("boolean"); expect(d.interpretation).toMatch(/expected spread of a two-run difference √2·SD/);
+    expect(() => diffRuns(A, A, idx)).toThrow(/same run/);
+    const x = diffRuns(A, C, idx); expect(x.material_classes).toEqual([]); expect(x.delta_g_vs_noise).toBeNull(); expect(x.system.find(s => s.field === "net_charge")).toBeUndefined();
   });
 });

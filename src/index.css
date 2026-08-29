@@ -33,6 +33,8 @@ pre { background:#0b0f14; border:1px solid var(--line); border-radius:6px; paddi
 .big { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; margin:4px 0 8px; } .unit { font-size:14px; color:var(--dim); font-weight:400; }
 .spark { margin:10px 0 0; } .spark svg { width:100%; height:90px; display:block; background:#0b0f14; border:1px solid var(--line); border-radius:6px; } .spark figcaption { text-align:left; margin-top:4px; }
 .warnbox { margin-top:10px; padding:8px 10px; border:1px solid var(--warn); border-radius:6px; font-size:13px; color:var(--warn); } .warnbox .dim { color:var(--dim); }
+.warnbox.quiet { border-color:var(--line); color:var(--dim); }
+details.small { margin-top:8px; } details.small summary { cursor:pointer; } details.small p { margin:6px 0 0; }
 .gallery { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:10px; } figure { margin:0; } figure img { width:100%; aspect-ratio:4/3; object-fit:contain; border-radius:4px; background:#fff; } figcaption { font-size:13px; color:var(--dim); text-align:center; }
 img { max-width:100%; } .viewer { width:100%; height:300px; position:relative; border-radius:6px; overflow:hidden; } .viewer.fallback { display:flex; align-items:center; justify-content:center; gap:8px; border:1px dashed var(--line); font-size:13px; height:auto; padding:24px; }
 .interp { padding:10px 12px; border:1px solid var(--acc); border-radius:6px; margin-bottom:14px; font-size:14px; } .interp.warn { border-color:var(--warn); }
