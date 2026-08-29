@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mean, sd, sem, autocorrelation, statisticalInefficiency, correctedSem, blockAverageSem, halves, driftSlope, runningMean } from "../src/lib/stats";
+import { mean, sd, sem, autocorrelation, statisticalInefficiency, correctedSem, blockAverageSem, halves, driftSlope, runningMean, projectedSem } from "../src/lib/stats";
 
 // Deterministic LCG so the tests are reproducible.
 function rng(seed: number) { let s = seed >>> 0; return () => { s = (1664525 * s + 1013904223) >>> 0; return s / 2 ** 32; }; }
@@ -50,4 +50,17 @@ describe("drift", () => {
     const noise = ar1(10000, 0, 9); expect(Math.abs(driftSlope(noise))).toBeLessThan(1e-3);
   });
   it("running mean", () => { expect(runningMean([1, 3, 5])).toEqual([1, 2, 3]); });
+});
+
+describe("projectedSem", () => {
+  it("SD·√(g·Δ/L): scales as 1/√L", () => {
+    expect(projectedSem(1, 4, 1, 400)).toBeCloseTo(0.1, 12);
+    expect(projectedSem(1, 4, 1, 1600) / projectedSem(1, 4, 1, 400)).toBeCloseTo(0.5, 12);
+  });
+  it("a short AR(1) segment projects the corrected SEM of the full series to within a factor ~1.6", () => {
+    const x = ar1(4000, 0.6, 21); const head = x.slice(0, 500);
+    const pred = projectedSem(sd(head, 0), statisticalInefficiency(head), 1, x.length);
+    const ratio = pred / correctedSem(x, undefined, 0);
+    expect(ratio).toBeGreaterThan(0.6); expect(ratio).toBeLessThan(1.6);
+  });
 });

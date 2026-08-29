@@ -1,8 +1,8 @@
 import type { Manifest, IndexEntry, SystemKey } from "./types";
 import { checkAmberIn, type Report } from "./amberCheck";
 import { zipSync, strToU8 } from "fflate";
-import type { PerFrame } from "./types";
-import { mean, sd, sem, statisticalInefficiency, integratedAutocorrelationTime, correctedSem, blockAverageSem, halves, driftSlope, round } from "./stats";
+import { GB_TERMS, type PerFrame, type GbTerm } from "./types";
+import { mean, sd, sem, statisticalInefficiency, integratedAutocorrelationTime, correctedSem, blockAverageSem, halves, driftSlope, round, projectedSem } from "./stats";
 
 // ---- loading ----------------------------------------------------------
 // The dev server answers a missing file with the SPA's index.html (HTTP 200, text/html);
@@ -136,6 +136,137 @@ export function uncertaintyFromFrames(pf: PerFrame, lengthPs: number | null) {
     reproduces: pf.reproduces,
   };
 }
+// ---- recompute: re-analyse ΔG over a frame window from the archived per-frame energies ----
+function slicePerFrame(pf: PerFrame, idx: number[]): PerFrame {
+  const pick = (v: number[]) => idx.map(i => v[i]);
+  return { ...pf, n: idx.length, delta_total: pick(pf.delta_total), terms: Object.fromEntries(GB_TERMS.map(k => [k, pick(pf.terms[k])])) as PerFrame["terms"] };
+}
+/** Fewer frames than this and no statistic is meaningful (g needs N ≥ 4). */
+export const MIN_WINDOW_FRAMES = 4;
+export interface RecomputeOpts { start_frame?: number; end_frame?: number; interval?: number; discard_ps?: number }
+/** ΔG, SD, corrected SEM and drift verdict over frames [start_frame, end_frame] every `interval`, from the archived per-frame energies. MMPBSA.py is not rerun. */
+export function recomputeResult(m: Manifest, opts: RecomputeOpts = {}) {
+  const mm = m.results.mmgbsa; if (!mm) throw new Error(`no MM-GBSA result in ${m.id}`);
+  const pf = mm.per_frame; if (!pf) throw new Error(`${m.id} has no archived per-frame energies (per_frame absent); recompute_result needs the _MMPBSA_*_gb.mdout.0 data. explain_result still reports MMPBSA.py's own numbers.`);
+  const n = pf.delta_total.length;
+  const prod = m.stages.find(s => s.role === "production");
+  const L = prod?.length_ps ?? null; const dPs = L != null ? L / n : null;
+  const isInt = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v);
+  if (opts.start_frame != null && opts.discard_ps != null) throw new Error("give discard_ps or start_frame, not both");
+  let start = 1;
+  if (opts.discard_ps != null) {
+    if (typeof opts.discard_ps !== "number" || !(opts.discard_ps >= 0)) throw new Error("discard_ps must be a number ≥ 0");
+    if (dPs == null) throw new Error(`production length unknown for ${m.id}; use start_frame`);
+    start = Math.floor(opts.discard_ps / dPs + 1e-9) + 1;
+  } else if (opts.start_frame != null) { if (!isInt(opts.start_frame)) throw new Error("start_frame must be an integer"); start = opts.start_frame; }
+  const end = opts.end_frame ?? n; const interval = opts.interval ?? 1;
+  if (!isInt(end) || !isInt(interval)) throw new Error("end_frame and interval must be integers");
+  if (start < 1) throw new Error(`start_frame ${start} < 1`);
+  if (end > n) throw new Error(`end_frame ${end} > ${n} frames archived for ${m.id}`);
+  if (start > end) throw new Error(`start_frame ${start} > end_frame ${end}`);
+  if (interval < 1) throw new Error(`interval ${interval} < 1`);
+  const idx: number[] = []; for (let i = start - 1; i <= end - 1; i += interval) idx.push(i);
+  const k = idx.length;
+  if (k < MIN_WINDOW_FRAMES) throw new Error(`window keeps ${k} frame(s) of ${n}; at least ${MIN_WINDOW_FRAMES} are needed for any statistic (≥ ${CONVERGENCE.min_n_eff} effectively independent for a verdict)`);
+  const w = slicePerFrame(pf, idx);
+  const dW = dPs != null ? dPs * interval : null;
+  const unc = uncertaintyFromFrames(w, dW != null ? dW * k : null);
+  const meanW = mean(w.delta_total);
+  const terms = Object.fromEntries(GB_TERMS.map(t => [t, { mean: round(mean(w.terms[t])), sd: round(sd(w.terms[t], 0)) }])) as Record<GbTerm, { mean: number; sd: number }>;
+  const termsSum = GB_TERMS.reduce((a, t) => a + mean(w.terms[t]), 0);
+  const full = start === 1 && end === n && interval === 1;
+  const diff = meanW - mm.delta_total_kcal_mol;
+  const ps = (f: number) => dPs != null ? round(f * dPs, 3) : null;
+  const window = { start_frame: start, end_frame: end, interval, frames_used: k, of_frames: n, start_ps: ps(start), end_ps: ps(end), discarded_ps: ps(start - 1), frame_interval_ps: dW != null ? round(dW, 3) : null, full };
+  const brief = `Frames ${start}–${end}${interval > 1 ? ` every ${interval}th` : ""} (${window.start_ps ?? "?"}–${window.end_ps ?? "?"} ps of ${L ?? "?"} ps, ${k} frames): ΔG = ${round(meanW, 2)} ± ${round(unc.corrected_sem, 2)} kcal/mol (corrected SEM; per-frame SD ${unc.per_frame_sd}), ${unc.verdict}. Archived full-window value ${mm.delta_total_kcal_mol} → Δ = ${round(diff, 2)} (${round(Math.abs(diff) / unc.corrected_sem, 1)} corrected SEM). Recomputed from archived per-frame energies; MMPBSA.py not rerun.`;
+  return {
+    run: m.id, window,
+    delta_g: { mean: round(meanW), per_frame_sd: unc.per_frame_sd, corrected_sem: unc.corrected_sem, n_eff: unc.n_eff, verdict: unc.verdict },
+    uncertainty: unc,
+    terms, terms_sum_of_means: round(termsSum),
+    archived: { delta_g: mm.delta_total_kcal_mol, per_frame_sd: mm.frame_std, frames: mm.frames, params: mm.params ?? null },
+    vs_archived: { diff: round(diff), diff_in_corrected_sem: round(diff / unc.corrected_sem, 2), exact_when_full_window: pf.reproduces.delta_total_mean },
+    brief,
+    method: "Recomputed in the browser from the per-frame energies archived in the manifest (_MMPBSA_{complex,receptor,ligand}_gb.mdout.0 + SASA; ESURF = surften·SASA + surfoff). MMPBSA.py was NOT rerun. Statistics as in explain_result: SD ddof=0 (MMPBSA.py convention); g, N_eff, corrected SEM, block averaging, halves drift with the same thresholds.",
+    provenance: { recomputed_from: pf.source, esurf_formula: pf.esurf_formula, mmpbsa_rerun: false, full_window_reproduces_mmgbsa_dat: pf.reproduces },
+  };
+}
+
+// ---- plan: how much more sampling for a target uncertainty (expected, from archived numbers) ----
+export const PLAN_LENGTHS_PS = [5, 10, 20, 50, 100];
+/** Default target for the SEM of the ensemble mean. 0.5 is already met on the 1L2Y ensemble (n=5 long runs, SD 0.79 → 0.35), so 0.25 makes the tool say something. */
+export const PLAN_DEFAULT_TARGET_KCAL = 0.25;
+export interface PlanOpts { target_uncertainty_kcal?: number; min_run_ps?: number }
+export function planSampling(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}) {
+  const T = opts.target_uncertainty_kcal ?? PLAN_DEFAULT_TARGET_KCAL;
+  if (typeof T !== "number" || !Number.isFinite(T) || T <= 0) throw new Error("target_uncertainty_kcal must be a number > 0");
+  const minPs = opts.min_run_ps ?? LONG_RUN_MIN_PS;
+  if (typeof minPs !== "number" || !Number.isFinite(minPs) || minPs <= 0) throw new Error("min_run_ps must be a number > 0");
+  const mm = m.results.mmgbsa; if (!mm) throw new Error(`no MM-GBSA result in ${m.id}`);
+  const pf = mm.per_frame; if (!pf) throw new Error(`${m.id} has no archived per-frame energies; plan_sampling needs them for the within-run projection`);
+  const prod = m.stages.find(s => s.role === "production"); if (!prod) throw new Error(`no production stage in ${m.id}`);
+  const L0 = prod.length_ps; if (L0 == null) throw new Error(`production length unknown for ${m.id}`);
+  const ens = ensemble(idx, m.id);
+  const unc = uncertaintyFromFrames(pf, L0);
+  // unrounded inputs for the projection so at_current_length reproduces corrected_sem exactly
+  const SD = sd(pf.delta_total, 0), g = statisticalInefficiency(pf.delta_total), dPs = L0 / pf.delta_total.length;
+  // run-to-run
+  const plannedOn: "long" | "all" | null = ens.long.n >= 3 ? "long" : ens.all.sd != null ? "all" : null;
+  const st: Stratum | null = plannedOn ? ens[plannedOn] : null;
+  const s = st?.sd ?? null, nNow = st?.n ?? null;
+  const semNow = s != null && nNow ? s / Math.sqrt(nNow) : null;
+  const nNeeded = s != null ? Math.ceil((s / T) ** 2) : null;
+  const additional = nNeeded != null && nNow != null ? Math.max(0, nNeeded - nNow) : null;
+  const semAfter = s != null && nNow != null && nNeeded != null ? s / Math.sqrt(Math.max(nNow, nNeeded)) : null;
+  const targetMet = semNow != null ? semNow <= T : false;
+  const stratumRow = (x: Stratum) => ({ n: x.n, sd: x.sd != null ? round(x.sd) : null, sem_of_mean: x.sd != null && x.n ? round(x.sd / Math.sqrt(x.n)) : null });
+  // within-run
+  const expSem = (Lps: number) => round(projectedSem(SD, g, dPs, Lps));
+  const lengthForTarget = round(g * dPs * (SD / T) ** 2, 1);
+  const Lrec = Math.max(minPs, L0);
+  const spreadOverWithin = s != null ? round(s / unc.corrected_sem, 1) : null;
+  // suggested edits: data for propose_change; nothing is proposed here
+  const dt = Number(prod.cntrl.dt), nstlimNow = Number(prod.cntrl.nstlim), ntwx = Number(prod.cntrl.ntwx) || null;
+  const nstlimNew = Math.round(Lrec / dt);
+  const mmInterval = Number(mm.params?.interval) || 1;
+  const suggested = nstlimNew !== nstlimNow ? {
+    run_id: m.id, stage: prod.name,
+    edits: { nstlim: String(nstlimNew), ...(prod.cntrl.ig !== "-1" ? { ig: "-1" } : {}) },
+    reason: `extend production from ${L0} to ${Lrec} ps (${nstlimNew} steps at dt=${dt}) so the run joins the ≥ ${minPs} ps stratum`,
+    expected_frames_written: ntwx ? Math.floor(nstlimNew / ntwx) : null,
+    expected_frames_analysed: ntwx ? Math.floor(Math.floor(nstlimNew / ntwx) / mmInterval) : null,
+    note: "Data for propose_change; nothing has been proposed. ntwx is unchanged, so the frame cadence Δ is unchanged and the analysed frame count scales with length.",
+  } : null;
+  const rerunNote = suggested ? null : `This run is already ≥ ${Lrec} ps; independent samples need no &cntrl edit — generate_rerun_bundle with seed='fresh' (ig=-1) for each new run.`;
+  const recommendation = plannedOn == null
+    ? `expected: no run-to-run estimate — this is the only run of its prepared system. Within this run the corrected SEM is ${unc.corrected_sem} kcal/mol at ${L0} ps; one run would reach ±${T} at ≈ ${lengthForTarget} ps (expected, stationary). Seed-to-seed spread cannot be estimated from one run: at least 3 independent runs (ig=-1) of ≥ ${Lrec} ps are needed before an ensemble uncertainty can be quoted.`
+    : targetMet
+      ? `expected: target ±${T} kcal/mol on the ensemble mean is already met on the ${plannedOn} stratum (n=${nNow}, SD ${round(s!, 2)}, SEM of mean ${round(semNow!, 2)}); 0 more runs needed.`
+      : `expected: ${additional} more independent run${additional === 1 ? "" : "s"} (ig=-1) of ≥ ${Lrec} ps each → n=${nNeeded}, SEM of the ensemble mean ≈ ${round(semAfter!, 2)} ≤ ${T} kcal/mol. Extending this run alone reaches ±${T} at ≈ ${lengthForTarget} ps (expected), but run-to-run SD ${round(s!, 2)} is ${spreadOverWithin}× this run's corrected SEM, so seed spread, not frame noise, limits the estimate.`;
+  const assumptions = [
+    plannedOn ? `The sample SD across the ${plannedOn} stratum (${nNow} runs) holds for new runs of ≥ ${Lrec} ps; it includes within-run noise (not decomposed), so it may shrink slightly with longer runs — not modelled.` : "No run-to-run SD is available from a single run.",
+    "New runs are independent samples (ig=-1) of the same prepared system and protocol.",
+    `Within-run projection assumes stationarity: the same per-frame SD (${unc.per_frame_sd}), statistical inefficiency g (${unc.statistical_inefficiency_g}; τ ≈ ${unc.integrated_autocorrelation_time_ps} ps) and output cadence Δ = ${round(dPs, 3)} ps/frame at any length.`,
+    ...(unc.verdict !== "no drift detected" ? [`This run's convergence verdict is '${unc.verdict}', so its τ and SD are less reliable inputs.`] : []),
+    "Nothing was run: every number labelled expected is computed in the browser from the archived numbers.",
+  ];
+  return {
+    label: "expected" as const, run: m.id, target_uncertainty_kcal: T,
+    what_the_target_means: "the standard error of the ensemble-mean ΔG (run-to-run SD / √n): how well the mean over independent runs is pinned down — not the spread to quote for a single run (explain_result gives that)",
+    min_run_ps: minPs,
+    run_to_run: { planned_on: plannedOn, strata: { all: stratumRow(ens.all), long: { min_ps: ens.long.min_ps, ...stratumRow(ens.long) } },
+      sd_used: s != null ? round(s) : null, n_now: nNow, sem_of_mean_now: semNow != null ? round(semNow) : null, n_needed: nNeeded, additional_runs: additional,
+      expected_sem_of_mean_after: semAfter != null ? round(semAfter) : null, target_met: targetMet, sign_claim: signClaim(st ?? ens.all) },
+    within_run: { this_run: { production_ps: L0, per_frame_sd: unc.per_frame_sd, g: unc.statistical_inefficiency_g, tau_ps: unc.integrated_autocorrelation_time_ps, frame_interval_ps: round(dPs, 3), corrected_sem: unc.corrected_sem, n_eff: unc.n_eff, verdict: unc.verdict },
+      formula: "expected SEM(L) = SD · √(g·Δ/L) = SD · √((Δ + 2τ)/L), N = L/Δ frames",
+      at_current_length: { length_ps: L0, expected_sem: expSem(L0) },
+      expected_sem_by_length: PLAN_LENGTHS_PS.map(Lps => ({ length_ps: Lps, expected_frames_analysed: Math.round(Lps / dPs), expected_sem: expSem(Lps) })),
+      expected_length_for_target_ps: lengthForTarget, spread_over_within: spreadOverWithin },
+    recommended_run_ps: Lrec, recommendation, suggested_edits: suggested, rerun_note: rerunNote, assumptions,
+    method: "Run-to-run: n_needed = ⌈(SD_runs / target)²⌉ so that SD_runs/√n ≤ target. Within-run: corrected SEM projected as SD·√(g·Δ/L), g from Chodera 2007 on this run's per-frame ΔG. All from archived numbers; nothing simulated.",
+  };
+}
+
 export function internalResidual(pf: PerFrame, deltaG: number) {
   const internal = ["BOND", "ANGLE", "DIHED", "1-4 VDW", "1-4 EEL"] as const;
   const by = Object.fromEntries(internal.map(k => { const v = pf.terms[k]; return [k, { mean: round(mean(v)), sd: round(sd(v, 0)), max_abs: round(Math.max(...v.map(Math.abs))) }]; })) as Record<typeof internal[number], { mean: number; sd: number; max_abs: number }>;

@@ -72,6 +72,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const [err, setErr] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
+  const re = useStore(s => s.reanalysis);
   useEffect(() => {
     let live = true; setM(null); setErr(null);
     loadRun(id).then(x => { if (live) setM(x); }, e => { if (live) setErr(String(e?.message ?? e)); });
@@ -127,12 +128,13 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
             <div className="big">{fmt(mm.delta_total_kcal_mol)} <span className="unit">kcal/mol</span></div>
             <dl><dt>per-frame</dt><dd>SD {fmt(mm.frame_std)} · SEM {fmt(mm.frame_sem, 3)} over {mm.frames} frames <span className="dim">(population SD; frames are correlated, so this SEM understates uncertainty{mm.frames_header_text && mm.frames_header_text !== String(mm.frames) ? `; the mmgbsa.dat header prints "${mm.frames_header_text}", see frames_note` : ""})</span></dd>
               {mm.per_frame && (() => { const u = uncertaintyFromFrames(mm.per_frame, prod?.length_ps ?? null); return <><dt>corrected</dt><dd>SEM <b>{u.corrected_sem}</b> after autocorrelation (g = {u.statistical_inefficiency_g}, τ = {u.integrated_autocorrelation_time_frames} frames, N<sub>eff</sub> ≈ {u.n_eff}) · halves {u.halves.first} → {u.halves.second} · <b>{u.verdict}</b> <span className="dim">(reconstructed from the per-frame mdout; reproduces mmgbsa.dat exactly)</span></dd></>; })()}
+              {re && re.run === m.id && <><dt>agent reanalysis</dt><dd>frames {re.start_frame}–{re.end_frame}{re.interval > 1 ? ` every ${re.interval}th` : ""} ({re.frames_used} frames{re.start_ps != null ? `, ${re.start_ps}–${re.end_ps} ps` : ""}) → <b>{fmt(re.mean)} ± {fmt(re.corrected_sem)}</b>, {re.verdict} <span className="dim">(recomputed in the browser from the archived per-frame energies; ± is the corrected SEM; the archived value above is unchanged)</span></dd></>}
               <dt>method</dt><dd>igb={mm.igb}, saltcon={mm.saltcon}, {prod?.length_ps} ps production, seed {prod?.realized_seed}</dd>
               {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b> independent runs of this system: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
                 {ens.long.n > 0 && ens.long.n < ens.all.n && <><br /><b>n={ens.long.n}</b> runs ≥ {ens.long.min_ps} ps: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</>}
                 <span className="dim"> — production lengths differ across runs; this spread is the uncertainty that matters</span></dd></>}
               <dt>computed</dt><dd>{mm.run_on}</dd></dl>
-            {mm.per_frame && <Sparkline x={mm.per_frame.delta_total} lengthPs={prod?.length_ps ?? null} />}
+            {mm.per_frame && <Sparkline x={mm.per_frame.delta_total} lengthPs={prod?.length_ps ?? null} window={re && re.run === m.id ? { start: re.start_frame, end: re.end_frame } : undefined} />}
             {mm.warnings.map((w, i) => <div key={i} className="warnbox">⚠ {w}<div className="dim">Recorded verbatim from mmgbsa.dat. Ask the agent to explain_result for what it means.</div></div>)}
           </> : <p className="dim">no MM-GBSA result</p>}
         </div>
@@ -159,11 +161,12 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
 }
 
 /** Per-frame ΔG with running mean. Inline SVG; every point is a number from the manifest. */
-function Sparkline({ x, lengthPs }: { x: number[]; lengthPs: number | null }) {
+function Sparkline({ x, lengthPs, window }: { x: number[]; lengthPs: number | null; window?: { start: number; end: number } }) {
   const W = 480, H = 90, P = 4; const lo = Math.min(...x), hi = Math.max(...x); const rm = runningMean(x);
   const sx = (i: number) => P + (i / (x.length - 1)) * (W - 2 * P), sy = (v: number) => P + (1 - (v - lo) / (hi - lo || 1)) * (H - 2 * P);
   const path = (v: number[]) => v.map((y, i) => `${i ? "L" : "M"}${sx(i).toFixed(1)},${sy(y).toFixed(1)}`).join(" ");
   return <figure className="spark"><svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="per-frame ΔG">
+      {window && <rect x={sx(window.start - 1)} y={0} width={Math.max(1, sx(window.end - 1) - sx(window.start - 1))} height={H} fill="var(--acc)" opacity="0.12" />}
       <path d={path(x)} fill="none" stroke="var(--dim)" strokeWidth="1" /><path d={path(rm)} fill="none" stroke="var(--acc)" strokeWidth="1.5" /></svg>
     <figcaption>per-frame ΔG over {x.length} frames{lengthPs != null ? ` (${lengthPs} ps)` : ""}: grey = frame values ({lo.toFixed(1)} … {hi.toFixed(1)}), blue = running mean → {rm[rm.length - 1].toFixed(2)} kcal/mol</figcaption></figure>;
 }

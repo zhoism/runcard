@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS } from "../src/lib/runs";
 import { mean, sd } from "../src/lib/stats";
 import { execFileSync } from "node:child_process";
 const load = (id: string) => JSON.parse(readFileSync(`public/runs/${id}/manifest.json`, "utf8"));
@@ -137,5 +137,83 @@ describe("loadRun / loadIndex with mocked fetch", () => {
     stub(async () => json({}, 404)); await expect(loadIndex()).rejects.toThrow(/run index could not be loaded: HTTP 404/);
     stub(async () => json({ not: "a list" })); await expect(loadIndex()).rejects.toThrow(/not a list of runs/);
     stub(async () => json(idx)); expect((await loadIndex()).length).toBe(idx.length);
+  });
+});
+
+// ---- recompute_result: re-analysis over a frame window from the archived per-frame energies ----
+describe("recomputeResult", () => {
+  it("full window reproduces the archived mean and SD for every run, and equals uncertaintyFromFrames", () => {
+    for (const r of idx) {
+      const m = load(r.id); const mm = m.results.mmgbsa; const out = recomputeResult(m, {});
+      expect(out.delta_g.mean, r.id).toBeCloseTo(mm.delta_total_kcal_mol, 4);
+      expect(out.delta_g.per_frame_sd, r.id).toBeCloseTo(mm.frame_std, 4);
+      expect(out.window).toMatchObject({ start_frame: 1, end_frame: 100, interval: 1, frames_used: 100, of_frames: 100, full: true, discarded_ps: 0 });
+      expect(Math.abs(out.vs_archived.diff)).toBeLessThan(1e-3); expect(out.vs_archived.exact_when_full_window).toBe(true);
+      expect(out.uncertainty).toEqual(uncertaintyFromFrames(mm.per_frame, r.production_ps));
+      expect(out.terms_sum_of_means).toBeCloseTo(out.delta_g.mean, 3);
+      expect(out.provenance.mmpbsa_rerun).toBe(false); expect(out.brief).toMatch(/MMPBSA.py not rerun/);
+    }
+  });
+  it("discard_ps converts to a 1-based start frame at this run's cadence", () => {
+    const pf = A.results.mmgbsa.per_frame;
+    const a = recomputeResult(A, { discard_ps: 1 });                     // 5 ps / 100 frames = 0.05 ps per frame → drop 20
+    expect(a.window).toMatchObject({ start_frame: 21, end_frame: 100, frames_used: 80, discarded_ps: 1, start_ps: 1.05, end_ps: 5 });
+    expect(a.delta_g.mean).toBeCloseTo(mean(pf.delta_total.slice(20)), 4);
+    expect(recomputeResult(B, { discard_ps: 6 }).window.start_frame).toBe(21); // 30 ps → 0.3 ps per frame
+    expect(recomputeResult(A, { discard_ps: 0 }).window.start_frame).toBe(1);
+    expect(a.brief).toMatch(/^Frames 21–100 \(1.05–5 ps of 5 ps, 80 frames\)/);
+  });
+  it("interval keeps every k-th frame and scales the frame interval", () => {
+    const pf = A.results.mmgbsa.per_frame; const out = recomputeResult(A, { interval: 2 });
+    expect(out.window).toMatchObject({ frames_used: 50, frame_interval_ps: 0.1, full: false }); expect(out.uncertainty.n_frames).toBe(50);
+    expect(out.delta_g.mean).toBeCloseTo(mean(pf.delta_total.filter((_: number, i: number) => i % 2 === 0)), 4);
+  });
+  it("rejects bad windows with messages that name the limits", () => {
+    expect(() => recomputeResult(A, { start_frame: 50, end_frame: 10 })).toThrow(/start_frame 50 > end_frame 10/);
+    expect(() => recomputeResult(A, { end_frame: 101 })).toThrow(/end_frame 101 > 100 frames/);
+    expect(() => recomputeResult(A, { interval: 0 })).toThrow(/interval 0 < 1/);
+    expect(() => recomputeResult(A, { start_frame: 5, discard_ps: 1 })).toThrow(/not both/);
+    expect(() => recomputeResult(A, { interval: 100 })).toThrow(/keeps 1 frame/);
+    expect(() => recomputeResult(A, { start_frame: 98 })).toThrow(new RegExp(`keeps 3 frame\\(s\\) of 100; at least ${MIN_WINDOW_FRAMES}`));
+    expect(() => recomputeResult(A, { start_frame: 1.5 })).toThrow(/integer/);
+    expect(() => recomputeResult({ ...A, results: { ...A.results, mmgbsa: { ...A.results.mmgbsa, per_frame: null } } }, {})).toThrow(/per-frame/);
+    expect(() => recomputeResult({ ...A, results: { ...A.results, mmgbsa: undefined } }, {})).toThrow(/no MM-GBSA/);
+  });
+});
+
+// ---- plan_sampling: expected sampling for a target uncertainty ----
+describe("planSampling", () => {
+  it("plans on the ≥10 ps stratum: n_needed = ⌈(SD/target)²⌉, suggests nstlim for a 10 ps rerun, proposes nothing", () => {
+    const p = planSampling(A, idx, { target_uncertainty_kcal: 0.25 }); const e = ensemble(idx, A.id);
+    expect(p.label).toBe("expected"); expect(p.run_to_run.planned_on).toBe("long");
+    expect(p.run_to_run.n_needed).toBe(Math.ceil((e.long.sd! / 0.25) ** 2)); expect(p.run_to_run.n_needed).toBe(11);
+    expect(p.run_to_run.additional_runs).toBe(6); expect(p.run_to_run.target_met).toBe(false);
+    expect(p.recommendation).toMatch(/^expected: 6 more independent runs/);
+    expect(p.recommended_run_ps).toBe(10);
+    expect(p.suggested_edits).toMatchObject({ run_id: A.id, stage: "product" });
+    expect(Number(p.suggested_edits!.edits.nstlim) * Number(A.stages.find((s: any) => s.role === "production").cntrl.dt)).toBeCloseTo(10, 9);
+    expect(p.suggested_edits!.edits).not.toHaveProperty("ig");
+    expect(p.suggested_edits!.expected_frames_analysed).toBe(200);
+    expect(p.within_run.expected_sem_by_length.map((r: any) => r.length_ps)).toEqual(PLAN_LENGTHS_PS);
+    expect(p.assumptions.some((a: string) => /Nothing was run/.test(a))).toBe(true);
+  });
+  it("a target that is already met asks for 0 more runs and no edit for a run that is already long enough", () => {
+    const p = planSampling(B, idx, { target_uncertainty_kcal: 0.5 });
+    expect(p.run_to_run.target_met).toBe(true); expect(p.run_to_run.additional_runs).toBe(0);
+    expect(p.recommendation).toMatch(/already met/); expect(p.suggested_edits).toBeNull(); expect(p.rerun_note).toMatch(/seed='fresh'/);
+  });
+  it("single run of its system: no run-to-run plan, within-run projection only, nstlim for 10 ps", () => {
+    const p = planSampling(C, idx, {});
+    expect(p.target_uncertainty_kcal).toBe(0.25); expect(p.run_to_run.planned_on).toBeNull(); expect(p.run_to_run.n_needed).toBeNull();
+    expect(p.recommendation).toMatch(/only run of its prepared system/); expect(p.within_run.expected_length_for_target_ps).toBeGreaterThan(0);
+    expect(p.suggested_edits!.edits.nstlim).toBe("5000");
+  });
+  it("the within-run projection reproduces this run's corrected SEM at its current length, for every run", () => {
+    for (const r of idx) { const p = planSampling(load(r.id), idx, {}); expect(p.within_run.at_current_length.expected_sem, r.id).toBeCloseTo(p.within_run.this_run.corrected_sem, 3); }
+  });
+  it("rejects non-positive targets and lengths", () => {
+    expect(() => planSampling(A, idx, { target_uncertainty_kcal: 0 })).toThrow(/> 0/);
+    expect(() => planSampling(A, idx, { target_uncertainty_kcal: -1 })).toThrow(/> 0/);
+    expect(() => planSampling(A, idx, { min_run_ps: 0 })).toThrow(/min_run_ps/);
   });
 });

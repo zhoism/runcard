@@ -74,3 +74,6 @@ export function driftSlope(x: number[]): number {
 export function runningMean(x: number[]): number[] { let s = 0; return x.map((v, i) => (s += v) / (i + 1)); }
 
 export const round = (v: number, d = 4) => Number.isFinite(v) ? +v.toFixed(d) : v;
+
+/** Expected corrected SEM of a run of length L ps at the same output cadence Δ (ps/frame): SD·√(g·Δ/L), where g·Δ = Δ + 2τ_ps and N = L/Δ frames. */
+export const projectedSem = (sdFrame: number, g: number, framePs: number, lengthPs: number) => sdFrame * Math.sqrt(g * framePs / lengthPs);

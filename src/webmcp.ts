@@ -1,7 +1,7 @@
 // WebMCP tool registry. Every tool is a pure function over the run manifests
 // plus the page store; the same table drives document.modelContext.registerTool
 // and the in-page Tool Console (so a human can call exactly what an agent can).
-import { loadIndex, loadRun, validateStage, validateAll, explainResult, diffRuns, makeProposal, rerunBundle, ensemble } from "./lib/runs";
+import { loadIndex, loadRun, validateStage, validateAll, explainResult, diffRuns, makeProposal, rerunBundle, ensemble, recomputeResult, planSampling } from "./lib/runs";
 import { get, set, logCall, navigate } from "./store";
 import { checkAmberIn } from "./lib/amberCheck";
 
@@ -36,6 +36,12 @@ export const TOOLS: Tool[] = [
     run: async ({ run_id, seed, target }) => { const m = await loadRun(run_id); const approved = get().proposals.filter(p => p.run === run_id && p.status === "approved"); const files = rerunBundle(m, { seed, target, approved }); set({ bundle: { name: `${run_id}-rerun-${seed}-${target}.zip`, files } }); navigate(`/run/${run_id}`); return { files: Object.keys(files), applied_proposals: approved.map(p => p.id), readme: files["README.md"], run_sh: files["run.sh"] }; } },
   { name: "get_ensemble", readOnly: true, description: "How much does ΔG vary across independent runs of this system? Run-to-run statistics for every run of the same prepared system as run_id (same ligand, atom types, charges, protein, force fields, solvent, box): n, mean, SD, min, max of ΔG for all runs and for runs ≥ 10 ps, with each run's production length.",
     inputSchema: S({ run_id: str("run id") }, ["run_id"]), run: async ({ run_id }) => ensemble(await loadIndex(), run_id) },
+  { name: "recompute_result", readOnly: true, description: "What is ΔG if I drop the first 20 frames as equilibration, or use every other frame? Re-analyses the archived per-frame MM-GBSA energies in the browser over a window you choose (start_frame/end_frame, 1-based; interval; or discard_ps to drop the first X ps): mean ΔG, per-frame SD, autocorrelation-corrected SEM, N_eff, block averaging and drift verdict for that window, per-term means, and the difference from the archived value in corrected-SEM units. MMPBSA.py is not rerun; the full window reproduces mmgbsa.dat exactly. Shows the result under the ΔG card.",
+    inputSchema: S({ run_id: str("run id"), start_frame: { type: "integer", description: "first frame, 1-based (default 1)" }, end_frame: { type: "integer", description: "last frame, inclusive (default: all)" }, interval: { type: "integer", description: "keep every k-th frame (default 1)" }, discard_ps: { type: "number", description: "drop the first X ps as equilibration (instead of start_frame)" } }, ["run_id"]),
+    run: async ({ run_id, ...w }) => { const r = recomputeResult(await loadRun(run_id), w); set({ reanalysis: { run: run_id, start_frame: r.window.start_frame, end_frame: r.window.end_frame, interval: r.window.interval, frames_used: r.window.frames_used, start_ps: r.window.start_ps, end_ps: r.window.end_ps, mean: r.delta_g.mean, corrected_sem: r.delta_g.corrected_sem, verdict: r.delta_g.verdict } }); navigate(`/run/${run_id}`); return r; } },
+  { name: "plan_sampling", readOnly: true, description: "How much more sampling do I need to reach ±X kcal/mol on ΔG? Expected, not measured: from the run-to-run SD across independent runs of this system, the number of additional runs (ig=-1) for the SEM of the ensemble mean to reach the target; from this run's per-frame SD and autocorrelation time, the expected corrected SEM of one run at 5–100 ps and the length at which one run reaches the target; which of the two limits the answer; and the nstlim an agent can pass to propose_change (this tool proposes nothing). Every projection is labelled expected with its assumptions.",
+    inputSchema: S({ run_id: str("run id"), target_uncertainty_kcal: { type: "number", description: "target SEM of the ensemble-mean ΔG, kcal/mol (default 0.25)" }, min_run_ps: { type: "number", description: "minimum production length for new runs, ps (default 10)" } }, ["run_id"]),
+    run: async ({ run_id, ...o }) => planSampling(await loadRun(run_id), await loadIndex(), o) },
 ];
 
 /** One readable line per call for the Tool Calls panel, so a human can follow what the agent learned without reading JSON. */
@@ -56,6 +62,10 @@ function summarize(name: string, out: any): string {
       case "propose_change": return `${out.status}: before ${verdict(out.before)} → after ${verdict(out.after)}; awaiting your Approve`;
       case "list_proposals": return `${out.length} proposals (${out.filter((p: any) => p.status === "pending").length} pending)`;
       case "generate_rerun_bundle": return `${out.files.length} files, ${out.applied_proposals.length} approved edit${out.applied_proposals.length === 1 ? "" : "s"} applied; download on the page`;
+      case "recompute_result": { const w = out.window; return `frames ${w.start_frame}–${w.end_frame}${w.interval > 1 ? ` every ${w.interval}th` : ""} (${w.frames_used}): ΔG ${f(out.delta_g.mean)} ± ${f(out.delta_g.corrected_sem)}, ${out.delta_g.verdict}; Δ vs archived ${f(out.vs_archived.diff)}; shown on the page`; }
+      case "plan_sampling": { const r = out.run_to_run, L = f(out.within_run.expected_length_for_target_ps, 0), T = out.target_uncertainty_kcal; return r.planned_on
+        ? `expected: ${r.additional_runs} more run${r.additional_runs === 1 ? "" : "s"} ≥ ${out.recommended_run_ps} ps for ±${T} (${r.planned_on} stratum: n=${r.n_now}, SD ${f(r.sd_used)}); one run alone would need ≈ ${L} ps`
+        : `expected: only run of its system, no run-to-run estimate; one run alone would need ≈ ${L} ps for ±${T}; ≥ 3 independent runs of ≥ ${out.recommended_run_ps} ps before an ensemble uncertainty can be quoted`; }
     }
   } catch { /* fall through */ }
   return JSON.stringify(out).slice(0, 160);
