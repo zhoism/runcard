@@ -415,7 +415,7 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
       : material.every(c => c === "sampling_length")
         ? `Same prepared system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}), so they are different-length samples of the same protocol. Whether either run is converged is reported per run (drift verdict in explain_result).`
         : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes). The ΔG difference combines that change with seed-to-seed sampling; the run-to-run spread is the scale to judge it against.`;
-  return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, differing_classes: [...classes], material_classes: material,
+  return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, stages_compared: stages.length, differing_classes: [...classes], material_classes: material,
     realized_seeds: seeds, delta_g: dg, delta_g_vs_noise: noise, run_to_run_spread: spread, verdict, interpretation, scale: vsSpread };
 }
 
