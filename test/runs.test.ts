@@ -285,7 +285,7 @@ describe("review batch 2026-08-29 (workflow findings)", () => {
   it("ensemble: single-run system gets a one-run caveat and stratum-aware sign claims; bad id names the recovery", () => {
     const e = ensemble(idx, "3htb-jz4"); expect(e.caveat).toMatch(/Only one run/); expect(e.caveat).not.toMatch(/mixes short and long/);
     expect(signClaim(e.long, "≥ 10 ps")).toBe("no runs ≥ 10 ps of this system"); expect(signClaim(e.all)).toMatch(/single run gives ΔG < 0 \(ΔG = -27/);
-    expect(signClaim(ensemble(idx, "1l2y-rep4").all)).toMatch(/known to about ±0\.7 kcal\/mol \(run-to-run SD over 2–30 ps runs/);
+    expect(signClaim(ensemble(idx, "1l2y-rep4").all)).toMatch(/observed seed-to-seed SD is ±0\.7 kcal\/mol in this short, mixed-length ensemble \(2–30 ps/);
     expect(() => ensemble(idx, "nope")).toThrow(/list_runs/);
   });
   it("explain_result names the stratum, gates the 'dominates' clause on the ratio", () => {
@@ -319,7 +319,7 @@ describe("confidence ladder", () => {
     expect(L.rungs.map(r => r.rung)).toEqual(["recomputable", "repeatable", "independently replicated", "robust to analysis-window choices", "externally supported"]);
     expect(by["recomputable"].status).toBe("verified"); expect(by["recomputable"].evidence).toMatch(/re-derived here/);
     expect(by["repeatable"].status).toBe("expected"); expect(by["repeatable"].evidence).toMatch(/3\/3 dynamics stages/);
-    expect(by["independently replicated"].status).toBe("verified"); expect(by["independently replicated"].evidence).toMatch(/9 runs of the same prepared system and production protocol with distinct realized seeds/);
+    expect(by["independently replicated"].status).toBe("verified"); expect(by["independently replicated"].evidence).toMatch(/9 runs of the same prepared system and production protocol with distinct realized seeds/); expect(by["independently replicated"].short).toMatch(/seed-replicated; (matched-length replication at|no matched-length group)/);
     expect(["verified", "not established"]).toContain(by["robust to analysis-window choices"].status); expect(by["robust to analysis-window choices"].evidence).toMatch(/4 analysis windows re-analysed/); expect(by["robust to analysis-window choices"].evidence).toMatch(/criterion ≤ 2/);
     const noProto = confidenceLadder(B, idx.map((r: any) => ({ ...r, protocol: undefined }))); expect(noProto.rungs[2].status).toBe("not established"); expect(noProto.rungs[2].evidence).toMatch(/no protocol key/);
     expect(by["externally supported"].status).toBe("not assessed");

@@ -111,7 +111,7 @@ export function signClaim(st: Stratum, label = ""): string {
   if (st.n === 0) return `no runs${label ? ` ${label}` : ""} of this system`;
   const range = st.n === 1 ? `ΔG = ${st.min} kcal/mol` : `range ${st.min} to ${st.max} kcal/mol`;
   const ps = st.runs.map(r => r.production_ps).filter(x => x != null); const psRange = ps.length ? `${Math.min(...ps)}–${Math.max(...ps)} ps` : "";
-  const pinned = st.sd != null ? `; the value is known to about ±${st.sd.toFixed(1)} kcal/mol (run-to-run SD over ${psRange} runs; range width ${(st.max! - st.min!).toFixed(1)})` : "";
+  const pinned = st.sd != null ? `; the observed seed-to-seed SD is ±${st.sd.toFixed(1)} kcal/mol in this short, mixed-length ensemble (${psRange}; range width ${(st.max! - st.min!).toFixed(1)}) — a spread, not a converged uncertainty` : "";
   if (st.negative === st.n) return `${st.n === 1 ? "The single run gives" : `All ${st.n} independent runs give`} ΔG < 0 (${range}); ${st.n >= 3 ? `the sign is robust to seed variation${pinned}` : "the sign is not yet established (n < 3)"}.`;
   if (st.negative === 0) return `None of the ${st.n} runs gives ΔG < 0 (${range}).`;
   return `${st.negative} of ${st.n} runs give ΔG < 0 (${range}); the sign is not robust across runs.`;
@@ -334,7 +334,7 @@ export function explainResult(m: Manifest, idx: IndexEntry[]) {
       : `ΔG = ${mm.delta_total_kcal_mol} kcal/mol, single-trajectory MM-GBSA over ${mm.frames} frames of a ${prod?.length_ps ?? "?"} ps production run.`,
     spreadSd != null ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD over all ${ens.all.n} independent runs${stratumNote}); the within-run SEM (${unc ? unc.corrected_sem : mm.frame_sem}) is not the uncertainty to report.` : `Only one run of this system: the within-run SEM ${unc ? unc.corrected_sem : mm.frame_sem} does not estimate run-to-run uncertainty; no spread can be quoted until ≥ 3 independent runs exist.`,
     ...(vsEnsemble ? [`This run is ${vsEnsemble.rank_most_negative} of ${vsEnsemble.n} (most negative first), z = ${vsEnsemble.z_vs_ensemble_mean} vs the ensemble mean ${vsEnsemble.ensemble_mean} ± ${vsEnsemble.ensemble_sem} (SEM, n=${vsEnsemble.n}) — the protocol's estimate conditional on this short-run ensemble (seed variation over picoseconds from one prepared start).`] : []),
-    unc ? `Convergence: ${unc.verdict} (N_eff ≈ ${unc.n_eff}, halves ${unc.halves.first} → ${unc.halves.second}).` : "Convergence: per-frame data not archived, cannot judge.",
+    unc ? `Convergence: ${unc.verdict} by the halves test over ${prod?.length_ps ?? "?"} ps (N_eff ≈ ${unc.n_eff}, halves ${unc.halves.first} → ${unc.halves.second}); this tests drift within the archived window, not equilibration on longer timescales.` : "Convergence: per-frame data not archived, cannot judge.",
     signClaim(ens.all),
   ].join(" ");
   return {
@@ -515,6 +515,7 @@ export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; targe
       `- fork ${f.id}${f.question ? ` — question: ${f.question}` : ""}`,
       ...(f.treatment ? [`  - treatment: ${f.treatment.key}${f.treatment.meaning ? ` (${f.treatment.meaning})` : ""} → ${f.treatment.to} on ${f.stages_applied.join(", ") || "(no stage)"}; before: ${Object.entries(f.treatment.from).map(([s, v]) => `${s}=${v}`).join(", ")}`] : []),
       ...(f.stages_not_applied.length ? [`  - ⚠ partially approved: ${f.stages_not_applied.join(", ")} NOT changed — this bundle is not the controlled extension as proposed`] : []),
+      ...(f.runs_per_condition ? [`  - ensemble: this bundle is ONE member of the ${f.runs_per_condition} planned for this condition; with seed policy ${opts.seed === "fresh" ? "fresh (ig=-1) each execution draws a new seed — run it ${f.runs_per_condition} times in separate copies (outputs share names)" : "pinned every execution replays the same seed — use seed='fresh' for the other members"}`] : []),
       ...(f.controls.length ? ["  - controls intended to be held: " + f.controls.join("; ")] : [])]),
     ...(forks.length > 1 ? [`- ⚠ ${forks.length} forks combined in one bundle; the result answers neither question alone`] : []),
     ...opts.approved.filter(p => !p.fork).map(p => `- plain edit: ${p.stage} ${(p.changes ?? []).map(c => `${c.key} ${c.before ?? "(unset)"} → ${c.after}`).join(", ") || JSON.stringify(p.edits)} — ${p.reason}`),
@@ -573,8 +574,13 @@ export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
   else if (sameProto.length >= 3 && distinct === sameProto.length && distinct >= 3) {
     const st = stratum(sameProto); const lengths = [...new Set(sameProto.map(r => r.production_ps))].sort((a, b) => a - b);
     const long = stratum(sameProto.filter(r => r.production_ps >= LONG_RUN_MIN_PS));
-    rungs.push({ rung: "independently replicated", status: "verified", short: `${st.n} runs of the same system and protocol with distinct seeds (${lengths[0]}–${lengths[lengths.length - 1]} ps)`,
-      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. ${signClaim(st)}`, to_climb: null });
+    // Seed replication is earned; matched-length replication (≥ 3 runs of one production length) is a stricter claim and is reported separately.
+    const byLen = new Map<number, IndexEntry[]>(); for (const r of sameProto) byLen.set(r.production_ps, [...(byLen.get(r.production_ps) ?? []), r]);
+    const matched = [...byLen.entries()].filter(([, rs]) => rs.length >= 3).map(([ps, rs]) => ({ ps, n: rs.length, sd: stratum(rs).sd }));
+    rungs.push({ rung: "independently replicated", status: "verified",
+      short: `${st.n} same-protocol runs with distinct seeds at mixed lengths (${lengths[0]}–${lengths[lengths.length - 1]} ps): seed-replicated${matched.length ? `; matched-length replication at ${matched.map(x => `${x.ps} ps (n=${x.n})`).join(", ")}` : "; no matched-length group of ≥ 3 runs"}`,
+      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. What this earns: the sign and the spread are robust to the seed; the numerical estimate is not replicated at one length${matched.length ? ` except at ${matched.map(x => `${x.ps} ps (n=${x.n}, SD ±${x.sd?.toFixed(2)})`).join(", ")}` : ""}. ${signClaim(st)}`,
+      to_climb: matched.length ? null : "≥ 3 independent runs at one production length (fork_experiment kind='replicate')" });
   } else rungs.push({ rung: "independently replicated", status: "not established", short: `${sameProto.length} run${sameProto.length === 1 ? "" : "s"} of this system and protocol on this site; 3 needed`,
     evidence: `${peers.length} run${peers.length === 1 ? "" : "s"} of this prepared system on this site, ${sameProto.length} with the same production protocol${seeded.length && distinct < sameProto.length ? ", not all with distinct seeds" : ""}; at least 3 independent runs (ig=-1, same protocol) are needed`, to_climb: "fork_experiment kind='replicate' (plan_sampling gives the number of runs)" });
   // 4 robust to reasonable analysis choices — analysis-window sensitivity only: each window's ΔG must sit within 2 corrected SEMs (of that window) of the archived value
@@ -607,7 +613,7 @@ export function confidenceLadder(m: Manifest, idx: IndexEntry[]) {
 
 // ---- fork this experiment: reproduce / replicate / extend ------------------------------
 export type ForkKind = "reproduce" | "replicate" | "extend";
-export interface ForkMeta { id: string; kind: ForkKind; parent: string; question: string | null; treatment: { key: string; meaning: string | null; class: ParamClass; from: Record<string, string>; to: string } | null; stages: string[]; controls: string[] }
+export interface ForkMeta { id: string; kind: ForkKind; parent: string; question: string | null; treatment: { key: string; meaning: string | null; class: ParamClass; from: Record<string, string>; to: string } | null; stages: string[]; controls: string[]; runs_per_condition?: number | null }
 let forkSeq = 0;
 /** Conditions held fixed in a controlled extension, as strings a reader can check against the stage inputs. */
 function controlsHeld(m: Manifest, treatmentKey: string | null): string[] {
@@ -661,10 +667,11 @@ export function forkExperiment(m: Manifest, idx: IndexEntry[], opts: { kind: For
   const unchanged = stages.filter(n => from[n] === to);
   if (unchanged.length) throw new Error(`${key} is already ${to} in ${unchanged.join(", ")}; every treated stage must change`);
   const question = opts.question?.trim() || null;
-  const meta: ForkMeta = { id, kind: "extend", parent: m.id, question, treatment: { key, meaning: SEMANTIC[key] ?? null, class: cls, from, to }, stages, controls: controlsHeld(m, key) };
+  let plan: ReturnType<typeof planSampling> | null = null; try { plan = planSampling(m, idx, {}); } catch { plan = null; }
+  const runsPerCondition = plan ? Math.max(3, plan.run_to_run.n_needed ?? 3) : null;
+  const meta: ForkMeta = { id, kind: "extend", parent: m.id, question, treatment: { key, meaning: SEMANTIC[key] ?? null, class: cls, from, to }, stages, controls: controlsHeld(m, key), runs_per_condition: runsPerCondition };
   const proposals: Proposal[] = stages.map(n => ({ ...makeProposal(m, n, { [key]: to }, question ?? `extend: ${key} ${from[n]} → ${to}`), fork: meta }));
   const heat = m.stages.find(s => s.role === "heating"); const first = m.stages.find(s => s.name === stages[0]);
-  let plan: ReturnType<typeof planSampling> | null = null; try { plan = planSampling(m, idx, {}); } catch { plan = null; }
   return { fork_id: id, kind: "extend" as const, parent: m.id, question, tests: "a controlled extension — one variable changed, the listed controls held; once executed and extracted, its card links back to this run as a child",
     treatment: meta.treatment, stages_changed: stages,
     stages_unchanged_note: cls === "thermodynamic_state" && heat && heat.cntrl[key] != null && !stages.includes(heat.name)
@@ -673,7 +680,7 @@ export function forkExperiment(m: Manifest, idx: IndexEntry[], opts: { kind: For
     controls_held: meta.controls, controls_note: controlsNote,
     proposals: proposals.map(p => ({ id: p.id, stage: p.stage, before: verdictOf(p.before), after: verdictOf(p.after), findings: p.after.findings.filter(f => f.level !== "PASS").map(f => `${f.level} ${f.rule}: ${f.detail}`) })),
     seed_policy: "fresh (ig=-1) recommended: MD is chaotic, so compare the extension as an ensemble against the parent's run-to-run spread, not one trajectory against one; seed='pinned' replays the parent's seed draw instead",
-    sampling: plan ? { runs_per_condition: Math.max(3, (plan.run_to_run.n_needed ?? 3)), min_run_ps: plan.recommended_run_ps, parent_run_to_run_sd: plan.run_to_run.sd_used } : null,
+    sampling: plan ? { runs_per_condition: runsPerCondition, min_run_ps: plan.recommended_run_ps, parent_run_to_run_sd: plan.run_to_run.sd_used, note: `one bundle = one member: with seed='fresh' (ig=-1) each execution draws a new seed, so run the bundle ${runsPerCondition} times (in separate copies — outputs share names) to build the treated ensemble; the parent's ${plan.run_to_run.n_now ?? "?"} runs are the control` } : null,
     next_steps: [`approve ${proposals.length} proposal${proposals.length === 1 ? "" : "s"} in the Proposals panel (human)`, "generate_rerun_bundle seed='fresh' target='local'|'slurm'", "run it elsewhere; extract the result as a child card"],
     note: approval, _proposals: proposals };
 }
