@@ -129,7 +129,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
 
       <div className="grid2">
         <div className="card">
-          <h2>Binding free energy <span className="dim">MM-GBSA, single trajectory</span></h2>
+          <h2>Binding free energy <span className="dim">MM-GBSA, single trajectory{mm?.params?.entropy === "0" ? ", no entropy term" : ""}</span></h2>
           {mm ? <>
             <div className="big">{fmt(mm.delta_total_kcal_mol)} <span className="unit">kcal/mol</span></div>
             <dl><dt>per-frame</dt><dd>SD {fmt(mm.frame_std)} · SEM {fmt(mm.frame_sem, 3)} over {mm.frames} frames <span className="dim">(population SD; frames are correlated, so this SEM understates uncertainty{mm.frames_header_text && mm.frames_header_text !== String(mm.frames) ? `; the mmgbsa.dat header prints "${mm.frames_header_text}" — (endframe−startframe)/interval+1 un-floored; the count here is from the per-frame blocks` : ""})</span></dd>

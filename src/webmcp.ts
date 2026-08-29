@@ -63,9 +63,11 @@ function summarize(name: string, out: any): string {
       case "list_proposals": return `${out.length} proposals (${out.filter((p: any) => p.status === "pending").length} pending)`;
       case "generate_rerun_bundle": return `${out.files.length} files, ${out.applied_proposals.length} approved edit${out.applied_proposals.length === 1 ? "" : "s"} applied; download on the page`;
       case "recompute_result": { const w = out.window; return `frames ${w.start_frame}–${w.end_frame}${w.interval > 1 ? ` every ${w.interval}th` : ""} (${w.frames_used}): ΔG ${f(out.delta_g.mean)} ± ${f(out.delta_g.corrected_sem)}, ${out.delta_g.verdict}; Δ vs archived ${f(out.vs_archived.diff)}; shown on the page`; }
-      case "plan_sampling": { const r = out.run_to_run, L = f(out.within_run.expected_length_for_target_ps, 0), T = out.target_uncertainty_kcal; return r.planned_on
-        ? `expected: ${r.additional_runs} more run${r.additional_runs === 1 ? "" : "s"} ≥ ${out.recommended_run_ps} ps for ±${T} (${r.planned_on} stratum: n=${r.n_now}, SD ${f(r.sd_used)}); one run alone would need ≈ ${L} ps`
-        : `expected: only run of its system, no run-to-run estimate; one run alone would need ≈ ${L} ps for ±${T}; ≥ 3 independent runs of ≥ ${out.recommended_run_ps} ps before an ensemble uncertainty can be quoted`; }
+      case "plan_sampling": { const r = out.run_to_run, Lp = out.within_run.expected_length_for_target_ps, T = out.target_uncertainty_kcal;
+        const one = Lp != null ? `one run alone would need ≈ ${f(Lp, 0)} ps` : `single-run length not projected (${out.within_run.this_run.verdict})`;
+        return r.planned_on
+        ? `expected: ${r.additional_runs} more run${r.additional_runs === 1 ? "" : "s"} ≥ ${out.recommended_run_ps} ps for ±${T} (${r.planned_on} stratum: n=${r.n_now}, SD ${f(r.sd_used)}); ${one}`
+        : `expected: only run of its system, no run-to-run estimate; ${one} for ±${T}; ≥ 3 independent runs of ≥ ${out.recommended_run_ps} ps before an ensemble uncertainty can be quoted`; }
     }
   } catch { /* fall through */ }
   return JSON.stringify(out).slice(0, 160);

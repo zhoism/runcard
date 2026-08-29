@@ -59,7 +59,7 @@ def parse_surf(path):
 
 def parse_mmpbsa_info(path):
     t = rd(path); info = {}
-    for k in ("startframe", "endframe", "interval", "surften", "surfoff", "igb", "saltcon", "receptor_mask", "ligand_mask", "molsurf"):
+    for k in ("startframe", "endframe", "interval", "surften", "surfoff", "igb", "saltcon", "receptor_mask", "ligand_mask", "molsurf", "entropy"):
         m = re.search(rf"^INPUT\['{k}'\]\s*=\s*(.+)$", t, re.M)
         if m: info[k] = m.group(1).strip().strip("'")
     m = re.search(r"^numframes\s*=\s*(\d+)", t, re.M)
@@ -178,7 +178,7 @@ def main():
             "frames": nframes, "frames_header_text": fr.group(1) if fr else None,
             "frames_note": "frame count from the per-frame mdout blocks, cross-checked with _MMPBSA_info numframes; mmgbsa.dat's header prints (endframe-startframe)/interval+1 un-floored",
             "igb": gb.get("igb"), "saltcon": gb.get("saltcon"),
-            "params": {k: info[k] for k in ("startframe", "endframe", "interval", "surften", "surfoff", "receptor_mask", "ligand_mask") if k in info},
+            "params": {k: info[k] for k in ("startframe", "endframe", "interval", "surften", "surfoff", "receptor_mask", "ligand_mask", "entropy") if k in info},   # entropy=0 → no −TΔS term: an interaction energy, not an absolute binding free energy
             "trajectory": "single (complex trajectory; receptor/ligand extracted)",
             "run_on": (re.search(r"Run on (.+)", t) or [None, None])[1],
             "mmpbsa_version": ver.group(1) if ver else None, "warnings": warns,

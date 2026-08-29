@@ -5,7 +5,7 @@
  "engine": "amber",
  "source": {
   "run_dir": "new-target-run",
-  "extracted": "2026-08-28"
+  "extracted": "2026-08-29"
  },
  "system": {
   "protein": {
@@ -284,7 +284,8 @@
     "surften": "0.0072",
     "surfoff": "0.0",
     "receptor_mask": ":1-163",
-    "ligand_mask": ":164"
+    "ligand_mask": ":164",
+    "entropy": "0"
    },
    "trajectory": "single (complex trajectory; receptor/ligand extracted)",
    "run_on": "Tue Jun  9 23:47:33 2026",

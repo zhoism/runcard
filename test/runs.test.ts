@@ -297,3 +297,17 @@ describe("review batch 2026-08-29 (workflow findings)", () => {
     expect(() => recomputeResult(A, { discard_ps: 100 })).toThrow(/discard_ps 100 ≥ the 5 ps production length/);
   });
 });
+
+describe("review batch 2026-08-29, part 2", () => {
+  it("entropy: every manifest records entropy=0 from _MMPBSA_info and explain_result states the caveat", () => {
+    for (const r of idx) expect(load(r.id).results.mmgbsa.params.entropy, r.id).toBe("0");
+    const e = explainResult(B, idx) as any;
+    expect(e.entropy_term).toMatch(/not computed/); expect(e.what_it_is).toMatch(/No entropy term .* not an absolute binding free energy/);
+  });
+  it("plan_sampling: a drifting run gets no single-run length projection, with the reason; a stationary run keeps it", () => {
+    const pA = planSampling(A, idx, {}); expect(uncertaintyFromFrames(A.results.mmgbsa.per_frame, 5).verdict).toBe("drifting");
+    expect(pA.within_run.expected_length_for_target_ps).toBeNull(); expect(pA.within_run.expected_length_note).toMatch(/drifting/);
+    expect(pA.recommendation).toMatch(/No single-run length is projected/); expect(pA.recommendation).not.toMatch(/≈ \d+(\.\d+)? ps \(expected\)/);
+    const pB = planSampling(B, idx, {}); expect(pB.within_run.expected_length_for_target_ps).toBeGreaterThan(0); expect(pB.within_run.expected_length_note).toBeNull();
+  });
+});

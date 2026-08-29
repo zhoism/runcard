@@ -5,7 +5,7 @@
  "engine": "amber",
  "source": {
   "run_dir": "happy-path-fixed-run",
-  "extracted": "2026-08-28"
+  "extracted": "2026-08-29"
  },
  "system": {
   "protein": {
@@ -285,7 +285,8 @@
     "surften": "0.0072",
     "surfoff": "0.0",
     "receptor_mask": ":1-20",
-    "ligand_mask": ":21"
+    "ligand_mask": ":21",
+    "entropy": "0"
    },
    "trajectory": "single (complex trajectory; receptor/ligand extracted)",
    "run_on": "Mon Jun  8 13:40:14 2026",

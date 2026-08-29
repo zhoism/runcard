@@ -232,7 +232,10 @@ export function planSampling(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}
   const stratumRow = (x: Stratum) => ({ n: x.n, sd: x.sd != null ? round(x.sd) : null, sem_of_mean: x.sd != null && x.n ? round(x.sd / Math.sqrt(x.n)) : null });
   // within-run
   const expSem = (Lps: number) => round(projectedSem(SD, g, dPs, Lps));
-  const lengthForTarget = round(g * dPs * (SD / T) ** 2, 1);
+  // The projection assumes stationarity. On a drifting or too-short series the autocorrelation truncates early and τ is not an estimate of anything (a 2 ps drifting run "reaches" the target at 2 ps); say so instead of printing a number.
+  const stationary = unc.verdict === "no drift detected";
+  const lengthForTarget = stationary ? round(g * dPs * (SD / T) ** 2, 1) : null;
+  const lengthNote = stationary ? null : `not projected: this run's convergence verdict is '${unc.verdict}', so its τ and SD are not a stationary estimate; the per-length table below is shown for scale only`;
   const Lrec = Math.max(minPs, L0);
   const spreadOverWithin = s != null ? round(s / unc.corrected_sem, 1) : null;
   // suggested edits: data for propose_change; nothing is proposed here
@@ -249,10 +252,10 @@ export function planSampling(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}
   } : null;
   const rerunNote = suggested ? null : `This run is already ≥ ${Lrec} ps; independent samples need no &cntrl edit — generate_rerun_bundle with seed='fresh' (ig=-1) for each new run.`;
   const recommendation = plannedOn == null
-    ? `expected: no run-to-run estimate — this is the only run of its prepared system. Within this run the corrected SEM is ${unc.corrected_sem} kcal/mol at ${L0} ps; one run would reach ±${T} at ≈ ${lengthForTarget} ps (expected, stationary). Seed-to-seed spread cannot be estimated from one run: at least 3 independent runs (ig=-1) of ≥ ${Lrec} ps are needed before an ensemble uncertainty can be quoted.`
+    ? `expected: no run-to-run estimate — this is the only run of its prepared system. Within this run the corrected SEM is ${unc.corrected_sem} kcal/mol at ${L0} ps; ${lengthForTarget != null ? `one run would reach ±${T} at ≈ ${lengthForTarget} ps (expected, stationary)` : `no single-run length is projected (verdict: ${unc.verdict})`}. Seed-to-seed spread cannot be estimated from one run: at least 3 independent runs (ig=-1) of ≥ ${Lrec} ps are needed before an ensemble uncertainty can be quoted.`
     : targetMet
       ? `expected: target ±${T} kcal/mol on the ensemble mean is already met on the ${plannedOn} stratum (n=${nNow}, SD ${round(s!, 2)}, SEM of mean ${round(semNow!, 2)}); 0 more runs needed.`
-      : `expected: ${additional} more independent run${additional === 1 ? "" : "s"} (ig=-1) of ≥ ${Lrec} ps each → n=${nNeeded}, SEM of the ensemble mean ≈ ${round(semAfter!, 2)} ≤ ${T} kcal/mol. Extending this run alone reaches ±${T} at ≈ ${lengthForTarget} ps (expected); run-to-run SD ${round(s!, 2)} is ${spreadOverWithin}× this run's corrected SEM, ${spreadOverWithin! >= 2 ? "so seed spread, not frame noise, limits the estimate" : spreadOverWithin! >= 1.2 ? "so seed spread and frame noise are comparable" : "so the run-to-run spread is not distinguishable from this run's frame noise"}.`;
+      : `expected: ${additional} more independent run${additional === 1 ? "" : "s"} (ig=-1) of ≥ ${Lrec} ps each → n=${nNeeded}, SEM of the ensemble mean ≈ ${round(semAfter!, 2)} ≤ ${T} kcal/mol. ${lengthForTarget != null ? `Extending this run alone reaches ±${T} at ≈ ${lengthForTarget} ps (expected)` : `No single-run length is projected for this run (verdict: ${unc.verdict})`}; run-to-run SD ${round(s!, 2)} is ${spreadOverWithin}× this run's corrected SEM, ${spreadOverWithin! >= 2 ? "so seed spread, not frame noise, limits the estimate" : spreadOverWithin! >= 1.2 ? "so seed spread and frame noise are comparable" : "so the run-to-run spread is not distinguishable from this run's frame noise"}.`;
   const assumptions = [
     plannedOn ? `The sample SD across the ${plannedOn} stratum (${nNow} runs) holds for new runs of ≥ ${Lrec} ps; it includes within-run noise (not decomposed), so it may shrink slightly with longer runs — not modelled.` : "No run-to-run SD is available from a single run.",
     "New runs are independent samples (ig=-1) of the same prepared system and protocol.",
@@ -271,7 +274,7 @@ export function planSampling(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}
       formula: "expected SEM(L) = SD · √(g·Δ/L) = SD · √((Δ + 2τ)/L), N = L/Δ frames",
       at_current_length: { length_ps: L0, expected_sem: expSem(L0) },
       expected_sem_by_length: PLAN_LENGTHS_PS.map(Lps => ({ length_ps: Lps, expected_frames_analysed: Math.round(Lps / dPs), expected_sem: expSem(Lps) })),
-      expected_length_for_target_ps: lengthForTarget, spread_over_within: spreadOverWithin },
+      expected_length_for_target_ps: lengthForTarget, expected_length_note: lengthNote, spread_over_within: spreadOverWithin },
     recommended_run_ps: Lrec, recommendation, suggested_edits: suggested, rerun_note: rerunNote, assumptions,
     method: "Run-to-run: n_needed = ⌈(SD_runs / target)²⌉ so that SD_runs/√n ≤ target. Within-run: corrected SEM projected as SD·√(g·Δ/L), g from Chodera 2007 on this run's per-frame ΔG. All from archived numbers; nothing simulated.",
   };
@@ -293,6 +296,8 @@ export function explainResult(m: Manifest, idx: IndexEntry[]) {
   const pf = mm.per_frame ?? null;
   const unc = pf ? uncertaintyFromFrames(pf, prod?.length_ps ?? null) : null;
   const resid = pf ? internalResidual(pf, mm.delta_total_kcal_mol) : null;
+  // MM-GBSA's largest caveat, read from _MMPBSA_info (entropy=0): no −TΔS term, and single-trajectory means no strain energy either.
+  const entropyNote = mm.params?.entropy === "0" ? "No entropy term (entropy=0) and a single trajectory (no ligand/receptor strain): this is an effective interaction energy for ranking poses or ligands, not an absolute binding free energy." : null;
   const spreadSd = ens.all.sd;
   // Name the stratum: explain_result quotes the all-runs SD; plan_sampling plans on the ≥ LONG_RUN_MIN_PS ps stratum when it has ≥ 3 runs. Say both so the two tools do not appear to disagree.
   const stratumNote = ens.long.sd != null && ens.long.n < ens.all.n ? `; the ≥ ${LONG_RUN_MIN_PS} ps stratum alone gives ±${ens.long.sd.toFixed(2)}, n=${ens.long.n}, which is what plan_sampling plans on` : "";
@@ -310,7 +315,8 @@ export function explainResult(m: Manifest, idx: IndexEntry[]) {
   return {
     brief,
     value_kcal_mol: mm.delta_total_kcal_mol,
-    what_it_is: `Single-trajectory MM-GBSA (igb=${mm.igb}, saltcon=${mm.saltcon}) binding free energy, averaged over ${mm.frames} frames (every ${mm.params?.interval ?? "?"}th of ${mm.params?.endframe ?? "?"}) of the ${prod?.length_ps} ps production stage.`,
+    what_it_is: `Single-trajectory MM-GBSA (igb=${mm.igb}, saltcon=${mm.saltcon}) binding free energy, averaged over ${mm.frames} frames (every ${mm.params?.interval ?? "?"}th of ${mm.params?.endframe ?? "?"}) of the ${prod?.length_ps} ps production stage.${entropyNote ? " " + entropyNote : ""}`,
+    entropy_term: mm.params?.entropy == null ? null : mm.params.entropy === "0" ? "not computed (entropy=0 in _MMPBSA_info)" : `computed (entropy=${mm.params.entropy})`,
     per_frame_std: mm.frame_std, per_frame_sem: mm.frame_sem, sd_convention: mm.sd_convention,
     uncertainty: unc, which_uncertainty_to_quote: which,
     stochasticity: { requested_seed: prod?.requested_seed, realized_seed: prod?.realized_seed, thermostat: `ntt=${prod?.cntrl.ntt} gamma_ln=${prod?.cntrl.gamma_ln}`,
