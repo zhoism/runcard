@@ -364,6 +364,7 @@ describe("fork_experiment", () => {
     expect(files["md/density.in"]).toMatch(/temp0=310\.0/); expect(files["md/product.in"]).toMatch(/temp0=310\.0/); expect(files["md/heat.in"]).toMatch(/temp0=300\.0/);
     expect(files["README.md"]).toMatch(/## Fork\n- kind: \*\*extend\*\* \(parent card: 1l2y-rep4; seed policy fresh\)\n- fork f\w+ — question: Does binding weaken at 310 K\?\n  - treatment: temp0 \(target temperature \(K\)\) → 310\.0 on density, product; before: density=300\.0, product=300\.0/);
     const mf = JSON.parse(files["manifest.json"]); expect(mf.parent).toBe("1l2y-rep4"); expect(mf.fork.kind).toBe("extend"); expect(mf.fork.forks[0].treatment.key).toBe("temp0"); expect(mf.fork.complete).toBe(true);
+    expect(files["README.md"]).toMatch(/ONE member of the \d+ planned for this condition; with seed policy fresh \(ig=-1\) each execution draws a new seed — run it \d+ times/); expect(files["README.md"]).not.toMatch(/\$\{/);
     // partial approval and combined forks are stated, not hidden
     const half = rerunBundle(B, { seed: "fresh", target: "local", approved: [approved[1]] });
     expect(half["README.md"]).toMatch(/partially approved: density NOT changed/); expect(JSON.parse(half["manifest.json"]).fork.complete).toBe(false);
