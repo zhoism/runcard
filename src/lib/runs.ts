@@ -694,10 +694,18 @@ export function forkExperiment(m: Manifest, idx: IndexEntry[], opts: { kind: For
     seed_policy: "pinned: each stage's ig set to the seed pmemd actually used", controls_held: controlsHeld(m, null), controls_note: controlsNote, proposals: [], next: { tool: "generate_rerun_bundle", input: { run_id: m.id, seed: "pinned", target: "local" } }, note: "No parameter changes, so no approval is needed; the bundle is generated directly. Different hardware or compilers may still diverge." };
   if (opts.kind === "replicate") {
     let plan: ReturnType<typeof planSampling> | null = null; try { plan = planSampling(m, idx, {}); } catch { plan = null; }
+    // Below 3 comparable runs there is no run-to-run SD, so plan_sampling cannot size the ensemble; say so and give the floor (3 = the replicated rung's threshold) instead of a null.
+    const nNow = ens?.all.n ?? 1; const MIN_RUNS = 3; const toFloor = Math.max(0, MIN_RUNS - nNow);
+    const sized = plan?.run_to_run.additional_runs != null && nNow >= 2;
+    const runsRec = { additional_runs: sized ? plan!.run_to_run.additional_runs : toFloor, minimum_runs: MIN_RUNS, min_run_ps: plan?.recommended_run_ps ?? null, target_uncertainty_kcal: plan?.target_uncertainty_kcal ?? null,
+      now: `${nNow} run${nNow === 1 ? "" : "s"} on this site`,
+      why: sized ? `sized from the observed run-to-run SD of ${nNow} runs to reach ±${plan!.target_uncertainty_kcal} kcal/mol on the ensemble mean (plan_sampling)`
+        : `no run-to-run estimate exists yet (${nNow} run${nNow === 1 ? "" : "s"}); at least ${MIN_RUNS} comparable independent runs (same protocol, ig=-1) are needed before a spread can be quoted — ${toFloor} more; plan_sampling can size the ensemble only after that` };
     return { fork_id: id, kind: opts.kind, parent: m.id, tests: "independent replication — once executed and extracted, an independent-seed run of the same protocol joins the run-to-run spread, which is the uncertainty to quote",
       seed_policy: "fresh: ig=-1, an independent sample of the same protocol", controls_held: controlsHeld(m, null), controls_note: controlsNote, proposals: [],
-      runs_recommended: plan ? { additional_runs: plan.run_to_run.additional_runs, min_run_ps: plan.recommended_run_ps, target_uncertainty_kcal: plan.target_uncertainty_kcal, now: ens ? `${ens.all.n} run${ens.all.n === 1 ? "" : "s"} on this site` : null } : null,
-      next: { tool: "generate_rerun_bundle", input: { run_id: m.id, seed: "fresh", target: "local" } }, note: "No parameter changes; no approval needed. Expect ΔG within the run-to-run spread, not equal." };
+      runs_recommended: runsRec,
+      next: { tool: "generate_rerun_bundle", input: { run_id: m.id, seed: "fresh", target: "local" } },
+      note: sized ? "No parameter changes; no approval needed. Expect ΔG within the run-to-run spread, not equal." : `No parameter changes; no approval needed. ${runsRec.why}.` };
   }
   // extend: one treatment variable, controls fixed, validated, pending human approval
   const t = opts.treatment;

@@ -367,6 +367,15 @@ describe("fork_experiment", () => {
     expect(forkExperiment(B, idx, { kind: "reproduce" }).tests).toMatch(/if the rerun is executed and its result compared/);
     const r = forkExperiment(B, idx, { kind: "reproduce" }); expect(r.next).toEqual({ tool: "generate_rerun_bundle", input: { run_id: "1l2y-rep4", seed: "pinned", target: "local" } }); expect(r.proposals).toEqual([]);
     const p = forkExperiment(B, idx, { kind: "replicate" }); expect(p.next!.input.seed).toBe("fresh"); expect((p as any).runs_recommended.additional_runs).toBeGreaterThanOrEqual(0);
+    expect((p as any).runs_recommended.why).toMatch(/sized from the observed run-to-run SD of 9 runs/);
+  });
+  it("replicate on a single-run site: no run-to-run estimate yet, 3 runs minimum, 2 more — never a null recommendation (RC-004 B)", () => {
+    const p = forkExperiment(C, idx, { kind: "replicate" }) as any;
+    expect(p.runs_recommended.now).toBe("1 run on this site");
+    expect(p.runs_recommended.minimum_runs).toBe(3); expect(p.runs_recommended.additional_runs).toBe(2);
+    expect(p.runs_recommended.why).toMatch(/no run-to-run estimate exists yet \(1 run\); at least 3 comparable independent runs/);
+    expect(p.note).toMatch(/at least 3 comparable independent runs/);
+    expect(p.note).not.toMatch(/within the run-to-run spread/);
   });
   it("an approved extension lands in the bundle with lineage: README ## Fork and manifest parent/fork; plain bundles record reproduce/replicate", () => {
     const f = forkExperiment(B, idx, { kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" });
