@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts } from "../src/lib/runs";
 import { mean, sd } from "../src/lib/stats";
 import { execFileSync } from "node:child_process";
 const load = (id: string) => JSON.parse(readFileSync(`public/runs/${id}/manifest.json`, "utf8"));
@@ -51,6 +51,15 @@ describe("diff/ensemble", () => {
     const e = ensemble(idx, "1l2y-regression"); expect(e.all.n).toBe(9); expect(e.all.max).toBeLessThan(0);
     expect(LONG_RUN_MIN_PS).toBe(10); expect(e.long.n).toBe(5); expect(e.long.runs.every(r => r.production_ps >= 10)).toBe(true);
     expect(explainResult(A, idx, true).run_to_run.all.n).toBe(9);
+  });
+  it("cohorts: index groups by prepared system + protocol; largest cohort first, longest run first and marked start_here; single run keeps its title and has no SD", () => {
+    const cs = cohorts(idx); expect(cs).toHaveLength(2);
+    const [a, b] = cs;
+    expect(a.n).toBe(9); expect(a.title).toBe("1L2Y + MOL"); expect(a.runs[0].id).toBe("1l2y-rep4"); expect(a.runs.map(r => r.id)).toHaveLength(9);
+    expect(a.lengths_ps).toEqual([2, 5, 10, 20, 30]); expect(a.sd).toBeCloseTo(0.656, 2); expect(a.mean).toBeCloseTo(ensemble(idx, "1l2y-rep4").all.mean!, 6); expect(a.start_here).toBe("1l2y-rep4");
+    for (let i = 1; i < a.runs.length; i++) expect(a.runs[i - 1].production_ps >= a.runs[i].production_ps).toBe(true);
+    expect(b.n).toBe(1); expect(b.title).toBe("3HTB + JZ4"); expect(b.sd).toBeNull(); expect(b.mean).toBeCloseTo(-27.4121, 4); expect(b.lengths_ps).toEqual([5]); expect(b.start_here).toBeNull();
+    expect(cohorts([])).toEqual([]);
   });
   it("sign claim is computed from the data", () => {
     const st = (g: number[]) => ({ n: g.length, mean: 0, sd: 0, min: Math.min(...g), max: Math.max(...g), negative: g.filter(x => x < 0).length, runs: [] });

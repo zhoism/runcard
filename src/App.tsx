@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Manifest, IndexEntry } from "./lib/types";
-import { loadIndex, loadRun, validateStage, ensemble, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, internalResidual } from "./lib/runs";
+import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, internalResidual } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
@@ -49,16 +49,25 @@ function Header() {
   );
 }
 
+/** The h2 line carries the cohort's mean ± run-to-run SD; rows do not repeat it. */
+const cohortLine = (c: Cohort) => c.n > 1
+  ? `${c.n} independent runs of one prepared system and protocol, ${c.lengths_ps[0]}–${c.lengths_ps[c.lengths_ps.length - 1]} ps · ΔG ${fmt(c.mean)} ± ${fmt(c.sd)} kcal/mol (run-to-run SD)`
+  : `1 run · ΔG ${fmt(c.mean)} kcal/mol (no run-to-run spread yet)`;
 function Home({ idx }: { idx: IndexEntry[] }) {
   useEffect(() => { document.title = "runcard"; }, []);
   return (
     <section>
       <h1>Simulation runs</h1>
-      <p className="lede">Each row is a molecular-dynamics run rendered from its artifacts: stages, parameters, seeds, results, environment. Open one and ask your agent about it — the page registers WebMCP tools (<code>navigator.modelContext</code>) to validate stages, compare runs, explain uncertainty, and build a rerun bundle.</p>
-      <div className="tablewrap"><table className="runs">
-        <thead><tr><th>run</th><th>ligand</th><th>protein atoms</th><th>production</th><th>ΔG MM-GBSA <span className="dim">kcal/mol</span></th><th>PLIP</th></tr></thead>
-        <tbody>{idx.map(r => <tr key={r.id} onClick={() => navigate(`/run/${r.id}`)}><td><a href={`#/run/${r.id}`}>{r.title}</a><div className="dim">{r.id}</div></td><td>{r.ligand}</td><td>{r.protein_atoms}</td><td>{r.production_ps} ps</td><td className="num">{fmt(r.delta_g)}</td><td>{r.plip ? "✓" : ""}</td></tr>)}</tbody>
-      </table></div>
+      <p className="lede">Each row is a molecular-dynamics run rendered from its artifacts: stages, parameters, seeds, results, environment. Runs of the same prepared system and protocol are grouped; their run-to-run spread is the uncertainty that matters. Open one and ask your agent about it — the page registers WebMCP tools (<code>navigator.modelContext</code>) to validate stages, compare runs, explain uncertainty, and build a rerun bundle.</p>
+      {cohorts(idx).map(c => (
+        <section key={c.key} className="cohort">
+          <h2>{c.title} <span className="dim">— {cohortLine(c)}</span></h2>
+          <div className="tablewrap"><table className="runs">
+            <thead><tr><th>run</th><th>ligand</th><th>protein atoms</th><th>production</th><th>ΔG MM-GBSA <span className="dim">kcal/mol</span></th><th>PLIP</th></tr></thead>
+            <tbody>{c.runs.map(r => <tr key={r.id} onClick={() => navigate(`/run/${r.id}`)}><td><a href={`#/run/${r.id}`}>{r.title}</a>{r.id === c.start_here && <span className="badge start">start here · longest run</span>}<div className="dim">{r.id}</div></td><td>{r.ligand}</td><td>{r.protein_atoms}</td><td>{r.production_ps} ps</td><td className="num">{fmt(r.delta_g)}</td><td>{r.plip ? "✓" : ""}</td></tr>)}</tbody>
+          </table></div>
+        </section>
+      ))}
     </section>
   );
 }

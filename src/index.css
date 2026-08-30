@@ -48,3 +48,6 @@ button { background:var(--acc); color:#04121c; border:0; border-radius:6px; padd
 dl.fork { grid-template-columns: max-content 1fr max-content; align-items:start; } dl.fork .act { display:block; } dl.fork .act button { margin:0; font-size:13px; padding:3px 9px; white-space:nowrap; }
 .ladder details.small { margin-top:2px; }
 .row { display:flex; } .call { font-size:13px; padding:5px 0; border-bottom:1px solid var(--line); } .call .args { color:var(--dim); } .call .what { margin-top:2px; }
+/* home: one section per cohort (same prepared system + protocol); the h2 carries the run-to-run statistic, the badge marks the data-derived starting run */
+.cohort { margin-top:22px; } .cohort h2 { color:var(--fg); font-size:15px; margin:0 0 8px; } .cohort h2 .dim { font-weight:400; }
+.cohort .badge.start { margin-left:8px; color:var(--acc); border-color:var(--acc); font-weight:500; vertical-align:1px; white-space:nowrap; }

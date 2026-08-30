@@ -117,6 +117,29 @@ export function signClaim(st: Stratum, label = ""): string {
   return `${st.negative} of ${st.n} runs give ΔG < 0 (${range}); the sign is not robust across runs.`;
 }
 
+// ---- cohorts: the home-page grouping --------------------------------------
+/** Runs of one prepared system and protocol. Their run-to-run spread is the uncertainty that matters; `start_here` is set only on the largest cohort and names its longest run. */
+export interface Cohort { key: string; title: string; runs: IndexEntry[]; n: number; mean: number | null; sd: number | null; lengths_ps: number[]; start_here: string | null }
+/** Longest common prefix of the titles, trimmed of trailing spaces, commas and "(" — "1L2Y + MOL (indole)" + "1L2Y + MOL, run 1" → "1L2Y + MOL". A single title is kept whole. */
+function commonTitle(titles: string[]): string {
+  if (titles.length === 1) return titles[0];
+  let p = titles[0];
+  for (const t of titles.slice(1)) { let i = 0; while (i < p.length && i < t.length && p[i] === t[i]) i++; p = p.slice(0, i); }
+  return p.replace(/[\s,(]+$/, "") || titles[0];
+}
+/** Group the index by system fingerprint + protocol. Largest cohort first; within a cohort the longest run first (then id). Statistics follow `ensemble` (sample SD, null when n < 2). */
+export function cohorts(idx: IndexEntry[]): Cohort[] {
+  const groups = new Map<string, IndexEntry[]>();
+  for (const r of idx) { const k = `${systemFingerprint(r.system)}||${r.protocol}`; groups.set(k, [...(groups.get(k) ?? []), r]); }
+  const out: Cohort[] = [...groups].map(([key, rs]) => {
+    const runs = [...rs].sort((a, b) => b.production_ps - a.production_ps || a.id.localeCompare(b.id));
+    const st = stratum(runs);
+    return { key, title: commonTitle(runs.map(r => r.title)), runs, n: st.n, mean: st.mean, sd: st.sd, lengths_ps: [...new Set(runs.map(r => r.production_ps))].sort((a, b) => a - b), start_here: null };
+  }).sort((a, b) => b.n - a.n || a.key.localeCompare(b.key));
+  if (out.length) out[0].start_here = out[0].runs[0].id;
+  return out;
+}
+
 // ---- explain --------------------------------------------------------
 /** Convergence thresholds, stated in the output so the verdict is checkable. */
 export const CONVERGENCE = { drift_sigma: 2, min_n_eff: 10 };
