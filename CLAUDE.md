@@ -30,8 +30,10 @@ reader-facing layer only — nothing runs or is authored here.
 
 - **A number is a claim.** Every figure on the page traces to a file in a run
   directory. "Verified" means executed and read; otherwise say "expected".
-- **Human approves, agent proposes.** `propose_change` is the only mutating
-  path and it stops at the Approve button. Keep it that way.
+- **Human approves, agent proposes.** Four of the fifteen tools are not
+  read-only. Only `propose_change` and `fork_experiment` can prepare a change to
+  a scientific input, and both stop at the Approve button; `generate_rerun_bundle`
+  and `export_evidence_brief` write page state only. Keep it that way.
 - **Minimum that solves it.** No accounts, uploads, live MD, DFT.
 - `bun run test` is the check. `bun run build` must pass before a push.
 

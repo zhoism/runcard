@@ -2,8 +2,10 @@
 // plus the page store; the same table drives document.modelContext.registerTool
 // and the in-page Tool Console (so a human can call exactly what an agent can).
 import { loadIndex, loadRun, validateStage, validateAll, explainResult, diffRuns, makeProposal, rerunBundle, bundleGaps, ensemble, recomputeResult, planSampling, verdictOf, confidenceLadder, forkExperiment } from "./lib/runs";
-import { get, set, logCall, navigate } from "./store";
+import { get, set, logCall, navigate, updateInvestigation } from "./store";
 import { checkAmberIn } from "./lib/amberCheck";
+import { buildEvidenceBrief, safeBriefFilename } from "./lib/evidenceBrief";
+import type { BundleSnapshot, EvidenceBriefSnapshot, InvocationSource } from "./lib/investigation";
 
 export interface Tool { name: string; description: string; inputSchema: object; readOnly: boolean; run: (input: any) => Promise<unknown> }
 const S = (props: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties: props, required });
@@ -38,13 +40,18 @@ export const TOOLS: Tool[] = [
       const buildFiles: Record<string, string> = {};
       for (const name of m.system.build_inputs?.present ?? []) { try { const r = await fetch(`/runs/${run_id}/build/${name}`); if (r.ok) buildFiles[name] = await r.text(); } catch { /* reported via gaps */ } }
       const files = rerunBundle(m, { seed, target, approved, buildFiles }); const gaps = bundleGaps(m, buildFiles);
-      set({ bundle: { name: `${run_id}-rerun-${seed}-${target}.zip`, files } }); navigate(`/run/${run_id}`);
-      return { files: Object.keys(files), self_contained: gaps.length === 0, still_needed_from_original_build: gaps, applied_proposals: approved.map(p => p.id), changed_stages: approved.map(p => ({ stage: p.stage, file: `md/${p.stage}.in`, changes: p.changes, fork: p.fork?.id ?? null })), readme: files["README.md"], run_sh: files["run.sh"] }; } },
+      const generatedAt = new Date().toISOString(); const name = `${run_id}-rerun-${seed}-${target}.zip`;
+      const changedStages = approved.map(p => ({ stage: p.stage, file: `md/${p.stage}.in`, changes: p.changes, fork: p.fork?.id ?? null }));
+      const forkIds = [...new Set(approved.flatMap(p => p.fork?.id ? [p.fork.id] : []))];
+      const forks = forkIds.map(id => { const meta = approved.find(p => p.fork?.id === id)!.fork!; const appliedStages = [...new Set(approved.filter(p => p.fork?.id === id).map(p => p.stage))]; const missingStages = meta.stages.filter(stage => !appliedStages.includes(stage)); return { id, question: meta.question, intendedStages: [...meta.stages], appliedStages, missingStages, complete: missingStages.length === 0 }; });
+      const snapshot: BundleSnapshot = { runId: run_id, name, files, seed, target, generatedAt, appliedProposalIds: approved.map(p => p.id), appliedProposals: approved.map(p => structuredClone(p)), changedStages, forks, combinesMultipleForks: forks.length > 1, selfContained: gaps.length === 0, missingInputs: gaps };
+      navigate(`/run/${run_id}`);
+      return { files: Object.keys(files), self_contained: gaps.length === 0, still_needed_from_original_build: gaps, applied_proposals: approved.map(p => p.id), changed_stages: changedStages, generated_at: generatedAt, readme: files["README.md"], run_sh: files["run.sh"], _bundle: snapshot }; } },
   { name: "get_ensemble", readOnly: true, description: "How much does ΔG vary across independent runs of this system? Run-to-run statistics for every run of the same prepared system as run_id (same ligand, atom types, charges, protein, force fields, solvent, box): n, mean, SD, min, max of ΔG for all runs and for runs ≥ 10 ps, with each run's production length.",
     inputSchema: S({ run_id: str("run id") }, ["run_id"]), run: async ({ run_id }) => ensemble(await loadIndex(), run_id) },
   { name: "recompute_result", readOnly: true, description: "What is ΔG if I drop the first 20 frames as equilibration, or use every other frame? Re-analyses the archived per-frame MM-GBSA energies in the browser over a window you choose (start_frame/end_frame, 1-based; interval; or discard_ps to drop the first X ps): mean ΔG, per-frame SD, autocorrelation-corrected SEM, N_eff, block averaging and drift verdict for that window, per-term means, and the difference from the archived value in corrected-SEM units. MMPBSA.py is not rerun; the full window reproduces mmgbsa.dat exactly. Shows the result under the ΔG card.",
     inputSchema: S({ run_id: str("run id"), start_frame: { type: "integer", description: "first frame, 1-based (default 1)" }, end_frame: { type: "integer", description: "last frame, inclusive (default: all)" }, interval: { type: "integer", description: "keep every k-th frame (default 1)" }, discard_ps: { type: "number", description: "drop the first X ps as equilibration (instead of start_frame)" } }, ["run_id"]),
-    run: async ({ run_id, ...w }) => { const r = recomputeResult(await loadRun(run_id), w); set({ reanalysis: { run: run_id, start_frame: r.window.start_frame, end_frame: r.window.end_frame, interval: r.window.interval, frames_used: r.window.frames_used, start_ps: r.window.start_ps, end_ps: r.window.end_ps, mean: r.delta_g.mean, corrected_sem: r.delta_g.corrected_sem, verdict: r.delta_g.verdict } }); navigate(`/run/${run_id}`); return r; } },
+    run: async ({ run_id, ...w }) => { const r = recomputeResult(await loadRun(run_id), w); navigate(`/run/${run_id}`); return r; } },
   { name: "plan_sampling", readOnly: true, description: "How much more sampling do I need to reach ±X kcal/mol on ΔG? Expected, not measured: from the run-to-run SD across independent runs of this system, the number of additional runs (ig=-1) for the SEM of the ensemble mean to reach the target; from this run's per-frame SD and autocorrelation time, the expected corrected SEM of one run at 5–100 ps and the length at which one run reaches the target; which of the two limits the answer; and the nstlim an agent can pass to propose_change (this tool proposes nothing). Every projection is labelled expected with its assumptions.",
     inputSchema: S({ run_id: str("run id"), target_uncertainty_kcal: { type: "number", description: "target SEM of the ensemble-mean ΔG, kcal/mol (default 0.25)" }, min_run_ps: { type: "number", description: "minimum production length for new runs, ps (default 10)" }, detail: { type: "boolean", description: "false (default): recommendation, run-to-run arithmetic, suggested edit; true: adds the per-length SEM table, strata, formulas" } }, ["run_id"]),
     run: async ({ run_id, ...o }) => planSampling(await loadRun(run_id), await loadIndex(), o) },
@@ -53,6 +60,21 @@ export const TOOLS: Tool[] = [
   { name: "fork_experiment", readOnly: false, description: "Fork this experiment. kind='reproduce': rerun the original as exactly as possible (pinned seeds; establishes repeatable). kind='replicate': same protocol, independent seeds (establishes independently replicated; says how many runs plan_sampling wants). kind='extend': ask a nearby scientific question by changing ONE treatment variable (a &cntrl key of class physics / thermodynamic_state / sampling_length / restraints, e.g. {\"key\":\"temp0\",\"value\":\"310.0\"}) while every other condition is held; returns the controlled diff (treatment before → after per stage, controls held, validation before/after) and creates one pending proposal per affected stage — NOTHING is applied until a person clicks Approve; then generate_rerun_bundle writes the bundle with the parent link. Thermodynamic-state treatments apply to equilibration + production (the heating ramp is left alone); others to production only, unless stages is given.",
     inputSchema: S({ run_id: str("run id"), kind: str("reproduce, replicate or extend", { enum: ["reproduce", "replicate", "extend"] }), treatment: { type: "object", description: "extend only: the one variable to change", properties: { key: str("&cntrl key, e.g. temp0"), value: str("new value as a string, e.g. 310.0") }, required: ["key", "value"] }, question: str("extend only: the scientific question, one sentence"), stages: { type: "array", items: { type: "string" }, description: "extend only: override which stages receive the treatment" } }, ["run_id", "kind"]),
     run: async ({ run_id, ...o }) => { const r = forkExperiment(await loadRun(run_id), await loadIndex(), o); const { _proposals, ...out } = r as any; if (_proposals?.length) set(s => ({ proposals: [..._proposals, ...s.proposals] })); navigate(`/run/${run_id}`); return out; } },
+  { name: "export_evidence_brief", readOnly: false, description: "Prepare a qualified Markdown evidence brief for one run. It returns the report to the caller and makes the same snapshot available for human copy/download on the page. include_session=false excludes transient reanalysis, plans, proposals and bundles. It does not approve, download, copy, post, email, write repository files, run MD, or validate against experiment.",
+    inputSchema: S({ run_id: str("run id from list_runs"), include_session: { type: "boolean", description: "include this visit's run-scoped reanalysis, sampling plan, proposals and prepared bundle (default true)" } }, ["run_id"]),
+    run: async (input) => {
+      if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("input must be an object");
+      const { run_id, include_session = true } = input;
+      if (typeof run_id !== "string") throw new Error("run_id must be a string");
+      safeBriefFilename(run_id);
+      if (typeof include_session !== "boolean") throw new Error("include_session must be a boolean");
+      const [m, idx] = await Promise.all([loadRun(run_id), loadIndex()]);
+      if (!idx.some(r => r.id === run_id)) throw new Error(`no run '${run_id}' in the run index. Call list_runs for valid run ids.`);
+      const origin = window.location.origin; const base = `${origin}${window.location.pathname}`;
+      const report = buildEvidenceBrief({ manifest: m, index: idx, cardUrl: `${base}#/run/${encodeURIComponent(run_id)}`, manifestUrl: `${origin}/runs/${encodeURIComponent(run_id)}/manifest.json`, generatedAt: new Date().toISOString(), includeSession: include_session, investigation: get().investigations[run_id], proposals: get().proposals });
+      navigate(`/run/${run_id}`);
+      return { run_id: report.runId, filename: report.filename, markdown: report.markdown, generated_at: report.generatedAt, included_sections: report.includedSections, _brief: report };
+    } },
 ];
 
 /** One readable line per call for the Tool Calls panel, so a human can follow what the agent learned without reading JSON. */
@@ -83,15 +105,33 @@ function summarize(name: string, out: any): string {
         return r.planned_on
         ? `expected: ${r.additional_runs} more run${r.additional_runs === 1 ? "" : "s"} ≥ ${out.recommended_run_ps} ps for ±${T} (${r.planned_on} stratum: n=${r.n_now}, SD ${f(r.sd_used)}); ${one}`
         : `expected: only run of its system, no run-to-run estimate; ${one} for ±${T}; ≥ 3 independent runs of ≥ ${out.recommended_run_ps} ps before an ensemble uncertainty can be quoted`; }
+      case "export_evidence_brief": return `${out.filename} prepared with ${out.included_sections.length} sections; copy/download available on the page`;
     }
   } catch { /* fall through */ }
   return JSON.stringify(out).slice(0, 160);
 }
 
-export async function callTool(name: string, input: unknown): Promise<string> {
+function recordOutcome(name: string, input: any, out: any, source: InvocationSource) {
+  const runId = typeof input?.run_id === "string" ? input.run_id : null;
+  if (!runId) return;
+  const completedAt = new Date().toISOString();
+  if (name === "recompute_result") updateInvestigation(runId, current => ({ ...current, reanalysis: { runId, source, completedAt, value: out } }));
+  if (name === "plan_sampling") updateInvestigation(runId, current => ({ ...current, samplingPlan: { runId, source, completedAt, value: out } }));
+  if (name === "fork_experiment" && typeof out?.fork_id === "string") updateInvestigation(runId, current => ({ ...current, forks: { ...current.forks, [out.fork_id]: { runId, source, completedAt, value: out } } }));
+  if (name === "generate_rerun_bundle" && out?._bundle) updateInvestigation(runId, current => ({ ...current, bundle: { runId, source, completedAt: out._bundle.generatedAt, value: out._bundle as BundleSnapshot } }));
+  if (name === "export_evidence_brief" && out?._brief) updateInvestigation(runId, current => ({ ...current, brief: { runId, source, completedAt: out._brief.generatedAt, value: out._brief as EvidenceBriefSnapshot } }));
+}
+
+const publicOutput = (out: any) => {
+  if (!out || typeof out !== "object" || Array.isArray(out)) return out;
+  const { _bundle: _b, _brief: _r, ...publicValue } = out;
+  return publicValue;
+};
+
+export async function callTool(name: string, input: unknown, source: InvocationSource = "console"): Promise<string> {
   const t = TOOLS.find(t => t.name === name); if (!t) throw new Error(`unknown tool ${name}`);
-  try { const out = await t.run(input ?? {}); logCall(name, input, true, summarize(name, out)); return JSON.stringify(out); }
-  catch (e: any) { logCall(name, input, false, String(e?.message ?? e)); return JSON.stringify({ error: String(e?.message ?? e) }); }
+  try { const out = await t.run(input ?? {}); recordOutcome(name, input, out, source); const visible = publicOutput(out); logCall(name, input, true, summarize(name, visible), source); return JSON.stringify(visible); }
+  catch (e: any) { logCall(name, input, false, String(e?.message ?? e), source); return JSON.stringify({ error: String(e?.message ?? e) }); }
 }
 
 export async function registerWebMCP() {
@@ -100,7 +140,7 @@ export async function registerWebMCP() {
   try {
     for (const t of TOOLS) {
       await mc.registerTool({ name: t.name, description: t.description, inputSchema: t.inputSchema, annotations: { readOnlyHint: t.readOnly },
-        execute: async (a: any) => callTool(t.name, a?.inputParams ?? a) });
+        execute: async (a: any) => callTool(t.name, a?.inputParams ?? a, "webmcp") });
     }
     set({ webmcp: "registered", tools: TOOLS.map(t => t.name) });
   } catch (e) { console.error("WebMCP registration failed", e); set({ webmcp: "error", tools: TOOLS.map(t => t.name) }); }

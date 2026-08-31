@@ -16,12 +16,12 @@ work that already happened.
 
 Open the live URL in ChatGPT's built-in browser, or in Chrome with
 `chrome://flags/#enable-webmcp-testing` enabled. The header should read
-`WebMCP: registered · 14 tools`. Without the flag it reads
+`WebMCP: registered · 15 tools`. Without the flag it reads
 `no WebMCP here — use the Tool Console ↓`, and the in-page **Tool Console** runs
 the identical tool table by hand — one table drives both, so the console is never
 a mock.
 
-A six-step pass that works end-to-end on the live site with real numbers:
+A seven-step pass that works end-to-end on the live site with real numbers:
 
 1. Open `1l2y-rep4` → archived ΔG is −19.20 kcal/mol.
 2. `recompute_result` → the mean and SD are re-derived from the per-frame
@@ -33,10 +33,14 @@ A six-step pass that works end-to-end on the live site with real numbers:
    (density, product); the heating ramp is deliberately left alone.
 6. Click **Approve**, then `generate_rerun_bundle` → a self-contained 13-file
    bundle whose `manifest.json` records the parent run and the fork.
+7. `export_evidence_brief` → a qualified Markdown snapshot of the archived
+   evidence and the run-scoped work actually completed during this visit.
 
 ## The tools
 
-Fourteen, of which only three are not read-only.
+Fifteen; eleven read-only. Of the four that are not: `propose_change` and
+`fork_experiment` prepare a change to a scientific input and stop at the Approve
+button; `generate_rerun_bundle` and `export_evidence_brief` write page state only.
 
 | | |
 |---|---|
@@ -46,6 +50,15 @@ Fourteen, of which only three are not read-only.
 | **Analyze** | `explain_result`, `recompute_result`, `get_ensemble`, `diff_runs` |
 | **Plan** | `plan_sampling`, `confidence_ladder`, `fork_experiment` |
 | **Change** | `propose_change` → `list_proposals` → `generate_rerun_bundle` |
+| **Export** | `export_evidence_brief` — prepares Markdown on the page; never posts, downloads, approves, or runs MD |
+
+### Question-driven investigations
+
+WebMCP, console, and page actions enter one typed, run-scoped investigation
+workspace. Reanalysis, sampling plans, forks, approvals, and generated bundles
+remain distinct outcomes rather than a forced tutorial sequence. Changing cards
+cannot show another run's transient evidence, and every bundle remains a
+historical snapshot of the proposal IDs applied when it was generated.
 
 ### Confidence ladder
 
@@ -86,8 +99,12 @@ works on your run.
 
 - **A number is a claim.** Every figure traces to a file. "Verified" means
   executed and read; anything else says *expected*.
-- **The agent proposes, a human approves.** `propose_change` and
-  `fork_experiment` are the only mutating paths, and both stop at the button.
+- **The agent proposes, a human approves.** Only `propose_change` and
+  `fork_experiment` can prepare a change to a scientific input, and both stop at
+  the Approve button. The other two tools that are not read-only,
+  `generate_rerun_bundle` and `export_evidence_brief`, write page state only: the
+  bundle contains nothing a human has not already approved, and the brief only
+  reports.
 - **The minimum that solves it.** No accounts, no uploads, no live MD, no DFT.
 
 ## The data
@@ -102,7 +119,7 @@ demonstrate refusing to quote a spread.
 ```
 bun install
 bun run dev        # http://localhost:5173
-bun run test       # 626 tests
+bun run test       # 640 tests
 bun run build
 ```
 

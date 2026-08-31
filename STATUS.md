@@ -1,6 +1,19 @@
 # STATUS — runcard
 
-Updated 2026-08-28 (Tiers A and B done; Codex review batch 1 done; see `~/.claude/plans/great-plan-it-distributed-key.md` for tiers B–D). Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
+Updated 2026-08-31. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
+
+## Investigation workspace build (local, not deployed)
+
+- Default build implemented: evidence-first home/run overview, typed outcomes keyed by run, invocation-source attribution, proposal/bundle snapshots, and a current-investigation panel. No fixed `investigate_everything` sequence was added; the agent still chooses tools in response to evidence.
+- Added `export_evidence_brief` (tool 15): pure Markdown builder plus page prepare/copy/download controls. Reports distinguish archive/reanalysis, within-run/run-to-run uncertainty, live proposal status, and the bundle's applied set at generation. `include_session:false` exports archived assessment only.
+- Added focused evidence-brief and mocked WebMCP registration/execution tests. The mocked registration is not a native-browser claim; real WebMCP verification for this build remains required after deployment.
+- This state is intentionally in-memory. Reloading clears investigations and proposals; exporting creates a snapshot, not durable identity or validation.
+
+### Deferred phases — explicitly not in this build
+
+1. Budget-aware planning: accept a run budget and return conditional candidate outcomes without claiming optimal design.
+2. Returned-run lineage: finish bundle-layout extraction and intended-versus-observed checks only when a genuine returned result is available.
+3. Dedicated usability/visual polish, then the demo video and submission writeup. Do not open another feature branch after that freeze unless a material bug appears.
 
 ## Where it stands
 
@@ -8,14 +21,14 @@ Updated 2026-08-28 (Tiers A and B done; Codex review batch 1 done; see `~/.claud
 |---|---|
 | Validator (`src/lib/amberCheck.ts`) | done — 11 rules, pinned to `check_amber.py` via `test/oracle/expected.json` over 553 inputs |
 | Manifests (`public/runs/`) | done — 10 runs, all fields extracted from artifacts by `tools/extract_run.py`; per-frame ΔG (100 frames × 9 GB terms) reconstructed from `_MMPBSA_*_gb.mdout.0` + SASA and gated on reproducing `mmgbsa.dat` exactly |
-| Tools (`src/webmcp.ts`, `src/lib/runs.ts`) | done — 14 tools (2026-08-29: `confidence_ladder`, `fork_experiment`; see the ladder/fork section below), one table drives WebMCP + in-page console. Added 2026-08-29: `recompute_result` (re-analysis over a frame window from the archived per-frame energies) and `plan_sampling` (expected additional runs / run length for a target uncertainty) |
+| Tools (`src/webmcp.ts`, `src/lib/runs.ts`) | done locally — 15 tools; one table drives WebMCP + in-page console. Tool 15, `export_evidence_brief`, prepares a qualified Markdown snapshot and does not approve, download, post, or run MD |
 | WebMCP in a real agent | **verified 2026-08-28** in ChatGPT's browser (localhost) and **2026-08-29 on the live URL** by Codex's browser (batch RC-20260828-02, `docs/coordination/`): 10 tools registered, full demo flow `validate_stage` → `explain_result` → `propose_change` → human Approve → `generate_rerun_bundle` with the approved dt=0.001 landing in the downloaded ZIP; live 404 recovery; 390 px no overflow; zero failures. **Batch 03 (2026-08-29, live d604351):** 12 tools registered; `recompute_result` + `plan_sampling` → `propose_change` → Approve → bundle chain verified from the downloaded ZIP; one real bug (RC-003, stale `ps` in the mdin title after a duration edit) found and fixed. **Batch 04 (2026-08-30, live 7d77378 → 2f7ac29):** 14 tools registered; `confidence_ladder` 2 of 4 + "partly established" accepted as the honest state (RC-004 A disputed, accepted); `fork_experiment` extend temp0=310 → 2 proposals → Approve both → 13-file self-contained bundle with Fork lineage, partial-approval warning, `stages:["heat"]` error, console prefill all verified live; RC-004 B (replicate on a 1-run site gave a null recommendation) fixed and verified on 2f7ac29. Codex's browser cannot capture downloads, so ZIPs are inspected from user-supplied archives: the **full fork** archive is verified (13 entries, 13475 B, SHA-256 `6005ea20…d8ae048` — `heat.in` temp0=300.0, `density.in`/`product.in` temp0=310.0 with ig=-1, README lineage with no partial warning, `manifest.json` parent=1l2y-rep4 and `fork.complete: true`). The **partial-approval** archive is verified too (13 entries, 13514 B, SHA-256 `e355d370…d4c854a5` — `density.in` 310 K, `product.in` and `heat.in` 300 K, README carries the partial-approval warning, `manifest.json` `stages_applied=[density]`, `stages_not_applied=[product]`, `fork.complete: false`). **Batch 04 complete** 2026-08-31T02:15Z after one fix/retest round, zero open issues. **Batch 05 (2026-08-31T02:18Z): passed clean, zero of three rounds used** — 14 tools, ladder 2 of 4 + partly established, replicate guidance, invalid-stage error, console prefill, and both bundle paths re-verified from Codex's own downloads (full `ee6f81b6…cc24f5c6`, 13475 B, `fork.complete=true`; partial `cfd194e1…1dc22dca25`, 13514 B, `fork.complete=false`). **Batch 06 (2026-08-31T02:20Z): passed clean, zero of three rounds used** — same matrix, both bundle paths re-verified from its own downloads (full `b24565b9…`, `fork.complete=true`; partial `4f2c1e94…`, `fork.complete=false`). **Batches 04–06 are complete; Codex mode is `complete`, its heartbeat deleted, and no `ready_for_claude` request is open.** Across the three batches the live build was exercised by a real WebMCP client 3× end-to-end with six independently downloaded archives inspected byte-for-byte; the only code change required was RC-004 B. The one item Codex structurally cannot test — the **flag-off header pill** — was verified here instead on live `index-DwFbZHdi.js` via headless Chrome (no WebMCP): the pill renders `no WebMCP here — use the Tool Console ↓` as `<a href="#tool-console">`, and clicking it scrolls 0 → 192 px with the Tool Console in view (top 147 px) while the hash stays `#/run/1l2y-rep4` and the h1 stays `1L2Y + MOL, run 4` — it does not route home |
 | Page renders | verified (headless Chrome): home, run, compare. WebGL-less browsers get a fallback instead of a crash |
 | Deploy | `https://runcard.vercel.app` public since 2026-08-28 (Deployment Protection off). **Live = 2f7ac29** (deployed 2026-08-29 from a clean `git worktree` of HEAD, bundle `index-DwFbZHdi.js`; previous: 7d77378 / `index-B7PiDcQK.js`, 6f317dc / `index-DEIhYtI0.js`, 3ef2cb5 / `index-BTW4-AZd.js`, fd8620c / `index-DsyBgKpr.js`, 662e98d / `index-CZfZNhsT.js`, b4491c3 / `index-Y31UbNAm.js`, ff85e2f / `index-USiMctXW.js`, f64789f / `index-CqSj8sfl.js`, 097a01a / `index-D8epXSVf.js`, 46ca5ba / `index-D_Ku5S9V.js`, d604351 / `index-DoMhorJt.js`). Deploy from a worktree whenever another session has uncommitted edits in the working tree; missing manifest → 404, which the loader handles. Project is not git-connected: every deploy is a CLI deploy |
 | Demo video, Devpost text | not started |
 | UI polish | first pass done 2026-08-28 (f39c348): sentence-case headings, ≥13 px text, ΔG at heading size, no horizontal overflow at 390 px (measured via CDP), header badge explains itself without WebMCP, Tool Calls panel readable, tool descriptions question-led, `explain_result.brief`. PASS is neutral and scoped as an input sanity check (2bd3127). Codex review batch 1 (`docs/coordination/`): RC-001, RC-002 fixed (a44bb7f). Not done: PLIP png/residue repeat, 12-thumbnail gallery hierarchy, MMPBSA warning styling, preprint theme (separate chat) |
 
-`bun run test` (611) and `bun run build` pass at HEAD. **Environment note (2026-08-29):** with the system Node 20.12 at `/usr/local/bin/node`, `bun run test`/`vite build` fail at startup inside rolldown (`util.styleText` array form needs Node ≥ 22). Run them under bun's runtime instead: `bun --bun x vitest run` and `bun --bun run build`.
+`bun --bun x vitest run` (640 tests) and `bun --bun run build` pass in the current checkout. **Environment note (2026-08-29):** with the system Node 20.12 at `/usr/local/bin/node`, `bun run test`/`vite build` fail at startup inside rolldown (`util.styleText` array form needs Node ≥ 22). Run them under bun's runtime instead: `bun --bun x vitest run` and `bun --bun run build`.
 
 ## Review 2026-08-29 (five-dimension workflow on live d604351)
 
@@ -74,14 +87,16 @@ src/webmcp.ts       TOOLS[] — name, description, JSON schema, readOnly, run()
                     registerWebMCP(): navigator.modelContext.registerTool for each
                     callTool(): shared by the agent path and the in-page Tool Console; logs every call
         │
-src/store.ts        tiny external store: route (hash), proposals, calls, bundle, reanalysis, webmcp status
-src/App.tsx         Home / RunPage / ComparePage / Sidebar (Proposals, Bundle, Tool Console, Tool Calls)
+src/store.ts        tiny external store: route, proposals, sourced calls, typed investigations keyed by run, WebMCP status
+src/App.tsx         Home / RunPage / ComparePage / Current Investigation / Sidebar
 src/Viewer.tsx      3Dmol viewer with WebGL fallback + error Boundary
 ```
 
-Invariants (from CLAUDE.md): a number is a claim — every figure traces to a file; `propose_change` is the only
-mutating tool and stops at the Approve button; read tools may navigate the page (`get_run_manifest`, `diff_runs`,
-`propose_change`, `generate_rerun_bundle`) so the agent's actions are visible to the human.
+Invariants (from CLAUDE.md): a number is a claim — every figure traces to a file; four of the fifteen tools are
+not read-only, and only `propose_change` and `fork_experiment` can prepare a change to a scientific input — both stop
+at the Approve button, while `generate_rerun_bundle` and `export_evidence_brief` write page state only; a tool that
+answers about one run navigates the page to it (`get_run_manifest`, `diff_runs`, `recompute_result`, `propose_change`,
+`generate_rerun_bundle`, `fork_experiment`, `export_evidence_brief`) so the agent's actions are visible to the human.
 
 ## Tools
 
@@ -94,8 +109,11 @@ mutating tool and stops at the Approve button; read tools may navigate the page 
 | `explain_result` | no | ΔG meaning; naive vs autocorrelation-corrected SEM, N_eff, drift verdict; which uncertainty to quote; seeds; run-to-run spread (all / ≥10 ps); sign claim; MMPBSA warning verbatim + quantified residual; provenance |
 | `diff_runs` | no (navigates) | same-system?, system diff, per-stage &cntrl diff with meaning/materiality, interpretation |
 | `get_ensemble` | no | n/mean/SD/min/max of ΔG across same-system runs |
-| `recompute_result` | no (navigates; sets the page's "agent reanalysis" line) | ΔG, SD, corrected SEM, N_eff, drift verdict, per-term means over a chosen frame window (`start_frame`/`end_frame`/`interval` or `discard_ps`), Δ vs archived in corrected-SEM units; from archived per-frame energies only, MMPBSA.py not rerun; full window reproduces mmgbsa.dat |
+| `recompute_result` | no (navigates; records a sourced run-scoped outcome) | ΔG, SD, corrected SEM, N_eff, drift verdict, per-term means over a chosen frame window (`start_frame`/`end_frame`/`interval` or `discard_ps`), Δ vs archived in corrected-SEM units; from archived per-frame energies only, MMPBSA.py not rerun; full window reproduces mmgbsa.dat |
 | `plan_sampling` | no | **expected**: additional runs for a target SEM of the ensemble mean (run-to-run SD), expected single-run SEM at 5–100 ps and the length that reaches the target, which term limits the answer, `nstlim` as data for `propose_change`; assumptions listed |
+| `confidence_ladder` | no | five rungs, each with status, the evidence behind it, and what would climb it; compact by default, `detail: true` for the full record |
+| `fork_experiment` | **yes → pending** (extend only) | reproduce/replicate: seed policy and how many runs the spread still needs; extend: the controlled diff plus one pending proposal per affected stage, nothing applied until Approve |
 | `propose_change` | **yes → pending** | bounded &cntrl edit, validated before/after, awaits Approve |
 | `list_proposals` | no | proposals + status |
 | `generate_rerun_bundle` | yes (page state) | .in files (approved edits applied), leap.in, run.sh, README, env pins |
+| `export_evidence_brief` | yes (page report state) | qualified Markdown snapshot; optional run-scoped session outcomes; never approves, downloads, posts, or runs MD |

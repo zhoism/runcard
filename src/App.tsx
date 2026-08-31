@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { Manifest, IndexEntry } from "./lib/types";
-import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, internalResidual } from "./lib/runs";
+import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
 import { TOOLS, callTool } from "./webmcp";
 import { Viewer, Boundary } from "./Viewer";
+import type { InvestigationState } from "./lib/investigation";
 
 /** "run_id=1l2y-regression stage=product" — the call's arguments, readable at a glance. */
 const fmtArgs = (input: unknown) => input && typeof input === "object" && !Array.isArray(input) ? Object.entries(input as Record<string, unknown>).map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`).join(" ") : input == null ? "" : JSON.stringify(input);
@@ -55,11 +56,12 @@ const cohortLine = (c: Cohort) => c.n > 1
   : `1 run · ΔG ${fmt(c.mean)} kcal/mol (no run-to-run spread yet)`;
 function Home({ idx }: { idx: IndexEntry[] }) {
   useEffect(() => { document.title = "runcard"; }, []);
+  const cs = cohorts(idx);
   return (
     <section>
-      <h1>Simulation runs</h1>
-      <p className="lede">Each row is a molecular-dynamics run rendered from its artifacts: stages, parameters, seeds, results, environment. Runs of the same prepared system and protocol are grouped; their run-to-run spread is the uncertainty that matters. Open one and ask your agent about it — the page registers WebMCP tools (<code>navigator.modelContext</code>) to validate stages, compare runs, explain uncertainty, and build a rerun bundle.</p>
-      {cohorts(idx).map(c => (
+      <h1>Simulation runs and their evidence</h1>
+      <p className="lede">Each row is a molecular-dynamics run rendered from its artifacts: stages, parameters, seeds, results, environment. Runs of the same prepared system and protocol are grouped; their run-to-run spread is the uncertainty that matters. Open one and ask your agent about it — the page registers WebMCP tools (<code>navigator.modelContext</code>) to validate stages, compare runs, explain uncertainty, plan sampling, and prepare a controlled follow-up that waits for your approval.</p>
+      {cs.map(c => (
         <section key={c.key} className="cohort">
           <h2>{c.title} <span className="dim">— {cohortLine(c)}</span></h2>
           <div className="tablewrap"><table className="runs">
@@ -70,6 +72,27 @@ function Home({ idx }: { idx: IndexEntry[] }) {
       ))}
     </section>
   );
+}
+
+/** Requests to hand an agent, written for the run on screen. Code blocks, not textareas: a prompt is text
+    you copy out, not a field you fill in. The partner is a same-system peer where one exists. */
+function AgentPrompts({ runId, partnerId }: { runId: string; partnerId?: string }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const card = (id: string) => `${window.location.origin}${window.location.pathname}#/run/${id}`;
+  const prompts = [
+    { id: "evidence", label: "Inspect the evidence", text: `Check what supports this result and what is still uncertain. Use the tools on ${card(runId)} and do not claim more than the evidence supports.` },
+    ...(partnerId ? [{ id: "compare", label: "Check comparability", text: `Check whether ${runId} and ${partnerId} are comparable and explain their differences. Start from ${card(runId)} and investigate before drawing a conclusion.` }] : []),
+    { id: "followup", label: "Prepare a controlled follow-up", text: `Using ${card(runId)}, prepare a controlled temperature change and explain what stays fixed. Stop at a pending proposal and wait for my approval.` },
+  ];
+  const copy = async (id: string, text: string) => { try { await navigator.clipboard.writeText(text); setCopied(id); } catch { setCopied(`error:${id}`); } };
+  return <>
+    <p className="dim small">Hand one of these to your agent — each names this run's card URL.</p>
+    <div className="request-examples" aria-label="Example requests for your agent">{prompts.map(p => <div className="request" key={p.id}>
+      <h3>{p.label}</h3><pre className="small">{p.text}</pre>
+      <button className="ghost" onClick={() => copy(p.id, p.text)} aria-label={`Copy the ${p.label.toLowerCase()} prompt`}>Copy prompt</button>
+      {copied === p.id && <span className="dim small" role="status">Copied</span>}{copied === `error:${p.id}` && <span className="fail small" role="status">Clipboard unavailable — select the text above.</span>}
+    </div>)}</div>
+  </>;
 }
 
 /** Settled load failure: the message names the run and the cause; the reader can go back or retry (the loader evicts failed loads, so retry refetches). */
@@ -84,7 +107,8 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const [err, setErr] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
-  const re = useStore(s => s.reanalysis);
+  const investigation = useStore(s => s.investigations[id]);
+  const re = investigation?.reanalysis?.value;
   useEffect(() => {
     let live = true; setM(null); setErr(null);
     loadRun(id).then(x => { if (live) setM(x); }, e => { if (live) setErr(String(e?.message ?? e)); });
@@ -102,6 +126,8 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const u = mm?.per_frame ? uncertaintyFromFrames(mm.per_frame, prod?.length_ps ?? null) : null;
   const resid = mm?.per_frame ? internalResidual(mm.per_frame, mm.delta_total_kcal_mol) : null;
   const spreadSd = ens && ens.all.n > 1 ? ens.all.sd : null;
+  const ladder = idx.length ? confidenceLadderFull(m, idx) : null;
+  const explanation = idx.length ? explainResult(m, idx) as any : null;
   return (
     <section className="run">
       <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
@@ -121,9 +147,9 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
                 {ens.long.n > 0 && ens.long.n < ens.all.n && <><br /><b>n={ens.long.n}</b> runs ≥ {ens.long.min_ps} ps: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</>}
                 <span className="dim"> — seed-to-seed variation over 2–30 ps from one prepared start; production lengths differ across runs</span></dd></>}
               {u && <><dt>within run</dt><dd>corrected SEM <b>{fmt(u.corrected_sem, 3)}</b> (g = {u.statistical_inefficiency_g}, N<sub>eff</sub> ≈ {u.n_eff}) · halves {fmt(u.halves.first)} → {fmt(u.halves.second)} · <b>{u.verdict}</b> <span className="dim">(halves test over {prod?.length_ps ?? "?"} ps)</span></dd></>}
-              {re && re.run === m.id && <><dt>agent reanalysis</dt><dd>frames {re.start_frame}–{re.end_frame}{re.interval > 1 ? ` every ${re.interval}th` : ""} ({re.frames_used} frames{re.start_ps != null ? `, ${re.start_ps}–${re.end_ps} ps` : ""}) → <b>{fmt(re.mean)} ± {fmt(re.corrected_sem)}</b>, {re.verdict} <span className="dim">(recomputed in the browser from the archived per-frame energies; ± is the corrected SEM; the archived value above is unchanged)</span></dd></>}
+              {re && <><dt>current reanalysis</dt><dd>frames {re.window.start_frame}–{re.window.end_frame}{re.window.interval > 1 ? ` every ${re.window.interval}th` : ""} ({re.window.frames_used} frames{re.window.start_ps != null ? `, ${re.window.start_ps}–${re.window.end_ps} ps` : ""}) → <b>{fmt(re.delta_g.mean)} ± {fmt(re.delta_g.corrected_sem)}</b>, {re.delta_g.verdict} <span className="dim">(recomputed in the browser from the archived per-frame energies; ± is the corrected SEM; the archived value above is unchanged)</span></dd></>}
               <dt>method</dt><dd>MM-GBSA igb={mm.igb}, saltcon={mm.saltcon} · computed {mm.run_on}</dd></dl>
-            {mm.per_frame && <Sparkline x={mm.per_frame.delta_total} lengthPs={prod?.length_ps ?? null} window={re && re.run === m.id ? { start: re.start_frame, end: re.end_frame } : undefined} />}
+            {mm.per_frame && <Sparkline x={mm.per_frame.delta_total} lengthPs={prod?.length_ps ?? null} window={re ? { start: re.window.start_frame, end: re.window.end_frame } : undefined} />}
             <details className="small"><summary className="dim">how these numbers were computed</summary>
               <p className="dim">Per-frame: population SD {fmt(mm.frame_std)}, naive SEM {fmt(mm.frame_sem, 3)} over {mm.frames} frames (every {mm.params?.interval ?? "?"}th of {mm.params?.endframe ?? "?"}); frames are correlated, so the naive SEM understates the within-run uncertainty.{mm.frames_header_text && mm.frames_header_text !== String(mm.frames) ? ` The mmgbsa.dat header prints "${mm.frames_header_text}" — (endframe−startframe)/interval+1 un-floored; the count here is from the per-frame blocks.` : ""}</p>
               {u && <p className="dim">Corrected SEM = SD·√(g/N) with g = 1 + 2Σ(1−t/N)C(t) (τ = {u.integrated_autocorrelation_time_frames} frames); drift verdict: {u.thresholds.drifting_if}; too short if {u.thresholds.too_short_if}. Reconstructed from the per-frame mdout files; the full window reproduces mmgbsa.dat exactly.</p>}
@@ -172,7 +198,10 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
         {m.structure && <Boundary label="Structure"><div className="card"><h2>Structure <span className="dim">cluster medoid, dry</span></h2><Viewer url={`/runs/${m.id}/${m.structure}`} ligand={m.system.ligand.resname} /></div></Boundary>}
       </div>
 
-      {idx.length > 0 && (() => { const L = confidenceLadderFull(m, idx); const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
+      {ladder && <EvidenceOverview ladder={ladder} explanation={explanation} investigation={investigation} validationVerdict={overall} />}
+      <CurrentInvestigation runId={id} investigation={investigation} />
+
+      {ladder && (() => { const L = ladder; const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
         <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} assessed rungs verified{L.rungs.some(r => r.status === "partly established") ? ` · ${L.rungs.filter(r => r.status === "partly established").length} partly established` : ""} · 1 not assessed · computed from the archived data</span></h2>
         <ol className="ladder">{L.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><span className="dim mono">{i + 1}.</span> <span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span>
           <details className="small"><summary className="dim">evidence</summary><p className="dim">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</p></details></li>)}</ol>
@@ -181,12 +210,13 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
       <div className="card"><h2>Fork this experiment <span className="dim">Reproduce and replicate change no inputs, so no proposal is needed. Extend changes one variable, so it waits for your approval.</span></h2>
         <dl className="fork">
           <dt>reproduce</dt><dd>rerun the original as exactly as possible: pinned seeds, same build — tests <i>repeatability</i> if executed and compared; it cannot show the result is stable.</dd>
-          <div className="act"><button className="ghost" onClick={() => callTool("generate_rerun_bundle", { run_id: m.id, seed: "pinned", target: "local" })}>build pinned bundle</button></div>
+          <div className="act"><button className="ghost" onClick={() => callTool("generate_rerun_bundle", { run_id: m.id, seed: "pinned", target: "local" }, "page")}>build pinned bundle</button></div>
           <dt>replicate</dt><dd>same protocol, independent seeds (ig=-1) — {ens && ens.all.n > 1 ? "an executed rerun joins the run-to-run spread above" : "an executed rerun would start the run-to-run spread this card lacks"}.</dd>
-          <div className="act"><button className="ghost" onClick={() => callTool("fork_experiment", { run_id: m.id, kind: "replicate" })}>plan a replicate</button></div>
+          <div className="act"><button className="ghost" onClick={() => callTool("fork_experiment", { run_id: m.id, kind: "replicate" }, "page")}>plan a replicate</button></div>
           <dt>extend</dt><dd>change one variable, hold the listed controls: the controlled diff is validated and waits for your approval before a bundle exists.</dd>
           <div className="act"><button className="ghost" onClick={() => { set({ console: { tool: "fork_experiment", input: JSON.stringify({ run_id: m.id, kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" }, null, 1) } }); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>prefill the console with an extension (temp0 → 310 K) →</button></div>
         </dl>
+        <AgentPrompts runId={m.id} partnerId={ens?.all.runs.find(r => r.id !== m.id)?.id ?? others[0]?.id} />
       </div>
 
       <div className="card"><h2>Analyses <span className="dim">cpptraj</span></h2>
@@ -200,6 +230,47 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
     </section>
   );
 }
+
+function EvidenceOverview({ ladder, explanation, investigation, validationVerdict }: { ladder: ReturnType<typeof confidenceLadderFull>; explanation: any; investigation?: InvestigationState; validationVerdict: string }) {
+  const missing = ladder.rungs.filter(r => r.status !== "verified");
+  const replicate = ladder.rungs.find(r => r.rung === "independently replicated");
+  const plan: any = investigation?.samplingPlan?.value;
+  return <section className="evidence-overview" aria-labelledby="evidence-overview-title">
+    <h2 id="evidence-overview-title">Evidence overview <span className="dim">what this record supports before you build on it</span></h2>
+    <div className="evidence-grid">
+      <div><h3>Checks supporting it</h3><p><b>{ladder.verified_of_assessable} assessed rungs verified.</b> Input sanity checks: {validationVerdict}. A passing input check is not convergence or physical accuracy.</p></div>
+      <div><h3>Still unestablished</h3><p>{missing.map(r => `${r.rung}: ${r.status}`).join("; ")}. {explanation?.within_run?.verdict ? `Archived-window verdict: ${explanation.within_run.verdict}.` : "Within-run drift could not be assessed."}</p></div>
+      <div><h3>Next relevant action</h3><p>{replicate?.to_climb ?? "Inspect the detailed evidence below."}</p>{plan && <p className="dim small"><b>Separate precision target:</b> {plan.recommendation}</p>}</div>
+    </div>
+  </section>;
+}
+
+function CurrentInvestigation({ runId, investigation }: { runId: string; investigation?: InvestigationState }) {
+  // Subscribe to the stable array and filter outside the selector: useStore passes the selector straight to
+  // useSyncExternalStore as getSnapshot, so returning a fresh array here re-renders without end (React #185).
+  const proposals = useStore(s => s.proposals).filter(p => p.run === runId);
+  const [message, setMessage] = useState<string | null>(null);
+  const re = investigation?.reanalysis; const plan: any = investigation?.samplingPlan; const forks = Object.values(investigation?.forks ?? {}); const bundle = investigation?.bundle?.value; const brief = investigation?.brief?.value;
+  const downloadBlob = (content: BlobPart, type: string, filename: string) => { const url = URL.createObjectURL(new Blob([content], { type })); const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); };
+  const prepare = async () => { const raw = await callTool("export_evidence_brief", { run_id: runId, include_session: true }, "page"); const out = JSON.parse(raw); setMessage(out.error ? out.error : "Evidence brief prepared."); };
+  const copyBrief = async () => { if (!brief) return; try { await navigator.clipboard.writeText(brief.markdown); setMessage("Brief copied."); } catch { setMessage("Clipboard unavailable — the prepared Markdown remains available to download."); } };
+  const hasActivity = !!(re || plan || forks.length || proposals.length || bundle);
+  return <section className="card investigation" aria-labelledby="investigation-title">
+    <h2 id="investigation-title">Current investigation <span className="dim">completed actions from this visit, scoped to {runId}</span></h2>
+    {!hasActivity && <p className="dim">No transient analysis or follow-up has been prepared for this run. Ask an agent one of the example questions, or use the Tool Console.</p>}
+    {re && <div className="investigation-item"><h3>Reanalysis <Source source={re.source} /></h3><p>Frames {re.value.window.start_frame}–{re.value.window.end_frame}{re.value.window.interval > 1 ? ` every ${re.value.window.interval}th` : ""}: <b>{fmt(re.value.delta_g.mean)} ± {fmt(re.value.delta_g.corrected_sem)} kcal/mol</b>, {re.value.delta_g.verdict}. Difference from archive: {fmt(re.value.vs_archived.diff)} kcal/mol. The archive is unchanged.</p></div>}
+    {plan && <div className="investigation-item"><h3>Sampling plan <Source source={plan.source} /></h3><p><span className="badge warn">expected, not measured</span> Target ±{fmt(plan.value.target_uncertainty_kcal)} kcal/mol on the ensemble mean. {plan.value.recommendation}</p>{plan.value.run_to_run.n_needed_range && <p className="dim small">Estimation range n={plan.value.run_to_run.n_needed_range.low}–{plan.value.run_to_run.n_needed_range.high}. Principal assumptions: {plan.value.assumptions.join(" ")}</p>}</div>}
+    {forks.map(f => { const v: any = f.value; return <div className="investigation-item" key={v.fork_id}><h3>{v.kind} fork <Source source={f.source} /></h3><p>{v.question || v.tests}</p>{v.treatment && <p><b>{v.treatment.key}</b>: {Object.entries(v.treatment.from).map(([s, x]) => `${s} ${x}`).join(", ")} → {v.treatment.to}; changed stages: {v.stages_changed.join(", ")}.</p>}<p className="dim small">{v.stages_unchanged_note || v.controls_note}</p></div>; })}
+    {proposals.length > 0 && <div className="investigation-item"><h3>Human review</h3><p>{proposals.map(p => <span key={p.id} className={`proposal-chip ${p.status}`}>{p.stage}: {p.status}</span>)}</p><p className="dim small">Approval and rejection remain human actions in the Proposals panel.</p></div>}
+    {bundle && <div className="investigation-item"><h3>Prepared rerun bundle <Source source={investigation!.bundle!.source} /></h3><p><b>{bundle.name}</b> · {bundle.appliedProposalIds.length} approved proposal{bundle.appliedProposalIds.length === 1 ? "" : "s"} captured at generation · {bundle.selfContained ? "self-contained" : `missing ${bundle.missingInputs.join(", ")}`}. Prepared does not mean simulated.</p>{bundle.forks.map(f => <p className={f.complete ? "dim small" : "warnbox"} key={f.id}>Fork {f.id}: {f.complete ? "complete at generation" : `partially approved — ${f.missingStages.join(", ")} not applied`}.</p>)}{bundle.combinesMultipleForks && <p className="warnbox">This bundle combines multiple fork questions.</p>}
+      <details className="small"><summary className="dim">{Object.keys(bundle.files).length} files in this bundle</summary><pre className="small">{Object.keys(bundle.files).join("\n")}</pre></details>
+      <button onClick={() => downloadBlob(zipBundle(bundle.files) as BlobPart, "application/zip", bundle.name)}>Download bundle</button></div>}
+    <div className="investigation-actions"><button onClick={prepare}>Prepare evidence brief</button>{brief && <><button className="ghost" onClick={copyBrief}>Copy brief</button><button className="ghost" onClick={() => downloadBlob(brief.markdown, "text/markdown;charset=utf-8", brief.filename)}>Download Markdown</button><span className="dim small">snapshot {new Date(brief.generatedAt).toLocaleString()}</span></>}</div>
+    {message && <p role="status" className={message.includes("unavailable") ? "fail small" : "dim small"}>{message}</p>}
+  </section>;
+}
+
+function Source({ source }: { source: string }) { return <span className="source-label">via {source === "webmcp" ? "agent / WebMCP" : source === "console" ? "manual console" : "page action"}</span>; }
 
 /** Per-frame ΔG with running mean. Inline SVG; every point is a number from the manifest. */
 function Sparkline({ x, lengthPs, window }: { x: number[]; lengthPs: number | null; window?: { start: number; end: number } }) {
@@ -246,7 +317,7 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
 }
 
 function Sidebar() {
-  const proposals = useStore(s => s.proposals); const calls = useStore(s => s.calls); const bundle = useStore(s => s.bundle);
+  const allProposals = useStore(s => s.proposals); const calls = useStore(s => s.calls);
   const route = useStore(s => s.route); const webmcp = useStore(s => s.webmcp); const pre = useStore(s => s.console);
   const [tool, setTool] = useState(TOOLS[0].name); const [input, setInput] = useState("{}"); const [out, setOut] = useState(""); const [touched, setTouched] = useState(false);
   // A page button can hand the console a drafted call (the human edits and presses Call — the console is the only path).
@@ -254,15 +325,17 @@ function Sidebar() {
   useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setOut(""); setTouched(true); set({ console: null }); setTimeout(() => callRef.current?.focus(), 50); } }, [pre]);
   // Prefill run_id with the run on screen, so "pick explain_result, press Call" works on a run page.
   const currentRun = route.split("/")[2] || "";
+  // The approval queue is global on purpose: list_proposals is unfiltered, so scoping this list to the
+  // route would let a pending proposal sit unseen while the panel said "None yet". Each card names its run.
+  const proposals = [...allProposals].sort((a, b) => Number(b.run === currentRun) - Number(a.run === currentRun));
   const prefill = (name: string) => { const props: any = (TOOLS.find(x => x.name === name)!.inputSchema as any).properties ?? {}; return JSON.stringify(currentRun && props.run_id ? { run_id: currentRun } : currentRun && props.run_a ? { run_a: currentRun, run_b: "" } : {}); };
   // On a run page the most useful first call is explain_result for that run — until the human picks a tool themselves.
   useEffect(() => { if (currentRun && !touched) { setTool("explain_result"); setInput(JSON.stringify({ run_id: currentRun })); setOut(""); } }, [currentRun, touched]);
   const t = TOOLS.find(x => x.name === tool)!;
   const outIsError = out.startsWith("SyntaxError") || out.startsWith("{\"error\"");
-  const download = () => { if (!bundle) return; const z = zipBundle(bundle.files); const url = URL.createObjectURL(new Blob([z as BlobPart], { type: "application/zip" })); const a = document.createElement("a"); a.href = url; a.download = bundle.name; a.click(); URL.revokeObjectURL(url); };
   return <aside>
     <div className="card">
-      <h2>Proposals <span className="dim">agent proposes, you approve</span></h2>
+      <h2>Proposals <span className="dim">agent proposes, you approve{allProposals.length ? ` · ${allProposals.filter(p => p.status === "pending").length} pending of ${allProposals.length}` : ""}</span></h2>
       {proposals.length === 0 && <p className="dim">None yet. An agent can call <code>propose_change</code>; nothing is applied until you approve it here.</p>}
       {proposals.map(p => <div key={p.id} className={`proposal ${p.status}`}>
         <div><b>{p.run}</b> / {p.stage} <span className={`badge ${p.status}`}>{p.status}</span>{p.fork && <span className="dim small"> · fork {p.fork.kind}{p.fork.question ? `: ${p.fork.question}` : ""}</span>}</div>
@@ -273,7 +346,6 @@ function Sidebar() {
         {p.status === "pending" && <div className="row"><button onClick={() => setProposalStatus(p.id, "approved")} disabled={p.after.hasFail}>Approve</button><button className="ghost" onClick={() => setProposalStatus(p.id, "rejected")}>Reject</button>{p.after.hasFail && <span className="dim small" style={{ alignSelf: "center" }}>cannot approve: the edit fails validation</span>}</div>}
       </div>)}
     </div>
-    {bundle && <div className="card"><h2>Rerun bundle</h2><pre className="small">{Object.keys(bundle.files).join("\n")}</pre><button onClick={download}>Download {bundle.name}</button> <button className="ghost" onClick={() => set({ bundle: null })}>clear</button></div>}
     <div className="card" id="tool-console">
       <h2>Tool console <span className="dim">the same tools an agent sees · ✎ = changes page state</span></h2>
       {webmcp !== "registered" && <p className="dim small">No agent is connected to this page. In Chrome, enable <code>chrome://flags/#enable-webmcp-testing</code> and reload to let an agent call these tools itself; or call them by hand here.</p>}
@@ -281,13 +353,13 @@ function Sidebar() {
       {(() => { const q = t.description.indexOf("? "); const head = q > 0 ? t.description.slice(0, q + 1) : t.description; const rest = q > 0 ? t.description.slice(q + 2) : ""; return <div className="dim small">{head}{rest && <details className="small"><summary className="dim">what it returns</summary><p className="dim">{rest}</p></details>}</div>; })()}
       <div className="dim small mono" id="tool-schema">{JSON.stringify((t.inputSchema as any).properties && Object.fromEntries(Object.entries((t.inputSchema as any).properties).map(([k, v]: any) => [k, v.enum ? v.enum.join("|") : v.type])))}</div>
       <textarea value={input} onChange={e => { setTouched(true); setInput(e.target.value); }} rows={3} spellCheck={false} aria-label="tool input (JSON)" aria-describedby="tool-schema" aria-invalid={outIsError || undefined} />
-      <button ref={callRef} onClick={async () => { try { setOut(await callTool(tool, JSON.parse(input))); } catch (e: any) { setOut(String(e)); } }}>Call</button>
+      <button ref={callRef} onClick={async () => { try { setOut(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setOut(String(e)); } }}>Call</button>
       <div role="status" aria-live="polite">{out && <pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre>}</div>
     </div>
     {/* What the agent just did, announced to screen readers; the visible log is below. */}
     <div role="status" aria-live="polite" style={srOnly}>{calls[0] ? `${calls[0].tool}: ${calls[0].summary}` : ""}</div>
-    {calls.length > 0 && <div className="card"><h2>Tool calls <span className="dim">what the agent did on this page</span></h2>
-      {calls.map((c, i) => <div key={i} className="call"><span className={c.ok ? "pass" : "fail"} role="img" aria-label={c.ok ? "ok" : "failed"}>●</span> <b>{c.tool}</b> <span className="args mono">{fmtArgs(c.input)}</span><div className={`what ${c.ok ? "" : "fail"}`}>{c.summary}</div></div>)}
+    {calls.length > 0 && <div className="card"><h2>Tool activity <span className="dim">agent, console, and page actions are identified separately</span></h2>
+      {calls.map((c, i) => <div key={i} className="call"><span className={c.ok ? "pass" : "fail"} role="img" aria-label={c.ok ? "ok" : "failed"}>●</span> <b>{c.tool}</b> <Source source={c.source} /> <span className="args mono">{fmtArgs(c.input)}</span><div className={`what ${c.ok ? "" : "fail"}`}>{c.summary}</div></div>)}
     </div>}
   </aside>;
 }
