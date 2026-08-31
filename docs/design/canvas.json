@@ -1,0 +1,32 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "A \u00b7 Preprint",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1600
+    },
+    {
+      "file": "Panel.dc.html",
+      "title": "B \u00b7 Instrument panel",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 1600
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -170,
+      "w": 520,
+      "text": "runcard run page \u2014 two directions, same real data (1l2y-rep1).\nA: paper, serif, hairlines, dotted numbers = traceable to a file.\nB: dark instrument panel, condensed sans + mono, gridded cells, amber accent.\nRev 2: sentence-case titles, no repeated facts, numbers \u226430px, text \u226513px."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; background: #f4f1ea; color: #1c1a16; font-family: 'Newsreader', 'Iowan Old Style', Georgia, serif; }
+    a { color: #9a3f1c; } a:hover { color: #6e2c12; }
+    .mono { font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+    .claim { text-decoration: underline dotted #9a3f1c; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+    .cap { font-family: 'Newsreader', Georgia, serif; font-style: italic; font-size: 15px; color: #6b655a; }
+    .rule { border: 0; border-top: 1px solid #1c1a16; margin: 0; }
+    .hair { border: 0; border-top: 1px solid #d6d0c2; margin: 0; }
+  </style>
+</helmet>
+<div style="width: 1440px; min-height: 1560px; background: #f4f1ea; padding: 40px 72px 64px 72px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px;">
+
+  <div style="display: flex; align-items: baseline; gap: 20px; font-size: 14px;">
+    <span style="font-family: 'Newsreader', Georgia, serif; font-weight: 500; font-size: 20px; letter-spacing: -0.01em;">runcard</span>
+    <span style="color: #6b655a; font-style: italic;">validated simulation records</span>
+    <span style="flex-grow: 1;"></span>
+    <span class="mono" style="font-size: 13px; color: #6b655a;">document.modelContext · 6 tools registered</span>
+  </div>
+  <hr class="rule">
+
+  <div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: end;">
+    <div style="grid-column: span 8; display: flex; flex-direction: column; gap: 10px;">
+      <span class="cap">run record · 1l2y-rep1</span>
+      <h1 style="margin: 0; font-size: 52px; line-height: 1.02; font-weight: 400; letter-spacing: -0.02em;">1L2Y + MOL, <span style="font-style: italic;">run 1</span></h1>
+      <p style="margin: 6px 0 0 0; font-size: 18px; line-height: 1.45; color: #3d382f; max-width: 62ch;">A validated record of one AMBER run. Every number on this page is <span class="claim">traceable</span> to a file in the run directory; the agent tools on the right read the same files.</p>
+    </div>
+    <div style="grid-column: span 4; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; text-align: right;">
+      <span class="cap">all six stages</span>
+      <span class="mono" style="font-size: 22px; font-weight: 500; color: #3a6b3a; letter-spacing: 0.02em;">pass</span>
+      <span style="font-size: 13px; color: #6b655a; font-style: italic;">inputs checked against check_amber rules</span>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div style="display: flex; align-items: baseline; gap: 14px;"><span class="cap">1 · pipeline</span><span style="font-size: 13px; color: #6b655a; font-style: italic;">click a stage for its .in and findings</span></div>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; position: relative;">
+      <div style="position: absolute; left: 0; right: 0; top: 9px; border-top: 1px solid #1c1a16;"></div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-right: 16px; position: relative;">
+        <span style="width: 19px; height: 19px; border-radius: 50%; background: #3a6b3a; display: inline-block;"></span>
+        <span class="mono" style="font-size: 14px; font-weight: 500;">min1</span>
+        <span style="font-size: 13px; color: #6b655a;">minimization · restrained</span>
+        <span class="mono" style="font-size: 13px; color: #6b655a;">wall 9 s · cut 9.0 Å</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-right: 16px; position: relative;">
+        <span style="width: 19px; height: 19px; border-radius: 50%; background: #3a6b3a; display: inline-block;"></span>
+        <span class="mono" style="font-size: 14px; font-weight: 500;">min2</span>
+        <span style="font-size: 13px; color: #6b655a;">minimization · restrained</span>
+        <span class="mono" style="font-size: 13px; color: #6b655a;">wall 9 s · cut 9.0 Å</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-right: 16px; position: relative;">
+        <span style="width: 19px; height: 19px; border-radius: 50%; background: #3a6b3a; display: inline-block;"></span>
+        <span class="mono" style="font-size: 14px; font-weight: 500;">min3</span>
+        <span style="font-size: 13px; color: #6b655a;">minimization · free</span>
+        <span class="mono" style="font-size: 13px; color: #6b655a;">wall 9 s · cut 9.0 Å</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-right: 16px; position: relative;">
+        <span style="width: 19px; height: 19px; border-radius: 50%; background: #3a6b3a; display: inline-block;"></span>
+        <span class="mono" style="font-size: 14px; font-weight: 500;">heat</span>
+        <span style="font-size: 13px; color: #6b655a;">50 ps NVT · 0→300 K · restrained</span>
+        <span class="mono" style="font-size: 13px; color: #6b655a;">ig −1 → seed 516798 · wall 308 s</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-right: 16px; position: relative;">
+        <span style="width: 19px; height: 19px; border-radius: 50%; background: #3a6b3a; display: inline-block;"></span>
+        <span class="mono" style="font-size: 14px; font-weight: 500;">density</span>
+        <span style="font-size: 13px; color: #6b655a;">50 ps NPT · 300 K · restrained</span>
+        <span class="mono" style="font-size: 13px; color: #6b655a;">ig −1 → seed 305950 · wall 427 s</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; position: relative;">
+        <span style="width: 19px; height: 19px; border-radius: 50%; background: #3a6b3a; display: inline-block;"></span>
+        <span class="mono" style="font-size: 14px; font-weight: 500;">product</span>
+        <span style="font-size: 13px; color: #6b655a;">20 ps NPT · 300 K · free</span>
+        <span class="mono" style="font-size: 13px; color: #6b655a;">ig −1 → seed 707390 · wall 168 s</span>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; padding: 14px 0 0 0;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span class="cap">product.in — restarts from density</span>
+        <pre class="mono" style="margin: 0; font-size: 13px; line-height: 1.5; color: #3d382f; white-space: pre-wrap;">&amp;cntrl
+  imin=0, irest=1, ntx=5, nstlim=10000, dt=0.002,
+  ntc=2, ntf=2, cut=9.0, ntb=2, ntp=1, barostat=2,
+  ntt=3, gamma_ln=2.0, ig=-1, temp0=300.0, ntr=0,
+  iwrap=1, ioutfm=1, ntpr=500, ntwx=20, ntwr=5000
+/</pre>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0;">
+        <span class="cap" style="padding-bottom: 6px;">findings for product</span>
+        <div style="display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid #d6d0c2; font-size: 14px;"><span class="mono" style="color: #3a6b3a; font-size: 13px; width: 48px;">PASS</span><span style="font-weight: 500; width: 110px;">dt</span><span style="color: #3d382f;">0.002 ps, within SHAKE-on cap</span></div>
+        <div style="display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid #d6d0c2; font-size: 14px;"><span class="mono" style="color: #3a6b3a; font-size: 13px; width: 48px;">PASS</span><span style="font-weight: 500; width: 110px;">cut</span><span style="color: #3d382f;">9.0 Å</span></div>
+        <div style="display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid #d6d0c2; font-size: 14px;"><span class="mono" style="color: #3a6b3a; font-size: 13px; width: 48px;">PASS</span><span style="font-weight: 500; width: 110px;">thermostat</span><span style="color: #3d382f;">ntt=3 Langevin, γ = 2.0 ps⁻¹</span></div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 32px;">
+    <div style="grid-column: span 5; display: flex; flex-direction: column; gap: 10px;">
+      <span class="cap">2 · binding free energy (MM-GBSA, single trajectory)</span>
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span class="mono claim" style="font-size: 30px; font-weight: 500; letter-spacing: -0.02em; line-height: 1;">−17.18</span>
+        <span style="font-size: 16px; color: #6b655a; font-style: italic;">kcal · mol⁻¹</span>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #3d382f;">Per-frame SD <span class="mono claim">1.62</span>, SEM <span class="mono claim">0.162</span> over <span class="mono claim">100.8</span> frames — frames are correlated, so the SEM understates uncertainty. Across the <span class="mono">n = 9</span> runs of this system the run-to-run spread is the number that matters; production lengths differ (2–30 ps), so these are not replicates.</p>
+      <div style="border-left: 2px solid #9a3f1c; padding: 8px 14px; margin-top: 6px; font-size: 13px; line-height: 1.5;">
+        <span class="mono" style="color: #9a3f1c; font-size: 13px;">MMPBSA.py, verbatim</span><br>
+        <span style="font-style: italic;">Inconsistencies exist within internal potential terms. The validity of these results are highly questionable.</span>
+        <span style="color: #6b655a;"> — ask the agent to <span class="mono" style="font-size: 13px;">explain_result</span>.</span>
+      </div>
+    </div>
+    <div style="grid-column: span 7; display: flex; flex-direction: column; gap: 10px;">
+      <span class="cap">3 · system and environment</span>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; font-size: 14px;">
+        <div style="display: flex; flex-direction: column; gap: 2px;"><span style="color: #6b655a; font-style: italic;">protein</span><span>290 atoms · <span class="mono" style="font-size: 13.5px;">protein_in.pdb</span></span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px;"><span style="color: #6b655a; font-style: italic;">ligand</span><span>MOL · 16 atoms · net 0 · bcc</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px;"><span style="color: #6b655a; font-style: italic;">solvent</span><span>TIP3P oct · 10 Å buffer · 5989 atoms</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px;"><span style="color: #6b655a; font-style: italic;">force fields</span><span class="mono" style="font-size: 13.5px;">ff19SB · tip3p · gaff2</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px;"><span style="color: #6b655a; font-style: italic;">atom types</span><span class="mono" style="font-size: 13.5px;">ca cc cd h4 ha hn na</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px;"><span style="color: #6b655a; font-style: italic;">engine</span><span>Amber 26 PMEMD · AmberTools 24.8 · <span class="mono" style="font-size: 13.5px;">env.lock.yml</span></span></div>
+      </div>
+      <div style="margin-top: 8px; height: 230px; border: 1px solid #1c1a16; display: flex; align-items: center; justify-content: center; background: #ece7dc;">
+        <span style="font-style: italic; color: #6b655a; font-size: 14px;">3Dmol viewer — cluster medoid, dry, ligand as sticks</span>
+      </div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <span class="cap">4 · analyses (cpptraj)</span>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px;">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px;">
+        <img src="rmsd.png" style="width: 100%; border: 1px solid #d6d0c2; background: #fff;">
+        <figcaption style="font-size: 13px; color: #3d382f;"><span style="font-weight: 500;">Fig. 1</span> — Backbone RMSD to first frame, production, 20 ps. <span class="mono" style="font-size: 13px; color: #6b655a;">rmsd.png</span></figcaption>
+      </figure>
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px;">
+        <img src="rg.png" style="width: 100%; border: 1px solid #d6d0c2; background: #fff;">
+        <figcaption style="font-size: 13px; color: #3d382f;"><span style="font-weight: 500;">Fig. 2</span> — Radius of gyration, production. <span class="mono" style="font-size: 13px; color: #6b655a;">rg.png</span></figcaption>
+      </figure>
+    </div>
+    <span style="font-size: 13px; color: #6b655a; font-style: italic;">+ rmsf · sasa · dssp · hbond · distmat · cluster · pca · fel · thermo</span>
+  </div>
+
+  <hr class="hair">
+  <div style="display: flex; gap: 28px; font-size: 13px; color: #6b655a;" class="mono">
+    <span>pipeline skills: antechamber-ligandprep · tleap-build · amber-md-run · cpptraj-analysis</span>
+    <span style="flex-grow: 1;"></span>
+    <span><span style="color: #9a3f1c;">dotted</span> = verified from a file in the run directory</span>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

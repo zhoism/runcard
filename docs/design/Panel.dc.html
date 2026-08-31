@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #17181a; color: #e8e4dc; font-family: 'IBM Plex Sans Condensed', 'Helvetica Neue', Arial Narrow, sans-serif; }
+    a { color: #e0a33a; } a:hover { color: #f1bf63; }
+    .mono { font-family: 'IBM Plex Mono', 'SF Mono', Menlo, monospace; }
+    .claim { border-bottom: 1px dotted #e0a33a; padding-bottom: 1px; }
+    .lbl { font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 14px; font-weight: 500; color: #8d8879; }
+    .cell { border: 1px solid #33352f; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; background: #1d1e20; }
+  </style>
+</helmet>
+<div style="width: 1440px; min-height: 1560px; background: #17181a; background-image: linear-gradient(#1f2022 1px, transparent 1px), linear-gradient(90deg, #1f2022 1px, transparent 1px); background-size: 24px 24px; padding: 0 0 48px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 0;">
+
+  <div style="display: flex; align-items: center; gap: 24px; padding: 14px 40px; border-bottom: 1px solid #33352f; background: #17181a;">
+    <span style="font-weight: 600; font-size: 17px;">runcard</span>
+    <span class="lbl">validated simulation records</span>
+    <span style="flex-grow: 1;"></span>
+    <span class="mono" style="font-size: 13px; color: #8d8879; display: flex; align-items: center; gap: 8px;"><span style="width: 8px; height: 8px; background: #7bb26a; display: inline-block;"></span>modelContext · 6 tools</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1px; background: #33352f; border-bottom: 1px solid #33352f;">
+    <div style="grid-column: span 7; background: #17181a; padding: 32px 40px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="lbl">run 1l2y-rep1</span>
+      <h1 style="margin: 0; font-size: 46px; line-height: 1; font-weight: 500; letter-spacing: -0.01em;">1L2Y + MOL <span style="color: #8d8879; font-weight: 400;">/ run 1</span></h1>
+      <span style="font-size: 15px; color: #b3ae9f; max-width: 60ch; line-height: 1.45;">A validated record of one AMBER run. Dotted numbers trace to a file in the run directory.</span>
+    </div>
+    <div style="grid-column: span 2; background: #17181a; padding: 32px 24px; display: flex; flex-direction: column; gap: 6px;">
+      <span class="lbl">verdict, all stages</span>
+      <span class="mono" style="font-size: 22px; font-weight: 600; color: #7bb26a; line-height: 1;">pass</span>
+      <span style="font-size: 13px; color: #8d8879;">6 / 6 stages</span>
+    </div>
+    <div style="grid-column: span 3; background: #17181a; padding: 32px 24px; display: flex; flex-direction: column; gap: 6px;">
+      <span class="lbl">production</span>
+      <span class="mono" style="font-size: 22px; font-weight: 600; line-height: 1;">20 ps</span>
+      <span style="font-size: 13px; color: #8d8879;">300 K · NPT · seed 707390</span>
+    </div>
+  </div>
+
+  <div style="padding: 28px 40px 0 40px; display: flex; flex-direction: column; gap: 12px;">
+    <span class="lbl">1 · pipeline</span>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: #33352f; border: 1px solid #33352f;">
+      <div class="cell"><div style="display: flex; justify-content: space-between; align-items: center;"><span class="mono" style="font-size: 14px; font-weight: 600;">min1</span><span class="mono" style="font-size: 13px; color: #7bb26a;">pass</span></div><div style="height: 3px; background: #7bb26a;"></div><span style="font-size: 13.5px; color: #b3ae9f;">minimization · ntr 1</span><span class="mono" style="font-size: 13px; color: #8d8879;">wall 9 s</span></div>
+      <div class="cell"><div style="display: flex; justify-content: space-between; align-items: center;"><span class="mono" style="font-size: 14px; font-weight: 600;">min2</span><span class="mono" style="font-size: 13px; color: #7bb26a;">pass</span></div><div style="height: 3px; background: #7bb26a;"></div><span style="font-size: 13.5px; color: #b3ae9f;">minimization · ntr 1</span><span class="mono" style="font-size: 13px; color: #8d8879;">wall 9 s</span></div>
+      <div class="cell"><div style="display: flex; justify-content: space-between; align-items: center;"><span class="mono" style="font-size: 14px; font-weight: 600;">min3</span><span class="mono" style="font-size: 13px; color: #7bb26a;">pass</span></div><div style="height: 3px; background: #7bb26a;"></div><span style="font-size: 13.5px; color: #b3ae9f;">minimization · ntr 0</span><span class="mono" style="font-size: 13px; color: #8d8879;">wall 9 s</span></div>
+      <div class="cell"><div style="display: flex; justify-content: space-between; align-items: center;"><span class="mono" style="font-size: 14px; font-weight: 600;">heat</span><span class="mono" style="font-size: 13px; color: #7bb26a;">pass</span></div><div style="height: 3px; background: #7bb26a;"></div><span style="font-size: 13.5px; color: #b3ae9f;">50 ps NVT · 0→300 K · ntr 1</span><span class="mono" style="font-size: 13px; color: #8d8879;">seed 516798 · 308 s</span></div>
+      <div class="cell"><div style="display: flex; justify-content: space-between; align-items: center;"><span class="mono" style="font-size: 14px; font-weight: 600;">density</span><span class="mono" style="font-size: 13px; color: #7bb26a;">pass</span></div><div style="height: 3px; background: #7bb26a;"></div><span style="font-size: 13.5px; color: #b3ae9f;">50 ps NPT · 300 K · ntr 1</span><span class="mono" style="font-size: 13px; color: #8d8879;">seed 305950 · 427 s</span></div>
+      <div class="cell" style="border-color: #e0a33a;"><div style="display: flex; justify-content: space-between; align-items: center;"><span class="mono" style="font-size: 14px; font-weight: 600;">product</span><span class="mono" style="font-size: 13px; color: #7bb26a;">pass</span></div><div style="height: 3px; background: #7bb26a;"></div><span style="font-size: 13.5px; color: #b3ae9f;">20 ps NPT · 300 K · ntr 0</span><span class="mono" style="font-size: 13px; color: #8d8879;">seed 707390 · 168 s</span></div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: #33352f; border: 1px solid #33352f;">
+      <div class="cell" style="gap: 6px;"><span class="lbl">product.in — restarts from density</span>
+        <pre class="mono" style="margin: 0; font-size: 13px; line-height: 1.55; color: #d6d1c4; white-space: pre-wrap;">&amp;cntrl
+  imin=0, irest=1, ntx=5, nstlim=10000, dt=0.002,
+  ntc=2, ntf=2, cut=9.0, ntb=2, ntp=1, barostat=2,
+  ntt=3, gamma_ln=2.0, ig=-1, temp0=300.0, ntr=0,
+  iwrap=1, ioutfm=1, ntpr=500, ntwx=20, ntwr=5000
+/</pre></div>
+      <div class="cell" style="gap: 0;"><span class="lbl" style="padding-bottom: 8px;">findings for product</span>
+        <div style="display: flex; gap: 14px; padding: 7px 0; border-top: 1px solid #33352f; font-size: 13.5px;"><span class="mono" style="color: #7bb26a; font-size: 13px; width: 48px;">pass</span><span class="mono" style="width: 100px;">dt</span><span style="color: #b3ae9f;">0.002 ps, within SHAKE-on cap</span></div>
+        <div style="display: flex; gap: 14px; padding: 7px 0; border-top: 1px solid #33352f; font-size: 13.5px;"><span class="mono" style="color: #7bb26a; font-size: 13px; width: 48px;">pass</span><span class="mono" style="width: 100px;">cut</span><span style="color: #b3ae9f;">9.0 Å</span></div>
+        <div style="display: flex; gap: 14px; padding: 7px 0; border-top: 1px solid #33352f; font-size: 13.5px;"><span class="mono" style="color: #7bb26a; font-size: 13px; width: 48px;">pass</span><span class="mono" style="width: 100px;">thermostat</span><span style="color: #b3ae9f;">ntt=3 Langevin, gamma_ln 2.0</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding: 28px 40px 0 40px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px;">
+    <div style="grid-column: span 5; display: flex; flex-direction: column; gap: 12px;">
+      <span class="lbl">2 · binding free energy, MM-GBSA</span>
+      <div class="cell" style="gap: 10px;">
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 3px;"><span class="lbl">ΔG, kcal/mol</span><span class="mono claim" style="font-size: 20px; align-self: flex-start;">−17.18</span></div>
+          <div style="display: flex; flex-direction: column; gap: 3px;"><span class="lbl">per-frame SD</span><span class="mono claim" style="font-size: 20px; align-self: flex-start;">1.62</span></div>
+          <div style="display: flex; flex-direction: column; gap: 3px;"><span class="lbl">SEM</span><span class="mono claim" style="font-size: 20px; align-self: flex-start;">0.162</span></div>
+          <div style="display: flex; flex-direction: column; gap: 3px;"><span class="lbl">runs of this system</span><span class="mono" style="font-size: 20px;">n = 9</span></div>
+        </div>
+        <span style="font-size: 13px; color: #b3ae9f; line-height: 1.5;">Frames are correlated; SEM understates. Production lengths differ across the 9 runs (2–30 ps) — run-to-run spread, not replicate SD.</span>
+      </div>
+      <div style="border: 1px solid #e0a33a; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; background: #1d1e20;">
+        <span class="lbl" style="color: #e0a33a;">MMPBSA.py, verbatim</span>
+        <span style="font-size: 13px; line-height: 1.5;">Inconsistencies exist within internal potential terms. The validity of these results are highly questionable.</span>
+        <span class="mono" style="font-size: 13px; color: #8d8879;">→ explain_result</span>
+      </div>
+    </div>
+    <div style="grid-column: span 7; display: flex; flex-direction: column; gap: 12px;">
+      <span class="lbl">3 · system and environment</span>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #33352f; border: 1px solid #33352f;">
+        <div class="cell" style="gap: 3px;"><span class="lbl">protein</span><span style="font-size: 14px;">290 atoms</span><span class="mono" style="font-size: 13px; color: #8d8879;">protein_in.pdb</span></div>
+        <div class="cell" style="gap: 3px;"><span class="lbl">ligand</span><span style="font-size: 14px;">MOL · 16 atoms · q 0</span><span class="mono" style="font-size: 13px; color: #8d8879;">ca cc cd h4 ha hn na</span></div>
+        <div class="cell" style="gap: 3px;"><span class="lbl">solvent</span><span style="font-size: 14px;">TIP3P oct · 5989 atoms</span><span class="mono" style="font-size: 13px; color: #8d8879;">buffer 10 Å</span></div>
+        <div class="cell" style="gap: 3px;"><span class="lbl">force fields</span><span class="mono" style="font-size: 13.5px;">ff19SB · tip3p · gaff2</span></div>
+        <div class="cell" style="gap: 3px;"><span class="lbl">engine</span><span style="font-size: 14px;">Amber 26 PMEMD</span><span class="mono" style="font-size: 13px; color: #8d8879;">ambertools 24.8 · py 3.11.15</span></div>
+        <div class="cell" style="gap: 3px;"><span class="lbl">env</span><span class="mono" style="font-size: 13.5px;">env.lock.yml</span></div>
+      </div>
+      <div style="height: 200px; border: 1px solid #33352f; background: #101113; display: flex; align-items: center; justify-content: center;"><span style="font-size: 13px; color: #8d8879;">3Dmol viewer — medoid, dry</span></div>
+    </div>
+  </div>
+
+  <div style="padding: 28px 40px 0 40px; display: flex; flex-direction: column; gap: 12px;">
+    <span class="lbl">4 · analyses (cpptraj)</span>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px;">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 6px;"><img src="rmsd.png" style="width: 100%; border: 1px solid #33352f;"><figcaption class="mono" style="font-size: 13px; color: #8d8879;">fig. 1 — backbone RMSD, production 20 ps · rmsd.png</figcaption></figure>
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 6px;"><img src="rg.png" style="width: 100%; border: 1px solid #33352f;"><figcaption class="mono" style="font-size: 13px; color: #8d8879;">fig. 2 — radius of gyration · rg.png</figcaption></figure>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

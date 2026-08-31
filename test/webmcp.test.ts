@@ -124,3 +124,23 @@ describe("approval gate: store → callTool → bundle", () => {
     expect(snap.selfContained).toBe(true); expect(snap.missingInputs).toEqual([]);
   });
 });
+
+// AGENTS.md and CLAUDE.md are the same runcard under two filenames, because Codex-style tools look for
+// AGENTS.md by convention and Claude Code looks for CLAUDE.md. Neither can be a pointer or a symlink: a
+// pointer costs the reader the runcard, and a symlink renders as its target path in a raw file view. So both
+// stand alone, and this test is what keeps them honest — they have drifted once already, when AGENTS.md was
+// left saying propose_change was the only mutating tool after CLAUDE.md had been corrected.
+describe("the two runcards do not drift", () => {
+  it("AGENTS.md is CLAUDE.md, minus the Status pointer that only applies to the Claude Code entry point", () => {
+    const read = (f: string) => readFileSync(f, "utf8").replace(/\r\n/g, "\n");
+    const claude = read("CLAUDE.md"), agents = read("AGENTS.md");
+    const body = (t: string) => t.split("\n").slice(1).join("\n").split("\n## Status\n")[0].trimEnd();
+    expect(claude.split("\n")[0]).toBe("# CLAUDE.md — runcard");
+    expect(agents.split("\n")[0]).toBe("# AGENTS.md — runcard");
+    // the shared body must be byte-identical: run counts, the read-only tool invariant, the commands
+    expect(body(agents)).toBe(body(claude));
+    // and the shared body must be the substance, not a stub that trivially matches
+    expect(body(agents).length).toBeGreaterThan(1500);
+    expect(body(agents)).toMatch(/A number is a claim/);
+  });
+});

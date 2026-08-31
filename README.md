@@ -136,7 +136,7 @@ pooled across all lengths — the honest number is the less flattering one.
 ```
 bun install
 bun run dev        # http://localhost:5173
-bun run test       # 641 tests
+bun run test       # 642 tests
 bun run build
 ```
 
