@@ -609,10 +609,15 @@ export function confidenceLadderFull(m: Manifest, idx: IndexEntry[]) {
   if (!mm) rungs.push({ rung: "recomputable", status: "not established", short: "no MM-GBSA result", evidence: "no MM-GBSA result in this run", to_climb: null });
   else if (!pf) rungs.push({ rung: "recomputable", status: "not established", short: "per-frame energies not archived", evidence: "per-frame energies were not archived; only mmgbsa.dat's summary is on the card", to_climb: "archive _MMPBSA_*_gb.mdout.0 and re-extract" });
   else {
-    const meanPf = mean(pf.delta_total), sdPf = sd(pf.delta_total, 0); const tol = 5e-5;
-    const ok = Math.abs(meanPf - mm.delta_total_kcal_mol) < tol && Math.abs(sdPf - mm.frame_std) < tol;
+    // mmgbsa.dat prints DELTA TOTAL to 4 dp and the archived per-frame series is stored at the same precision, so
+    // agreement can only be asserted at 4 dp: a correct reconstruction still differs from the printed value by up to
+    // 5e-5 from that printing alone. A 5e-5 tolerance therefore sits exactly on the rounding boundary and rejects
+    // sound runs at random (of these 14, the observed gaps run 6e-7 … 5.7e-5). Compare at the printed precision, one
+    // unit in the last place, which is the check tools/extract_run.py already gates extraction on.
+    const meanPf = mean(pf.delta_total), sdPf = sd(pf.delta_total, 0); const tol = 1e-4 + 1e-9;
+    const ok = Math.abs(round(meanPf) - mm.delta_total_kcal_mol) < tol && Math.abs(round(sdPf) - mm.frame_std) < tol;
     rungs.push({ rung: "recomputable", status: ok ? "verified" : "not established", short: ok ? `mean and SD of the ${pf.n} archived per-frame energies reproduce mmgbsa.dat` : "archived per-frame energies do not reproduce mmgbsa.dat",
-      evidence: `mean of the ${pf.n} archived per-frame energies = ${round(meanPf)} vs mmgbsa.dat ${mm.delta_total_kcal_mol}; population SD ${round(sdPf)} vs ${mm.frame_std} (both re-derived here, tolerance ${tol}; source ${pf.source.join(", ")})${ok ? "" : " — mismatch"}`, to_climb: null });
+      evidence: `mean of the ${pf.n} archived per-frame energies = ${round(meanPf)} vs mmgbsa.dat ${mm.delta_total_kcal_mol}; population SD ${round(sdPf)} vs ${mm.frame_std} (both re-derived here and compared at mmgbsa.dat's own 4 dp, to one unit in the last place; source ${pf.source.join(", ")})${ok ? "" : " — mismatch"}`, to_climb: null });
   }
   // 2 repeatable — a pinned-seed replay is possible only if every stochastic stage's realized seed, the environment lock and leap.in are archived; never verified here
   const dyn = m.stages.filter(s => s.role !== "minimization"); const unseeded = dyn.filter(s => s.realized_seed == null).map(s => s.name);
@@ -634,9 +639,16 @@ export function confidenceLadderFull(m: Manifest, idx: IndexEntry[]) {
     // (≥ 3 runs of the same production length) is what "verified" means for this card. Anything less is "partly established", and the rung says which part.
     const myPs = me.production_ps; const atMyLen = sameProto.filter(r => r.production_ps === myPs);
     const verifiedHere = atMyLen.length >= 3; const sdHere = verifiedHere ? stratum(atMyLen).sd : null;
+    // The protocol key covers &cntrl and the MM-GBSA model, not the program that integrated the equations. Runs at
+    // this length were produced by more than one engine here, and counting them silently would let the rung rest on
+    // an agreement it never states. Name the mix; whether the engines agree is a claim only more runs can settle.
+    const engines = [...new Set(atMyLen.map(r => r.engine).filter(Boolean))].sort();
+    const engineMix = engines.length > 1
+      ? ` Engines at this length: ${engines.map(e => `${e} (${atMyLen.filter(r => r.engine === e).length})`).join(", ")} — the protocol key fixes &cntrl and the GB model, not the integrator, so this rung counts runs across engines and says so.`
+      : "";
     rungs.push({ rung: "independently replicated", status: verifiedHere ? "verified" : "partly established",
       short: `seed-replicated ✓ (${st.n} same-protocol runs, ${lengths[0]}–${lengths[lengths.length - 1]} ps) · at this run's length (${myPs} ps): ${atMyLen.length} of 3 needed ${verifiedHere ? "✓" : "✗"}`,
-      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. What this earns: the sign and the spread are robust to the seed. Replication of this run's number at its own length (${myPs} ps): ${atMyLen.length} run${atMyLen.length === 1 ? "" : "s"}${verifiedHere ? ` (SD ±${sdHere?.toFixed(2)})` : " — fewer than the 3 needed"}. ${signClaim(st).split("; the observed")[0].replace(/\.?$/, ".")}`,
+      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. What this earns: the sign and the spread are robust to the seed. Replication of this run's number at its own length (${myPs} ps): ${atMyLen.length} run${atMyLen.length === 1 ? "" : "s"}${verifiedHere ? ` (SD ±${sdHere?.toFixed(2)})` : " — fewer than the 3 needed"}. ${signClaim(st).split("; the observed")[0].replace(/\.?$/, ".")}${engineMix}`,
       to_climb: verifiedHere ? null : `${3 - atMyLen.length} more independent run${3 - atMyLen.length === 1 ? "" : "s"} at ${myPs} ps (fork_experiment kind='replicate')` });
   } else rungs.push({ rung: "independently replicated", status: "not established", short: `${sameProto.length} run${sameProto.length === 1 ? "" : "s"} of this system and protocol on this site; 3 needed`,
     evidence: `${peers.length} run${peers.length === 1 ? "" : "s"} of this prepared system on this site, ${sameProto.length} with the same production protocol${seeded.length && distinct < sameProto.length ? ", not all with distinct seeds" : ""}; at least 3 independent runs (ig=-1, same protocol) are needed`, to_climb: "fork_experiment kind='replicate' (plan_sampling gives the number of runs)" });
@@ -665,7 +677,7 @@ export function confidenceLadderFull(m: Manifest, idx: IndexEntry[]) {
   rungs.push({ rung: "externally supported", status: "not assessed", short: "no experimental or literature value linked", evidence: "no experimental or literature value is linked to this card", to_climb: "link an external reference with its own provenance (not part of this site)" });
   const verified = rungs.filter(r => r.status === "verified").length; const partly = rungs.filter(r => r.status === "partly established").length;
   return { run: m.id, rungs, verified_of_assessable: `${verified} of 4`, summary: `${verified} of 4 assessable rungs verified (${rungs.filter(r => r.status === "verified").map(r => r.rung).join(", ") || "none"})${partly ? `, ${partly} partly established (${rungs.filter(r => r.status === "partly established").map(r => `${r.rung}: ${r.short}`).join("; ")})` : ""}; repeatable is at best expected (nothing is executed here); external support is not assessed.`,
-    method: "recomputable: mean and population SD of the archived per-frame energies vs mmgbsa.dat (tolerance 5e-5); repeatable: realized seeds for every dynamics stage + environment lock + leap.in archived (never executed here); replicated: verified = ≥ 3 same-fingerprint, same-protocol, distinct-seed runs at THIS run's production length; partly established = seed-replicated across the cohort but not at this length; robust: drift verdict 'no drift detected' AND ΔG over equilibration-discard (10/25/50 %) and stride-2 windows within 2 corrected SEMs of the archived value — analysis-window sensitivity only; external: not assessed. A passing input sanity check is not a rung." };
+    method: "recomputable: mean and population SD of the archived per-frame energies vs mmgbsa.dat, compared at the 4 dp mmgbsa.dat prints, to one unit in the last place; repeatable: realized seeds for every dynamics stage + environment lock + leap.in archived (never executed here); replicated: verified = ≥ 3 same-fingerprint, same-protocol, distinct-seed runs at THIS run's production length; partly established = seed-replicated across the cohort but not at this length; robust: drift verdict 'no drift detected' AND ΔG over equilibration-discard (10/25/50 %) and stride-2 windows within 2 corrected SEMs of the archived value — analysis-window sensitivity only; external: not assessed. A passing input sanity check is not a rung." };
 }
 
 // ---- fork this experiment: reproduce / replicate / extend ------------------------------

@@ -25,10 +25,14 @@ A seven-step pass that works end-to-end on the live site with real numbers:
 
 1. Open `1l2y-rep4` → archived ΔG is −19.20 kcal/mol.
 2. `recompute_result` → the mean and SD are re-derived from the per-frame
-   energies and matched to `mmgbsa.dat` (tolerance 5e-5).
+   energies and matched to `mmgbsa.dat`, compared at the four decimals
+   `mmgbsa.dat` prints, to one unit in the last place.
 3. `explain_result` → per-frame SEM 0.17, autocorrelation-corrected SEM 0.28,
-   run-to-run spread ±0.66. The uncertainty you quote is the third one.
-4. `plan_sampling` → six more runs ≥ 30 ps to reach ±0.25, labeled *expected*.
+   run-to-run spread ±0.64. The uncertainty you quote is the third one.
+4. `plan_sampling` → the ±0.25 target is now met on the ≥ 10 ps stratum
+   (n=9, SD 0.67, SEM of mean 0.22); 0 more runs needed. It said six before the
+   PACE-ICE replicates landed — the tool asks for runs when the data needs them
+   and stops asking when it doesn't.
 5. `fork_experiment` extend `temp0` 300 → 310 K → two pending proposals
    (density, product); the heating ramp is deliberately left alone.
 6. Click **Approve**, then `generate_rerun_bundle` → a self-contained 13-file
@@ -72,10 +76,15 @@ analysis-window choices** (ΔG across 10/25/50 % equilibration discards and
 stride-2 windows, within 2 corrected SEMs), **externally supported** (always
 *not assessed* — the page will not claim what it cannot check).
 
-The flagship run scores **2 of 4**, not 4 of 4, and says why: seed replication is
-established across nine runs, but only two of them match its 30 ps length, so
-that rung reads *partly established* with the one missing run named. Rungs the
-data does not earn are the point of the feature.
+The flagship run scored **2 of 4** for most of this project's life, and said why:
+seed replication was established across nine runs, but only two matched its 30 ps
+length, so that rung read *partly established* with the missing run named. On
+2026-08-31 four independent 30 ps replicates were run on Georgia Tech's PACE-ICE
+cluster from a bundle this page generated, and that rung flipped to **verified**
+on real data — 3 of 4. The rung that moved is the one the page had been pointing
+at. Rungs the data does not earn are still the point of the feature: *repeatable*
+remains at best *expected* because nothing executes here, and *externally
+supported* is never assessed.
 
 ### Fork this experiment
 
@@ -109,10 +118,18 @@ works on your run.
 
 ## The data
 
-Ten real runs: nine of 1L2Y + indole (one prepared system, production 2–30 ps —
-same protocol at different lengths, *not* replicates, and the page says so) and
-one of 3HTB + JZ4, which is deliberately left as a single run so the tools can
-demonstrate refusing to quote a spread.
+Fourteen real runs: thirteen of 1L2Y + indole (one prepared system, production
+2–30 ps — same protocol at different lengths, *not* all replicates, and the page
+says so) and one of 3HTB + JZ4, which is deliberately left as a single run so the
+tools can demonstrate refusing to quote a spread.
+
+Four of the thirteen are genuine replicates produced on PACE-ICE on 2026-08-31
+from a `generate_rerun_bundle` output — same prepared system, same `&cntrl`,
+fresh seeds, 30 ps. They ran under Amber 24 SANDER rather than the parent's
+Amber 26 PMEMD (`pmemd` is licensed and absent from that cluster), so the
+replication rung names the engine mix instead of counting them silently. Six
+30 ps runs now give a matched-length SD of ±0.80 kcal/mol, wider than the ±0.64
+pooled across all lengths — the honest number is the less flattering one.
 
 ## Develop
 

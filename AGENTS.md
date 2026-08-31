@@ -1,4 +1,4 @@
-# CLAUDE.md — runcard
+# AGENTS.md — runcard
 
 Entry for the OpenAI WebMCP Challenge (Devpost, deadline **Sep 3 2026, 1:00 pm PDT**).
 Judged equally on: WebMCP leverage · execution · potential impact · creativity.
@@ -48,7 +48,3 @@ reader-facing layer only — nothing runs or is authored here.
     bun run test
     bun run build
     vercel --prod      # deploy (after `vercel login`)
-
-## Status
-
-See `STATUS.md` — state, open decisions, known thin spots, architecture. Update it when any of those change.

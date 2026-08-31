@@ -181,6 +181,150 @@
  },
  {
   "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 139205,
+  "id": "1l2y-rep4-ice1",
+  "title": "1L2Y + MOL, run 4 replicate 1",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 30.0,
+  "delta_g": -16.8578,
+  "plip": false,
+  "engine": "Amber 24 SANDER (2024)",
+  "system": {
+   "ligand": "MOL",
+   "ligand_atoms": 16,
+   "atom_types": [
+    "ca",
+    "cc",
+    "cd",
+    "h4",
+    "ha",
+    "hn",
+    "na"
+   ],
+   "charge_method": "bcc",
+   "net_charge": 0,
+   "protein_atoms": 290,
+   "force_fields": [
+    "protein.ff19SB",
+    "water.tip3p",
+    "gaff2"
+   ],
+   "solvent": "TIP3PBOX",
+   "box": "oct",
+   "buffer_A": 10.0
+  }
+ },
+ {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 871923,
+  "id": "1l2y-rep4-ice2",
+  "title": "1L2Y + MOL, run 4 replicate 2",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 30.0,
+  "delta_g": -18.1506,
+  "plip": false,
+  "engine": "Amber 24 SANDER (2024)",
+  "system": {
+   "ligand": "MOL",
+   "ligand_atoms": 16,
+   "atom_types": [
+    "ca",
+    "cc",
+    "cd",
+    "h4",
+    "ha",
+    "hn",
+    "na"
+   ],
+   "charge_method": "bcc",
+   "net_charge": 0,
+   "protein_atoms": 290,
+   "force_fields": [
+    "protein.ff19SB",
+    "water.tip3p",
+    "gaff2"
+   ],
+   "solvent": "TIP3PBOX",
+   "box": "oct",
+   "buffer_A": 10.0
+  }
+ },
+ {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 153875,
+  "id": "1l2y-rep4-ice3",
+  "title": "1L2Y + MOL, run 4 replicate 3",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 30.0,
+  "delta_g": -17.3978,
+  "plip": false,
+  "engine": "Amber 24 SANDER (2024)",
+  "system": {
+   "ligand": "MOL",
+   "ligand_atoms": 16,
+   "atom_types": [
+    "ca",
+    "cc",
+    "cd",
+    "h4",
+    "ha",
+    "hn",
+    "na"
+   ],
+   "charge_method": "bcc",
+   "net_charge": 0,
+   "protein_atoms": 290,
+   "force_fields": [
+    "protein.ff19SB",
+    "water.tip3p",
+    "gaff2"
+   ],
+   "solvent": "TIP3PBOX",
+   "box": "oct",
+   "buffer_A": 10.0
+  }
+ },
+ {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
+  "seed": 222651,
+  "id": "1l2y-rep4-ice4",
+  "title": "1L2Y + MOL, run 4 replicate 4",
+  "ligand": "MOL",
+  "protein_atoms": 290,
+  "production_ps": 30.0,
+  "delta_g": -17.6271,
+  "plip": false,
+  "engine": "Amber 24 SANDER (2024)",
+  "system": {
+   "ligand": "MOL",
+   "ligand_atoms": 16,
+   "atom_types": [
+    "ca",
+    "cc",
+    "cd",
+    "h4",
+    "ha",
+    "hn",
+    "na"
+   ],
+   "charge_method": "bcc",
+   "net_charge": 0,
+   "protein_atoms": 290,
+   "force_fields": [
+    "protein.ff19SB",
+    "water.tip3p",
+    "gaff2"
+   ],
+   "solvent": "TIP3PBOX",
+   "box": "oct",
+   "buffer_A": 10.0
+  }
+ },
+ {
+  "protocol": "dt=0.002|cut=9.0|ntc=2|ntf=2|ntb=2|temp0=300.0|ntt=3|gamma_ln=2.0|ntp=1|pres0=1.0|barostat=2|taup=2.0|ntr=0|igb=5|saltcon=0.100",
   "seed": 704051,
   "id": "1l2y-rep5",
   "title": "1L2Y + MOL, run 5",

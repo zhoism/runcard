@@ -101,6 +101,42 @@ def per_frame_gb(mmdir, dat_text):
         "reproduces": {"delta_total_mean": True, "sd_ddof0": True, "checked_against": "mmgbsa.dat DELTA TOTAL"},
     }, info
 
+def pdb_atoms(p):
+    """Atom count of a PDB written by MMPBSA.py's topology split (dry, post-leap, hydrogens included)."""
+    if not p.exists(): return None
+    return sum(1 for l in rd(p).splitlines() if l.startswith(("ATOM", "HETATM"))) or None
+
+
+def system_from_artifacts(run, mol2):
+    """Composition read from a run's own files, for runs built outside the s*.json pipeline.
+
+    ligand atoms / gaff2 types / net charge come from the mol2 leap.in loads; protein and dry-complex atom
+    counts from the topology split MMPBSA.py writes; solvated atoms from NATOM in the first .out. Anything
+    not present stays absent — solvent residues_added needs leap.log, which a bundle rerun does not produce."""
+    out = {}; src = []
+    if mol2 and mol2.exists():
+        t = rd(mol2)
+        if "@<TRIPOS>ATOM" in t:
+            rows = [l.split() for l in t.split("@<TRIPOS>ATOM")[1].split("@<TRIPOS>")[0].strip().splitlines()]
+            rows = [r for r in rows if len(r) >= 9]
+            if rows:
+                out["ligand_atoms"] = len(rows)
+                out["atom_types"] = sorted({r[5].split(".")[0] for r in rows})
+                # mol2 partial charges sum to the formal charge up to print precision; leap uses the integer
+                out["net_charge"] = round(sum(float(r[8]) for r in rows))
+                src.append(mol2.name)
+    mmdir = run / "analysis/mmgbsa"
+    rec, cx = pdb_atoms(mmdir / "_MMPBSA_receptor.pdb"), pdb_atoms(mmdir / "_MMPBSA_complex.pdb")
+    if rec: out["protein_atoms"] = rec; src.append("_MMPBSA_receptor.pdb")
+    if cx: out["dry_atoms"] = cx; src.append("_MMPBSA_complex.pdb")
+    first = next((p for p in sorted((run / "md").glob("*.out")) if p.exists()), None)
+    if first:
+        m = re.search(r"NATOM\s*=\s*(\d+)", rd(first))
+        if m: out["solvated_atoms"] = int(m.group(1)); src.append(f"{first.name} NATOM")
+    if out: out["source"] = src
+    return out
+
+
 def stage_role(name, c):
     if c.get("imin") == "1": return "minimization"
     if name.startswith("heat"): return "heating"
@@ -148,17 +184,27 @@ def main():
         lines = rd(mol2).splitlines()
         charge_method = lines[4].strip() if len(lines) > 4 else None
     v3 = (s3 or {}).get("validation", {}); v2 = (s2 or {}).get("validation", {})
+    # Composition normally comes from the build pipeline's s2/s3 validation JSON. A run executed outside that
+    # pipeline (a replicate run on someone else's cluster from a rerun bundle) has no s*.json, and every
+    # composition field would land null — which drops the run out of its own system's fingerprint and so out of
+    # the replication rung it exists to serve. Read the same quantities from artifacts the run does carry.
+    # Never inherit them from the parent card: a number on a card is read from that run's files or it is null.
+    fb = system_from_artifacts(run, mol2)
     system = {
-        "protein": {"atoms": v3.get("protein_atoms"), "source_pdb": (build / "protein_in.pdb").name if build and (build/"protein_in.pdb").exists() else None},
-        "ligand": {"resname": ligres.group(1) if ligres else None, "atoms": v2.get("atom_count"),
-                   "atom_types": v2.get("atom_types"), "charge_method": charge_method,
-                   "net_charge": v2.get("charge_sum"), "frcmod_missing": v2.get("frcmod_missing")},
+        "protein": {"atoms": v3.get("protein_atoms") or fb.get("protein_atoms"), "source_pdb": (build / "protein_in.pdb").name if build and (build/"protein_in.pdb").exists() else None},
+        "ligand": {"resname": ligres.group(1) if ligres else None, "atoms": v2.get("atom_count") or fb.get("ligand_atoms"),
+                   "atom_types": v2.get("atom_types") or fb.get("atom_types"), "charge_method": charge_method,
+                   "net_charge": v2.get("charge_sum") if v2.get("charge_sum") is not None else fb.get("net_charge"),
+                   "frcmod_missing": v2.get("frcmod_missing")},
         "solvent": {"box": box.group(1) if box else None, "model": box.group(2) if box else None,
                     "buffer_A": float(box.group(3)) if box else None,
                     "residues_added": v3.get("solvent_residues_added"),
-                    "solvated_atoms": v3.get("solvated_atoms"), "dry_atoms": v3.get("dry_atoms")},
+                    "solvated_atoms": v3.get("solvated_atoms") or fb.get("solvated_atoms"),
+                    "dry_atoms": v3.get("dry_atoms") or fb.get("dry_atoms")},
         "force_fields": ffs, "leap_in": leap,
     }
+    if fb and not v2 and not v3:
+        system["composition_source"] = fb["source"]
 
     # --- results ---
     results = {}
@@ -216,7 +262,10 @@ def main():
     if rep.exists(): shutil.copy(rep, out / "structure.pdb"); structure = "structure.pdb"
 
     # --- environment ---
-    lock = ROOT.parent / "project-prime/env.lock.yml"
+    # a run that shipped its own lock ran under that environment, not the parent pipeline's; stamping
+    # project-prime's pins onto an ICE replicate would put a version on the card that never ran it
+    lock = next((p for p in (run / "env.lock.yml", run / "build/env.lock.yml") if p.exists()),
+                ROOT.parent / "project-prime/env.lock.yml")
     env = {}
     if lock.exists():
         for k in ("ambertools", "python", "numpy", "openmm", "parmed", "cpptraj"):
