@@ -38,9 +38,10 @@ A seven-step pass that works end-to-end on the live site with real numbers:
 
 ## The tools
 
-Fifteen; eleven read-only. Of the four that are not: `propose_change` and
-`fork_experiment` prepare a change to a scientific input and stop at the Approve
-button; `generate_rerun_bundle` and `export_evidence_brief` write page state only.
+Fifteen; nine read-only. Of the six that are not, only `propose_change` and
+`fork_experiment` prepare a change to a scientific input, and both stop at the
+Approve button. The other four — `generate_rerun_bundle`, `export_evidence_brief`,
+`recompute_result`, `plan_sampling` — write page state only.
 
 | | |
 |---|---|
@@ -101,10 +102,9 @@ works on your run.
   executed and read; anything else says *expected*.
 - **The agent proposes, a human approves.** Only `propose_change` and
   `fork_experiment` can prepare a change to a scientific input, and both stop at
-  the Approve button. The other two tools that are not read-only,
-  `generate_rerun_bundle` and `export_evidence_brief`, write page state only: the
-  bundle contains nothing a human has not already approved, and the brief only
-  reports.
+  the Approve button. The other four tools that are not read-only write page state
+  only: the bundle contains nothing a human has not already approved, and the
+  brief, reanalysis and sampling plan only report.
 - **The minimum that solves it.** No accounts, no uploads, no live MD, no DFT.
 
 ## The data
@@ -119,7 +119,7 @@ demonstrate refusing to quote a spread.
 ```
 bun install
 bun run dev        # http://localhost:5173
-bun run test       # 640 tests
+bun run test       # 641 tests
 bun run build
 ```
 

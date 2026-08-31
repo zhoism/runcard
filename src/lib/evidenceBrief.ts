@@ -15,6 +15,8 @@ export interface EvidenceBriefInput {
 }
 
 const md = (value: unknown) => String(value ?? "").replace(/([\\`*_{}<>#|])/g, "\\$1").replaceAll("[", "\\[").replaceAll("]", "\\]").replace(/\r?\n/g, " ");
+/** Inside a code span Markdown takes backslashes literally, so escape nothing and just neutralise backticks. */
+const code = (value: unknown) => String(value ?? "").replace(/`/g, "'").replace(/\r?\n/g, " ");
 const n = (value: number | null | undefined, digits = 2) => value == null ? "not available" : value.toFixed(digits);
 const section = (title: string, body: string[]) => [`## ${title}`, "", ...body, ""];
 
@@ -39,7 +41,7 @@ export function buildEvidenceBrief(input: EvidenceBriefInput): EvidenceBriefSnap
   const lines: string[] = [`# Evidence brief: ${md(m.title)}`, ""];
 
   lines.push(...section("Record", [
-    `- Run: \`${md(m.id)}\` — ${md(m.title)}`,
+    `- Run: \`${code(m.id)}\` — ${md(m.title)}`,
     `- Card: [${md(cardUrl)}](${cardUrl})`,
     `- Published manifest: [${md(manifestUrl)}](${manifestUrl})`,
     `- Report generated: ${md(generatedAt)}. This is the report time, not the simulation execution time.`,
@@ -88,13 +90,13 @@ export function buildEvidenceBrief(input: EvidenceBriefInput): EvidenceBriefSnap
 
   if (proposals.length || investigation?.bundle) {
     included.push("proposals_and_prepared_bundle");
-    const proposalLines = proposals.length ? proposals.map(p => `- Proposal \`${md(p.id)}\` (${md(p.stage)}): **${md(p.status)}** — ${md(p.reason)}; ${p.changes.map(c => `${md(c.key)} ${md(c.before ?? "unset")} → ${md(c.after)}`).join(", ")}.`) : ["- No proposals were generated in this session."];
+    const proposalLines = proposals.length ? proposals.map(p => `- Proposal \`${code(p.id)}\` (${md(p.stage)}): **${md(p.status)}** — ${md(p.reason)}; ${p.changes.map(c => `${md(c.key)} ${md(c.before ?? "unset")} → ${md(c.after)}`).join(", ")}.`) : ["- No proposals were generated in this session."];
     const bundle = investigation?.bundle?.value;
     const bundleLines = bundle ? [
-      `- Bundle snapshot: \`${md(bundle.name)}\`, prepared ${md(bundle.generatedAt)}. Prepared does not mean the simulation was run.`,
-      `- Applied proposal IDs at generation: ${bundle.appliedProposalIds.length ? bundle.appliedProposalIds.map(x => `\`${md(x)}\``).join(", ") : "none"}. Later approval changes do not alter this snapshot.`,
+      `- Bundle snapshot: \`${code(bundle.name)}\`, prepared ${md(bundle.generatedAt)}. Prepared does not mean the simulation was run.`,
+      `- Applied proposal IDs at generation: ${bundle.appliedProposalIds.length ? bundle.appliedProposalIds.map(x => `\`${code(x)}\``).join(", ") : "none"}. Later approval changes do not alter this snapshot.`,
       `- Changed stages in this bundle: ${bundle.changedStages.length ? bundle.changedStages.map(x => md(x.stage)).join(", ") : "none"}.`,
-      ...bundle.forks.map(f => `- Fork \`${md(f.id)}\`: **${f.complete ? "complete" : "incomplete / partially approved"}**; applied ${f.appliedStages.map(md).join(", ") || "no stages"}${f.missingStages.length ? `; missing intended stages ${f.missingStages.map(md).join(", ")}` : ""}.`),
+      ...bundle.forks.map(f => `- Fork \`${code(f.id)}\`: **${f.complete ? "complete" : "incomplete / partially approved"}**; applied ${f.appliedStages.map(md).join(", ") || "no stages"}${f.missingStages.length ? `; missing intended stages ${f.missingStages.map(md).join(", ")}` : ""}.`),
       ...(bundle.combinesMultipleForks ? ["- Warning: this bundle combines multiple fork questions, so its result would not answer either question alone."] : []),
       `- Build inputs: ${bundle.selfContained ? "self-contained" : `incomplete; missing ${bundle.missingInputs.map(md).join(", ")}`}.`,
     ] : ["- No rerun bundle was prepared in this session."];
@@ -109,7 +111,7 @@ export function buildEvidenceBrief(input: EvidenceBriefInput): EvidenceBriefSnap
   for (const a of Object.values(m.analyses)) if (a.png) artifacts.add(a.png);
   if (m.environment.conda_lock_file) artifacts.add(m.environment.conda_lock_file);
   lines.push(...section("Sources and limits", [
-    `- Source artifacts named by the manifest: ${artifacts.size ? [...artifacts].map(x => `\`${md(x)}\``).join(", ") : "none listed"}. These are artifact identities, not invented download links.`,
+    `- Source artifacts named by the manifest: ${artifacts.size ? [...artifacts].map(x => `\`${code(x)}\``).join(", ") : "none listed"}. These are artifact identities, not invented download links.`,
     `- The card and published manifest are the hosted sources for this report.`,
     `- Preparing this report performed deterministic checks over archived data. It did not run molecular dynamics, rerun MMPBSA.py, validate against experiment, establish a cause for differences, approve a proposal, or complete a follow-up simulation.`,
   ]));

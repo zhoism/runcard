@@ -532,8 +532,12 @@ export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; targe
   for (const s of m.stages) {
     let text = s.mdin;
     // Approved proposals compose: the store lists newest first, so apply oldest → newest, each on top of the previous.
-    for (const p of [...opts.approved].reverse().filter(p => p.stage === s.name)) text = applyEdits(text, p.edits);
-    if (opts.seed === "pinned" && s.realized_seed !== undefined && /\big\s*=/.test(text)) text = applyEdits(text, { ig: String(s.realized_seed) });
+    const here = [...opts.approved].reverse().filter(p => p.stage === s.name);
+    for (const p of here) text = applyEdits(text, p.edits);
+    // An approved ig edit outranks the pinned seed. Overwriting it would leave the README, the tool's
+    // changed_stages and the evidence brief all reporting a seed the file does not contain.
+    if (opts.seed === "pinned" && !here.some(p => Object.keys(p.edits).some(k => k.toLowerCase() === "ig"))
+      && s.realized_seed !== undefined && /\big\s*=/.test(text)) text = applyEdits(text, { ig: String(s.realized_seed) });
     files[`md/${s.name}.in`] = text;
   }
   files["build/leap.in"] = m.system.leap_in;
@@ -568,7 +572,7 @@ export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; targe
     ...opts.approved.filter(p => !p.fork).map(p => `- plain edit: ${p.stage} ${(p.changes ?? []).map(c => `${c.key} ${c.before ?? "(unset)"} → ${c.after}`).join(", ") || JSON.stringify(p.edits)} — ${p.reason}`),
     "- lineage is recorded in this bundle's manifest.json (`parent`, `fork`); tools/extract_run.py copies it onto the child card when the rerun directory is extracted", ""];
   files["README.md"] = [`# Rerun bundle: ${m.title} (${m.id})`, "",
-    `Seed policy: **${opts.seed}** — ${opts.seed === "pinned" ? "each stage's ig is set to the seed pmemd actually used in the original run (exact replay on the same build; different hardware/compilers may still diverge)." : "ig=-1 as in the original; this is an independent sample, expect ΔG within the run-to-run spread, not equal."}`,
+    `Seed policy: **${opts.seed}** — ${opts.seed === "pinned" ? `each stage's ig is set to the seed pmemd actually used in the original run (exact replay on the same build; different hardware/compilers may still diverge)${opts.approved.some(p => Object.keys(p.edits).some(k => k.toLowerCase() === "ig")) ? ", except where an approved change sets ig itself — that stage keeps the approved seed and is no longer a replay" : ""}.` : "ig=-1 as in the original; this is an independent sample, expect ΔG within the run-to-run spread, not equal."}`,
     `Target: ${opts.target}`, "", ...forkSection, "## Environment", `- ${m.environment.pmemd ?? m.stages[0].engine}`, ...Object.entries(m.environment.conda_lock).map(([k, v]) => `- ${k}=${v}`), "",
     "## Approved changes", ...(opts.approved.length ? opts.approved.map(p => `- ${p.stage}: ${JSON.stringify(p.edits)} — ${p.reason}`) : ["- none"]), "",
     "## What this bundle is", gaps.length

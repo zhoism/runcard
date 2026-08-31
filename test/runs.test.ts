@@ -377,6 +377,18 @@ describe("fork_experiment", () => {
     expect(p.note).toMatch(/at least 3 comparable independent runs/);
     expect(p.note).not.toMatch(/within the run-to-run spread/);
   });
+  it("an approved ig edit outranks the pinned seed instead of being silently overwritten", () => {
+    const p = makeProposal(B, "product", { ig: "424242" }, "pin my own seed"); p.status = "approved";
+    const pinned = rerunBundle(B, { seed: "pinned", target: "local", approved: [p] });
+    expect(pinned["md/product.in"]).toMatch(/ig\s*=\s*424242/);
+    expect(pinned["README.md"]).toMatch(/except where an approved change sets ig itself/);
+    // every other stage still gets its realized seed
+    const heat = B.stages.find(s => s.name === "heat")!;
+    if (heat.realized_seed !== undefined) expect(pinned["md/heat.in"]).toMatch(new RegExp(`ig\\s*=\\s*${heat.realized_seed}`));
+    // and without that approval the pinned seed still wins
+    const plain = rerunBundle(B, { seed: "pinned", target: "local", approved: [] });
+    expect(plain["md/product.in"]).not.toMatch(/ig\s*=\s*424242/);
+  });
   it("an approved extension lands in the bundle with lineage: README ## Fork and manifest parent/fork; plain bundles record reproduce/replicate", () => {
     const f = forkExperiment(B, idx, { kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" });
     const approved = (f as any)._proposals.map((p: any) => ({ ...p, status: "approved" }));

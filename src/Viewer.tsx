@@ -12,7 +12,8 @@ export function Viewer({ url, ligand }: { url: string; ligand: string | null }) 
     if (!ref.current) return;
     if (!hasWebGL()) { setErr("WebGL is not available in this browser"); return; }
     let alive = true, v: any;
-    try { v = $3Dmol.createViewer(ref.current, { backgroundColor: "#0b0f14" }); }
+    const bg = getComputedStyle(document.documentElement).getPropertyValue("--viewer-bg").trim() || "#0b0f14";
+    try { v = $3Dmol.createViewer(ref.current, { backgroundColor: bg }); }
     catch (e: any) { setErr(`viewer failed: ${e?.message ?? e}`); return; }
     fetch(url).then(r => r.text()).then(pdb => {
       if (!alive) return;
