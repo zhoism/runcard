@@ -31,13 +31,17 @@ def outfile_facts(out_path):
     f = {}
     m = re.search(r"Setting random seed to\s+(\d+)", t)
     if m: f["realized_seed"] = int(m.group(1))
+    # pmemd prints "Total wall time: N seconds"; sander prints "| Elapsed(s) = N" / "| Total time".
     m = re.search(r"Total wall time:\s+(\d+)\s+seconds", t)
     if m: f["wall_s"] = int(m.group(1))
-    m = re.search(r"^\s+(Amber \d+ PMEMD)\s+(\d{4})\s*$", t, re.M)
+    else:
+        m = re.search(r"^\|\s*Elapsed\(s\)\s*=\s*([\d.]+)", t, re.M)
+        if m: f["wall_s"] = int(float(m.group(1)))
+    m = re.search(r"^\s+(Amber \d+ [A-Z][A-Za-z.]*)\s+(\d{4})\s*$", t, re.M)
     if m: f["engine"] = f"{m.group(1)} ({m.group(2)})"
     m = re.search(r"Release\s+(\d+)", t)
     if m: f["engine_release"] = m.group(1)
-    f["finished"] = "Total wall time" in t or "FINAL RESULTS" in t
+    f["finished"] = "Total wall time" in t or "FINAL RESULTS" in t or "Elapsed(s)" in t
     return f
 
 
