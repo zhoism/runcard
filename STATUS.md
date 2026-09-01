@@ -12,6 +12,14 @@ card on Home (parent node, rail, forks with engine/length/ΔG, computed verdict)
 `fork of …` / `N forks · status` badges in the titlebar, and `↳ fork of` / `· N forks` markers in the run table. The one real
 network on the site is in **tension** (parent −19.20 vs fork mean −17.51 ± 0.54, 2.6× the run-to-run SD, PMEMD vs SANDER named
 as the confound) — shown in amber, not hidden. Not built (need a backend): comments, stars, uploads; say so in the Devpost.
+**Designer round 2 (2026-09-01, spec in `docs/design/SPEC-2026-09-01-designer-round2.md`), built:** (1) proposals are
+Figma-style comments pinned to the stage they target — bubble beside the stage dot, thread opens inline in the stage
+detail with who/when (callTool stamps `source`/`t`), the diff, validation after, Approve / Reject; the sidebar only
+points at the pins for the run on screen. (2) Analyses: `src/lib/analysisCatalog.ts` names each cpptraj plot, files it
+under structure / dynamics / ensemble / energy and gives a one-line meaning (plot type, never a run's number); filter
+pills above the gallery. (3) Fork flow: three cards (Reproduce / Replicate / Extend, one navy verb each, Copy prompt,
+amber "needs your approval" on Extend), moved up under the fork network, with a **Fork** button in the title bar; the
+general agent prompts moved into Current investigation. 390 px re-measured clean with a stage open.
 Next if time: an activity feed (the call log as a timeline) and an agent-review card on pending proposals.
 
 ## Investigation workspace build (live 2026-08-31 as 5a885d9)

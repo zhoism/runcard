@@ -97,6 +97,33 @@ function ProposalThread({ p, compact }: { p: Proposal; compact?: boolean }) {
   </div>;
 }
 
+/** Fork this experiment: three cards, one primary action each. Reproduce and replicate change no inputs, so they act at once;
+    extend changes one variable and is prefilled into the console, where it becomes a proposal that waits for Approve. */
+function ForkCards({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> | null }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const card = `${window.location.origin}${window.location.pathname}#/run/${m.id}`;
+  const copy = async (id: string, text: string) => { try { await navigator.clipboard.writeText(text); setCopied(id); } catch { setCopied(`error:${id}`); } };
+  const kinds = [
+    { id: "reproduce", title: "Reproduce", desc: "Rerun exactly as-is: pinned seeds, same build. Confirms the pipeline replays; it cannot show the result is stable.", action: "Build bundle", approval: false,
+      run: () => callTool("generate_rerun_bundle", { run_id: m.id, seed: "pinned", target: "local" }, "page"),
+      prompt: `Build the pinned rerun bundle for ${card} and tell me what it contains and what running it would establish.` },
+    { id: "replicate", title: "Replicate", desc: ens && ens.all.n > 1 ? `Same protocol, fresh seeds. An executed rerun joins the ${ens.all.n}-run spread above.` : "Same protocol, fresh seeds. An executed rerun starts the run-to-run spread this card lacks.", action: "Plan replicate", approval: false,
+      run: () => callTool("fork_experiment", { run_id: m.id, kind: "replicate" }, "page"),
+      prompt: `Plan a replicate of ${card}: how many more independent runs are needed and at what length? Then prepare the replicate fork.` },
+    { id: "extend", title: "Extend", desc: "Change one variable, hold the rest fixed — e.g. temp0 → 310 K. The controlled diff becomes a proposal pinned to its stages.", action: "Prefill console", approval: true,
+      run: () => { set({ console: { tool: "fork_experiment", input: JSON.stringify({ run_id: m.id, kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" }, null, 1) } }); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); },
+      prompt: `Using ${card}, prepare a controlled temperature change and explain what stays fixed. Stop at a pending proposal and wait for my approval.` },
+  ];
+  return <div className="card" id="fork-card"><h2>Fork this experiment <span className="dim">reproduce and replicate change no inputs; extend changes one and waits for your approval</span></h2>
+    <div className="fork-cards">{kinds.map(k => <div key={k.id} className="fork-card">
+      {k.approval && <span className="badge warn">needs your approval</span>}
+      <h3>{k.title}</h3><p>{k.desc}</p>
+      <div className="fork-actions"><button onClick={k.run}>{k.action}</button><button className="ghost" onClick={() => copy(k.id, k.prompt)} aria-label={`Copy the ${k.title.toLowerCase()} prompt for your agent`}>Copy prompt</button>
+        {copied === k.id && <span className="dim small" role="status">Copied</span>}{copied === `error:${k.id}` && <span className="fail small" role="status">Clipboard unavailable</span>}</div>
+    </div>)}</div>
+  </div>;
+}
+
 /** The cpptraj plots as a filterable gallery: each has a name, a family and a one-line meaning from the catalogue. */
 function AnalysesCard({ m }: { m: Manifest }) {
   const [filter, setFilter] = useState<AnalysisCategory | "all">("all");
@@ -142,11 +169,10 @@ function AgentPrompts({ runId, partnerId }: { runId: string; partnerId?: string 
   const prompts = [
     { id: "evidence", label: "Inspect the evidence", text: `Check what supports this result and what is still uncertain. Use the tools on ${card(runId)} and do not claim more than the evidence supports.` },
     ...(partnerId ? [{ id: "compare", label: "Check comparability", text: `Check whether ${runId} and ${partnerId} are comparable and explain their differences. Start from ${card(runId)} and investigate before drawing a conclusion.` }] : []),
-    { id: "followup", label: "Prepare a controlled follow-up", text: `Using ${card(runId)}, prepare a controlled temperature change and explain what stays fixed. Stop at a pending proposal and wait for my approval.` },
   ];
   const copy = async (id: string, text: string) => { try { await navigator.clipboard.writeText(text); setCopied(id); } catch { setCopied(`error:${id}`); } };
   return <>
-    <p className="dim small">Hand one of these to your agent — each names this run's card URL.</p>
+    <p className="dim small">Ask your agent — each request names this run's card URL.</p>
     <div className="request-examples" aria-label="Example requests for your agent">{prompts.map(p => <div className="request" key={p.id}>
       <h3>{p.label}</h3><pre className="small">{p.text}</pre>
       <button className="ghost" onClick={() => copy(p.id, p.text)} aria-label={`Copy the ${p.label.toLowerCase()} prompt`}>Copy prompt</button>
@@ -200,6 +226,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
     <section className="run">
       <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
         {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {m.parent}</a>}
+        <button type="button" className="fork-btn" onClick={() => { const el = document.getElementById("fork-card"); el?.scrollIntoView({ behavior: "smooth", block: "start" }); el?.classList.add("flash"); setTimeout(() => el?.classList.remove("flash"), 1200); }}>Fork</button>
         {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</a>}
         <select value="" aria-label="compare this run with" onChange={e => e.target.value && navigate(`/compare/${id}/${e.target.value}`)}><option value="">compare with…</option>{others.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}</select></div>
       {/* Lineage is identity, not provenance trivia: a replicate has to say what it replicates before it shows
@@ -241,6 +268,8 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
 
       {net && net.n > 0 && <ForkNetworkCard net={net} compact />}
 
+      <ForkCards m={m} ens={ens} />
+
       <div className="card">
         <h2>Stages <span className={`badge ${overall.toLowerCase()}`}>input checks {overall}</span></h2>
         <p className="dim small">11 rules on each .in file (timestep vs SHAKE, cutoff, thermostat, barostat, restarts, seeds, output cadence): a sanity check of the input files, not evidence of convergence or physical accuracy and not a rung of the confidence ladder — select a stage for its input and findings.</p>
@@ -276,7 +305,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
       </div>
 
       {ladder && <EvidenceOverview ladder={ladder} explanation={explanation} investigation={investigation} validationVerdict={overall} />}
-      <CurrentInvestigation runId={id} investigation={investigation} />
+      <CurrentInvestigation runId={id} investigation={investigation} partnerId={ens?.all.runs.find(r => r.id !== m.id)?.id ?? others[0]?.id} />
 
       {ladder && (() => { const L = ladder; const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
         <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} assessed rungs verified{L.rungs.some(r => r.status === "partly established") ? ` · ${L.rungs.filter(r => r.status === "partly established").length} partly established` : ""} · 1 not assessed · computed from the archived data</span></h2>
@@ -284,17 +313,6 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
           <details className="small"><summary className="dim">evidence</summary><p className="dim">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</p></details></li>)}</ol>
       </div>; })()}
 
-      <div className="card"><h2>Fork this experiment <span className="dim">Reproduce and replicate change no inputs, so no proposal is needed. Extend changes one variable, so it waits for your approval.</span></h2>
-        <dl className="fork">
-          <dt>reproduce</dt><dd>rerun the original as exactly as possible: pinned seeds, same build — tests <i>repeatability</i> if executed and compared; it cannot show the result is stable.</dd>
-          <div className="act"><button className="ghost" onClick={() => callTool("generate_rerun_bundle", { run_id: m.id, seed: "pinned", target: "local" }, "page")}>build pinned bundle</button></div>
-          <dt>replicate</dt><dd>same protocol, independent seeds (ig=-1) — {ens && ens.all.n > 1 ? "an executed rerun joins the run-to-run spread above" : "an executed rerun would start the run-to-run spread this card lacks"}.</dd>
-          <div className="act"><button className="ghost" onClick={() => callTool("fork_experiment", { run_id: m.id, kind: "replicate" }, "page")}>plan a replicate</button></div>
-          <dt>extend</dt><dd>change one variable, hold the listed controls: the controlled diff is validated and waits for your approval before a bundle exists.</dd>
-          <div className="act"><button className="ghost" onClick={() => { set({ console: { tool: "fork_experiment", input: JSON.stringify({ run_id: m.id, kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" }, null, 1) } }); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>prefill the console with an extension (temp0 → 310 K) →</button></div>
-        </dl>
-        <AgentPrompts runId={m.id} partnerId={ens?.all.runs.find(r => r.id !== m.id)?.id ?? others[0]?.id} />
-      </div>
 
       <AnalysesCard m={m} />
 
@@ -322,7 +340,7 @@ function EvidenceOverview({ ladder, explanation, investigation, validationVerdic
   </section>;
 }
 
-function CurrentInvestigation({ runId, investigation }: { runId: string; investigation?: InvestigationState }) {
+function CurrentInvestigation({ runId, investigation, partnerId }: { runId: string; investigation?: InvestigationState; partnerId?: string }) {
   // Subscribe to the stable array and filter outside the selector: useStore passes the selector straight to
   // useSyncExternalStore as getSnapshot, so returning a fresh array here re-renders without end (React #185).
   const proposals = useStore(s => s.proposals).filter(p => p.run === runId);
@@ -348,6 +366,7 @@ function CurrentInvestigation({ runId, investigation }: { runId: string; investi
     {bundle && <div className="investigation-item"><h3>Prepared rerun bundle <Source source={investigation!.bundle!.source} /></h3><p><b>{bundle.name}</b> · {bundle.appliedProposalIds.length} approved proposal{bundle.appliedProposalIds.length === 1 ? "" : "s"} captured at generation · {bundle.selfContained ? "self-contained" : `missing ${bundle.missingInputs.join(", ")}`}. Prepared does not mean simulated.</p>{bundle.forks.map(f => <p className={f.complete ? "dim small" : "warnbox"} key={f.id}>Fork {f.id}: {f.complete ? "complete at generation" : `partially approved — ${f.missingStages.join(", ")} not applied`}.</p>)}{bundle.combinesMultipleForks && <p className="warnbox">This bundle combines multiple fork questions.</p>}
       <details className="small"><summary className="dim">{Object.keys(bundle.files).length} files in this bundle</summary><pre className="small">{Object.keys(bundle.files).join("\n")}</pre></details>
       <button onClick={() => downloadBlob(zipBundle(bundle.files) as BlobPart, "application/zip", bundle.name)}>Download bundle</button></div>}
+    <AgentPrompts runId={runId} partnerId={partnerId} />
     <div className="investigation-actions"><button onClick={prepare}>Prepare evidence brief</button>{brief && <><button className="ghost" onClick={copyBrief}>Copy brief</button><button className="ghost" onClick={() => downloadBlob(brief.markdown, "text/markdown;charset=utf-8", brief.filename)}>Download Markdown</button><span className="dim small">snapshot {new Date(brief.generatedAt).toLocaleString()}</span></>}</div>
     {message && <p role="status" className={message.includes("unavailable") ? "fail small" : "dim small"}>{message}</p>}
   </section>;
