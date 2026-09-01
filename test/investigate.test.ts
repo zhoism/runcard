@@ -62,4 +62,24 @@ describe("automode (investigate_run)", () => {
       expect(r.bottleneck?.movable_by).not.toBe("not assessable here");
     }
   });
+
+  it("agrees with the bundle tool about what the bundle ships (RC-006B, batch 08)", () => {
+    // generate_rerun_bundle reported self_contained:true while automode, on the same page, said the three
+    // archived build inputs "must come from the original build directory" — bundleGaps was called bare, which
+    // means "nothing is shipped". Automode fetches nothing, but the manifest's build_inputs.present already
+    // says what extract_run.py found archived under build/; the two tools must read that one fact the same way.
+    const m = load("1l2y-rep4");
+    expect(m.system.build_inputs.present.sort()).toEqual(["MOL.frcmod", "MOL.mol2", "protein_clean.pdb"]);
+    const r = investigateRun(m, idx);
+    const step = r.steps.find(s => s.tool === "generate_rerun_bundle")!;
+    expect(step.found).toContain("self-contained");
+    expect(step.found).not.toContain("must come from the original build directory");
+
+    // and the honesty survives: an input that genuinely was never archived is still named as a gap
+    const gappy = load("1l2y-rep4");
+    gappy.system.build_inputs = { present: ["MOL.frcmod", "protein_clean.pdb"], missing: ["MOL.mol2"] };
+    const g = investigateRun(gappy, idx).steps.find(s => s.tool === "generate_rerun_bundle")!;
+    expect(g.found).toContain("MOL.mol2");
+    expect(g.found).not.toContain("MOL.frcmod");
+  });
 });

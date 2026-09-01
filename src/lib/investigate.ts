@@ -120,7 +120,12 @@ export function investigateRun(m: Manifest, idx: IndexEntry[]): Investigation {
       tool: u ? "plan_sampling" : null, input: u ? { run_id: m.id } : null, needs_a_human: true };
   } else {
     // repeatable — structurally the ceiling for every run here, because nothing is ever executed in the browser.
-    const gaps = bundleGaps(m);
+    // bundleGaps' second argument is what the bundle actually ships. generate_rerun_bundle passes the build files
+    // it fetched; automode is pure and fetches nothing, but the manifest already records which of leap.in's inputs
+    // are archived under build/ (build_inputs.present — extract_run.py wrote that list from the run directory).
+    // Calling bundleGaps(m) bare would count every archived input as missing and contradict the bundle tool's own
+    // self_contained:true on the same page. (RC-006B, batch 08.)
+    const gaps = bundleGaps(m, Object.fromEntries((m.system.build_inputs?.present ?? []).map(n => [n, "archived"])));
     steps.push({ tool: "generate_rerun_bundle", why: "the rung is 'expected' for every run on this site — nothing executes here — so the useful question is whether a bundle would actually replay",
       found: gaps.length ? `the bundle is a recipe: ${gaps.join(", ")} must come from the original build directory` : "seeds, environment pins, leap.in and its build inputs are all archived, so a pinned bundle is self-contained" });
     next = { rationale: "run the pinned bundle off-site and extract the result as a card. That is the only rung left that data can move, and it is the one thing this page structurally cannot do for you.",
