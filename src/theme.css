@@ -193,3 +193,6 @@ ol.trace li > div { color: var(--ink-2); }
 
 /* the header is sticky, so in-page scroll targets need clearance */
 #tool-console, .stagebox { scroll-margin-top: calc(var(--header-h) + 12px); }
+
+/* phones: the tag and status dot cost a quarter-screen of sticky header; the number must not wrap */
+@media (max-width: 700px) { .tag { display: none; } header { align-items: center; gap: 12px; } .webmcp { text-align: right; } .webmcp::before { display: none; } .big { font-size: 26px; } }
