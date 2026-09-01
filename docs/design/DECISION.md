@@ -67,3 +67,8 @@ three defended stances; the user accepted the rulings. What renders now is `src/
 Not done from the spec (structural, post-deadline unless asked): splitting the report into pages with
 a left side nav, and an Overleaf-style collapsible split view for the compare route.
 `theme.css` (preprint) and `amber.css` remain in-tree as reference only.
+
+## 2026-09-01 (evening) — the designer's redesign supersedes the report theme
+The owner: "if I bring a bunch of stuff I expect change. Adopt it." The mockup in `redesign-2026-09-01/` is now the
+visual language of the app (IBM Plex, paper ground, flat sections, ink buttons, agent accent). The report theme's
+semantic colour code and the 13 px text floor carry over; its bento cards and navy header do not.
