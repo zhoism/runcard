@@ -351,6 +351,19 @@ describe("confidence ladder", () => {
     const oneEngine = confidenceLadderFull(B, idx.map((r: any) => ({ ...r, engine: "Amber 26 PMEMD (2026)" })));
     expect(oneEngine.rungs[2].evidence).not.toMatch(/Engines at this length/);
     expect(["verified", "not established"]).toContain(by["robust to analysis-window choices"].status); expect(by["robust to analysis-window choices"].evidence).toMatch(/4 analysis windows re-analysed/); expect(by["robust to analysis-window choices"].evidence).toMatch(/criterion ≤ 2/);
+    // The partly-established middle state is the thesis of this rung, and since the PACE-ICE replicates landed no
+    // run on the site is in it any more — so it has to be constructed, or the branch (its "✗" short text and the
+    // "N more runs" to_climb it generates) is executed by nothing. It is also the state every new system starts in.
+    const twoAt30 = idx.filter((r: any) => r.production_ps !== 30 || ["1l2y-rep4", "1l2y-rep6"].includes(r.id));
+    const partly = confidenceLadderFull(B, twoAt30).rungs[2];
+    expect(partly.status).toBe("partly established");
+    expect(partly.short).toBe("seed-replicated ✓ (9 same-protocol runs, 2–30 ps) · at this run's length (30 ps): 2 of 3 needed ✗");
+    expect(partly.evidence).toMatch(/at its own length \(30 ps\): 2 runs — fewer than the 3 needed/);
+    expect(partly.to_climb).toBe("1 more independent run at 30 ps (fork_experiment kind='replicate')");
+    expect(confidenceLadderFull(B, twoAt30).summary).toMatch(/1 partly established \(independently replicated/);
+    // singular/plural on the run it still needs
+    const oneAt30 = idx.filter((r: any) => r.production_ps !== 30 || r.id === "1l2y-rep4");
+    expect(confidenceLadderFull(B, oneAt30).rungs[2].to_climb).toBe("2 more independent runs at 30 ps (fork_experiment kind='replicate')");
     const noProto = confidenceLadderFull(B, idx.map((r: any) => ({ ...r, protocol: undefined }))); expect(noProto.rungs[2].status).toBe("not established"); expect(noProto.rungs[2].evidence).toMatch(/no protocol key/);
     expect(by["externally supported"].status).toBe("not assessed");
     expect(L.summary).toMatch(/of 4 assessable rungs verified/);
