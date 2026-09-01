@@ -68,8 +68,15 @@ partly-established branch, and all-or-nothing provenance on the new composition 
    makes the ligand default to its complement. The README states plainly that nothing was executed by the
    page, and what a fresh seed means for the number. **Client-verified by batch 08** (2026-09-01): both
    ZIPs downloaded over real WebMCP, 15 CRC-clean files each, masks differing per system, SLURM job
-   names and README claims exact. **Still not executed anywhere** — the bundle is a recipe; only an
-   off-site AMBER run (another ICE session) would turn "expected" into "verified".
+   names and README claims exact. **And now executed** (2026-09-01, local AmberTools): the exact
+   generated bundle, run unmodified against `1l2y-rep4`'s archived trajectory, reproduces the archived
+   ΔG — **−19.1939 vs −19.1953**, 1.4e-3 apart, two orders below the frame SEM, clustering structure
+   included. The execution caught a real bug no file inspection had: the script hardcoded
+   `--radii=mbondi2` while every archived analysis ran on **mbondi** topologies — a 0.47 kcal/mol error
+   in the number the bundle exists to reproduce. Radii are now read from each run's own prmtop artifact
+   into the manifest (`results.mmgbsa.radii`) and emitted from there; the four ICE runs archived no dry
+   topology, so their bundles omit `--radii` and say so instead of guessing. Receipts:
+   `docs/verification/20260901-generated-analysis-execution/`.
 2. **A new UI.** The user has one finished outside this repo and is migrating it in.
    `src/index.css` + `src/App.tsx` are what render. Do not touch `src/theme.css`, `index.html`,
    `src/Viewer.tsx`, `preview.html` — another session owns them.

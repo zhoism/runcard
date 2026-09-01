@@ -566,6 +566,23 @@ describe("the rerun bundle reproduces the number, not just the trajectory", () =
     expect(fresh).toMatch(/independent sample: expect a ΔG within the run-to-run spread, not the archived value/);
     for (const r of [pinned, fresh]) expect(r).toMatch(/Nothing here was executed by the page/);
   });
+  it("reads the GB radii from the manifest, and refuses to guess when no artifact recorded them", () => {
+    // Found by executing a generated bundle against 1l2y-rep4's archived trajectory: with the previously
+    // hardcoded mbondi2 the chain reproduces -18.73, not the archived -19.1953 — a 0.47 kcal/mol error in
+    // the exact number the bundle exists to reproduce. The archived analysis ran on mbondi topologies
+    // (analysis/comp_dry.top %FLAG RADIUS_SET); with --radii=mbondi the same chain lands at -19.1939,
+    // within reprocessing noise. Radii therefore come from the manifest, which read them from the artifact.
+    const a = rerunBundle(load("1l2y-rep4"), { seed: "pinned", target: "local", approved: [] });
+    expect(a["run_analysis.sh"]).toContain("--radii=mbondi\n");
+    expect(a["run_analysis.sh"]).not.toContain("mbondi2");
+    expect(a["README.md"]).toContain("GB radii mbondi (read from this run's archived topology)");
+    // the ICE replicates archived no dry topology, so their manifests carry no radii claim: the script
+    // must omit the flag and say so, in the script and the README both, never silently default
+    const ice = rerunBundle(load("1l2y-rep4-ice1"), { seed: "pinned", target: "local", approved: [] });
+    expect(ice["run_analysis.sh"]).not.toContain("--radii=");
+    expect(ice["run_analysis.sh"]).toContain("# no --radii: the archived run's radii set is not recorded in its artifacts");
+    expect(ice["README.md"]).toContain("GB radii unrecorded in this run's artifacts");
+  });
   it("adds SLURM directives to the analysis job too, not just the MD job", () => {
     const f = rerunBundle(B, { seed: "pinned", target: "slurm", approved: [] });
     expect(f["run_analysis.sh"].split("\n")[1]).toBe("#SBATCH --job-name=1l2y-rep4-mmgbsa");

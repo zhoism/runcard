@@ -70,6 +70,27 @@ def parse_mmpbsa_info(path):
     if m: info["numframes"] = int(m.group(1))
     return info
 
+def gb_radii(run):
+    """The GB radii set the archived MM-GBSA actually used, read from the prmtop MMPBSA.py was handed.
+    _MMPBSA_info names it (FILES.complex_prmtop, relative to analysis/mmgbsa); the prmtop's
+    %FLAG RADIUS_SET line carries the set's name with its token in parentheses — "modified Bondi
+    radii (mbondi)". mbondi vs mbondi2 moved this repo's 1L2Y ΔG by 0.47 kcal/mol when the generated
+    rerun script hardcoded the wrong one, so this is read from the artifact or left absent, never guessed.
+    Returns (token, source_relpath) or (None, None)."""
+    mmdir = run / "analysis/mmgbsa"
+    top = None
+    info = mmdir / "_MMPBSA_info"
+    if info.exists():
+        m = re.search(r"^FILES\.complex_prmtop\s*=\s*'(.+)'$", rd(info), re.M)
+        if m and (mmdir / m.group(1)).exists(): top = (mmdir / m.group(1)).resolve()
+    if top is None and (run / "analysis/comp_dry.top").exists(): top = run / "analysis/comp_dry.top"
+    if top is None: return None, None
+    m = re.search(r"%FLAG RADIUS_SET\s*\n%FORMAT\([^)]*\)\s*\n(.+)", rd(top))
+    tok = re.search(r"\(([a-z0-9]+)\)\s*$", m.group(1).strip()) if m else None
+    try: src = str(top.resolve().relative_to(run.resolve()))
+    except ValueError: src = top.name
+    return (tok.group(1) if tok else None), src
+
 def per_frame_gb(mmdir, dat_text):
     """Reconstruct per-frame ΔG from the three per-part mdout files + SASA. Returns None unless it reproduces
     mmgbsa.dat's DELTA TOTAL mean (4 dp) and population SD (4 dp) — a number is a claim."""
@@ -147,6 +168,24 @@ def stage_role(name, c):
     return "dynamics"
 
 def main():
+    if sys.argv[1] == "--patch-radii":
+        # Insert results.mmgbsa.radii into an existing manifest from the run dir's own artifacts,
+        # touching nothing else — the full extractor rerun would legitimately refresh other fields
+        # and drown this one-field change in diff noise. Same reader as extraction; still never typed.
+        run = Path(sys.argv[2]).resolve(); rid = sys.argv[3]
+        mf = ROOT / "public/runs" / rid / "manifest.json"
+        manifest = json.loads(mf.read_text())
+        tok, src = gb_radii(run)
+        if not tok: print(f"{rid}: no radii recoverable — manifest untouched", file=sys.stderr); return
+        mm = manifest["results"]["mmgbsa"]
+        rebuilt = {}
+        for k, v in mm.items():
+            rebuilt[k] = v
+            if k == "saltcon": rebuilt["radii"] = tok; rebuilt["radii_source"] = f"{src} %FLAG RADIUS_SET"
+        manifest["results"]["mmgbsa"] = rebuilt
+        mf.write_text(json.dumps(manifest, indent=1, ensure_ascii=False))
+        print(rid, "radii:", tok, "from", src)
+        return
     run = Path(sys.argv[1]).resolve(); rid = sys.argv[2]
     title = sys.argv[4] if len(sys.argv) > 4 and sys.argv[3] == "--title" else rid
     out = ROOT / "public/runs" / rid; out.mkdir(parents=True, exist_ok=True)
@@ -239,6 +278,7 @@ def main():
             "frames": nframes, "frames_header_text": fr.group(1) if fr else None,
             "frames_note": "frame count from the per-frame mdout blocks, cross-checked with _MMPBSA_info numframes; mmgbsa.dat's header prints (endframe-startframe)/interval+1 un-floored",
             "igb": gb.get("igb"), "saltcon": gb.get("saltcon"),
+            **(lambda r, srcf: {"radii": r, "radii_source": f"{srcf} %FLAG RADIUS_SET"} if r else {})(*gb_radii(run)),
             "params": {k: info[k] for k in ("startframe", "endframe", "interval", "surften", "surfoff", "receptor_mask", "ligand_mask", "entropy") if k in info},   # entropy=0 → no −TΔS term: an interaction energy, not an absolute binding free energy
             "trajectory": "single (complex trajectory; receptor/ligand extracted)",
             "run_on": (re.search(r"Run on (.+)", t) or [None, None])[1],

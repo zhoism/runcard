@@ -26,7 +26,7 @@ export interface Manifest {
     mmgbsa?: {
       delta_total_kcal_mol: number; frame_std: number; frame_sem: number; sd_convention?: string;
       frames: number | null; frames_header_text?: string | null; frames_note?: string;
-      igb: string; saltcon: string; params?: Record<string, string>; trajectory: string; run_on: string | null; mmpbsa_version: string | null; warnings: string[];
+      igb: string; saltcon: string; radii?: string; radii_source?: string; params?: Record<string, string>; trajectory: string; run_on: string | null; mmpbsa_version: string | null; warnings: string[];
       per_frame?: PerFrame | null;
     };
     plip?: { frame: { policy: string; index: number; nframes: number } | null; ligand: Record<string, unknown> | null; interactions: Record<string, { residue: string; dist?: number }[]>; source?: string };

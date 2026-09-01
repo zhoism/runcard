@@ -575,11 +575,15 @@ export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; targe
       "set -euo pipefail",
       'cd "$(dirname "$0")"', "",
       'MD="$(cd "$(dirname "$0")/md" && pwd)"', 'mkdir -p analysis && cd analysis', "",
-      'echo "[1/4] dry topologies (igb=5 needs mbondi2 radii)" >&2',
+      // The GB radii are a property of the topology, not of mmgbsa.in, and they are not cosmetic: mbondi vs
+      // mbondi2 moved this repo's own 1L2Y ΔG by 0.47 kcal/mol when an earlier version hardcoded mbondi2 here.
+      // The set comes from the manifest, which read it from the prmtop the archived MM-GBSA was actually handed;
+      // when no artifact recorded it, the flag is omitted and the README says so instead of guessing.
+      `echo "[1/4] dry topologies (${mmb.radii ? `${mmb.radii} radii, read from this run's archived topology` : "radii set not recovered from this run's artifacts; ante-MMPBSA.py's default applies"})" >&2`,
       "ante-MMPBSA.py \\", '  -p "$MD/comp_oct.top" \\', "  -c complex_dry.top \\", "  -r receptor.top \\", "  -l ligand.top \\",
       `  -s '${strip}' \\`,
       ...(recMask ? [`  -m '${recMask}' \\`] : []),
-      "  --radii=mbondi2",
+      mmb.radii ? `  --radii=${mmb.radii}` : "  # no --radii: the archived run's radii set is not recorded in its artifacts",
       ...(recMask ? ["# -m and -n are mutually exclusive in ante-MMPBSA.py. Passing the receptor mask as -m makes",
         `# the ligand default to !(${recMask}) == ${pr.ligand_mask ?? "the remainder"}, which is exactly what this card recorded.`] : []),
       "",
@@ -634,7 +638,7 @@ export function rerunBundle(m: Manifest, opts: { seed: "pinned" | "fresh"; targe
     "2. copy comp_oct.top / comp_oct.crd into md/", "3. `bash run.sh` — the MD stages, producing the trajectory",
     ...(mmb ? ["4. `bash run_analysis.sh` — dry topologies, strip solvent, MM-GBSA. This is what produces a ΔG comparable to this card's."] : []),
     "", "## Reproducing the number", mmb
-      ? `\`analysis/mmgbsa.in\` and \`run_analysis.sh\` carry this card's own MM-GBSA settings — igb=${mmb.igb}, saltcon=${mmb.saltcon}, frames ${mmb.params?.startframe ?? 1}–${mmb.params?.endframe ?? "?"} every ${mmb.params?.interval ?? 1}, receptor \`${mmb.params?.receptor_mask ?? "?"}\`, ligand \`${mmb.params?.ligand_mask ?? "?"}\`, single trajectory, no entropy term. ${opts.seed === "pinned" ? `With seed policy pinned this should reproduce the archived ${mmb.delta_total_kcal_mol} kcal/mol on the same build; different hardware or compilers may still diverge.` : "With seed policy fresh this is an independent sample: expect a ΔG within the run-to-run spread, not the archived value."} Nothing here was executed by the page — this is a recipe, and \"expected\" until you run it.`
+      ? `\`analysis/mmgbsa.in\` and \`run_analysis.sh\` carry this card's own MM-GBSA settings — igb=${mmb.igb}, saltcon=${mmb.saltcon}, frames ${mmb.params?.startframe ?? 1}–${mmb.params?.endframe ?? "?"} every ${mmb.params?.interval ?? 1}, receptor \`${mmb.params?.receptor_mask ?? "?"}\`, ligand \`${mmb.params?.ligand_mask ?? "?"}\`, single trajectory, no entropy term, ${mmb.radii ? `GB radii ${mmb.radii} (read from this run's archived topology)` : "GB radii unrecorded in this run's artifacts — the script omits --radii, so ante-MMPBSA.py's default (mbondi) applies, which may not be what produced the archived number"}. ${opts.seed === "pinned" ? `With seed policy pinned this should reproduce the archived ${mmb.delta_total_kcal_mol} kcal/mol on the same build; different hardware or compilers may still diverge.` : "With seed policy fresh this is an independent sample: expect a ΔG within the run-to-run spread, not the archived value."} Nothing here was executed by the page — this is a recipe, and \"expected\" until you run it.`
       : "This card has no archived MM-GBSA result, so no analysis step is included.", "",
     "## Force fields", ...m.system.force_fields.map(f => `- leaprc.${f}`)].join("\n");
   files["manifest.json"] = JSON.stringify({ ...m, parent: m.id, fork: lineage, stages: m.stages.map(s => ({ ...s, mdin: undefined })) }, null, 1);

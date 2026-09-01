@@ -286,6 +286,8 @@
    "frames_note": "frame count from the per-frame mdout blocks, cross-checked with _MMPBSA_info numframes; mmgbsa.dat's header prints (endframe-startframe)/interval+1 un-floored",
    "igb": "5",
    "saltcon": "0.100",
+   "radii": "mbondi",
+   "radii_source": "analysis/comp_dry.top %FLAG RADIUS_SET",
    "params": {
     "startframe": "1",
     "endframe": "500",

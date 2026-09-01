@@ -1,0 +1,40 @@
+TIME:		Results Output : 0.0038 s ( 45.54%)
+TIME:	Output Total : 0.0084 s (  6.03%)
+
+TIME: Analyses took 0.1399 seconds.
+
+DATASETS (7 total):
+	RMSD_00001 "RMSD_00001" (double, rms), size is 500 (4.000 kB)
+	_DEFAULTCRD_ "_DEFAULTCRD_" (coordinates), size is 500 (1.856 MB)
+	C0 "C0" (integer), size is 500 (2.000 kB)
+	CMATRIX_00003 "CMATRIX_00003" (pairwise matrix (mem)), size is 124750 (499.064 kB)
+	C0[DBI] "C0[DBI]" (double), size is 1 (0.008 kB)
+	C0[PSF] "C0[PSF]" (double), size is 0
+	C0[SSRSST] "C0[SSRSST]" (double), size is 0
+    Total data set memory usage is at least 2.361 MB
+
+DATAFILES (1 total):
+  cnumvtime.dat (Standard Data File):  C0
+
+RUN TIMING:
+TIME:		Init               : 0.0000 s (  0.00%)
+TIME:		Trajectory Process : 0.0015 s (  1.03%)
+TIME:		Action Post        : 0.0000 s (  0.00%)
+TIME:		Analysis           : 0.1399 s ( 98.61%)
+TIME:		Data File Write    : 0.0005 s (  0.34%)
+TIME:		Other              : 0.0000 s (  0.00%)
+TIME:	Run Total 0.1418 s
+---------- RUN END ---------------------------------------------------
+  [quit]
+TIME: Total execution time: 0.1667 seconds.
+--------------------------------------------------------------------------------
+To cite CPPTRAJ use:
+Daniel R. Roe and Thomas E. Cheatham, III, "PTRAJ and CPPTRAJ: Software for
+  Processing and Analysis of Molecular Dynamics Trajectory Data". J. Chem.
+  Theory Comput., 2013, 9 (7), pp 3084-3095.
+
+--- DELTA TOTAL ---
+DELTA TOTAL                -19.1939                1.7084              0.1708
+
+
+-------------------------------------------------------------------------------
