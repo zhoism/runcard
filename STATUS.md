@@ -77,15 +77,14 @@ partly-established branch, and all-or-nothing provenance on the new composition 
    into the manifest (`results.mmgbsa.radii`) and emitted from there; the four ICE runs archived no dry
    topology, so their bundles omit `--radii` and say so instead of guessing. Receipts:
    `docs/verification/20260901-generated-analysis-execution/`.
-2. ~~**A new UI.**~~ **Landed 2026-09-01** (overnight design pass, this session). What renders is now
-   `src/amber.css` — the "amber record" direction: cool lab-bench ground, IBM Plex Serif/Mono, the
-   headline ΔG in a translucent resin field, and the agent rail as a sticky graphite instrument panel.
-   Two directions were built on unchanged `App.tsx` markup and compared at 390/1440/2560 px before
-   choosing; the decision record and token system are in `docs/design/DECISION.md`. The runner-up
-   "preprint" theme (`src/theme.css` + `preview.html`) is kept as reference; `src/index.css` is retired
-   but kept in-tree. `src/App.tsx` and all tool logic untouched. Verified: 654 tests, tsc, build; DevTools
-   pass with no overflow and no console errors; propose → Approve → bundle, automode, brief, 404,
-   compare all exercised on the themed app.
+2. **A new UI — resolved 2026-09-01: the user keeps the dark `index.css` design.** The overnight
+   design pass built and preview-deployed the "amber record" theme (`src/amber.css`, decision record
+   in `docs/design/DECISION.md`); the user reviewed the preview and rejected it ("go back to the old
+   one"), so `src/main.tsx` imports `src/index.css` again — exactly what production serves. Both
+   alternate themes stay in-tree as reference only (`amber.css`; `theme.css` behind `preview.html`).
+   **Do not re-land either without the user asking.** `src/App.tsx` and all tool logic were never
+   touched by the design pass. Side benefit kept from the pass: theme.css bug fixes (ladder rules,
+   cohort double-dash) for the reference page.
 3. **Demo video + Devpost writeup.** Last, after 1 and 2, so it shows the finished thing.
 
 **Batch 07 is done** (2026-09-01, stopped early). It verified automode's two critical invariants, the
@@ -110,9 +109,10 @@ a five-minute judging pass, and each risks regressing code that is currently gre
 
 ### Constraints that will bite a new session
 
-- **What renders is `src/amber.css` + `src/App.tsx`** (since 2026-09-01). `src/theme.css` +
-  `preview.html`/`src/main.preview.tsx` are the runner-up design kept for reference; `src/index.css` is
-  retired. The file-ownership split between sessions is over.
+- **What renders is `src/index.css` + `src/App.tsx`** — the user rejected the amber redesign on
+  preview (2026-09-01) and chose to keep the dark UI. `src/amber.css` and `src/theme.css` (behind
+  `preview.html`) are reference-only; do not import them. The file-ownership split between sessions
+  is over.
 - **`useStore` passes its selector straight to `useSyncExternalStore` as `getSnapshot`**
   (`src/store.ts:12`), so a selector returning a fresh array or object loops forever (React #185).
   Subscribe to the stable value and filter outside the selector. This shipped once.
