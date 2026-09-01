@@ -20,11 +20,9 @@ under structure / dynamics / ensemble / energy and gives a one-line meaning (plo
 pills above the gallery. (3) Fork flow: three cards (Reproduce / Replicate / Extend, one navy verb each, Copy prompt,
 amber "needs your approval" on Extend), moved up under the fork network, with a **Fork** button in the title bar; the
 general agent prompts moved into Current investigation. 390 px re-measured clean with a stage open.
-**Visual language (2026-09-01 evening):** the designer's mockup (`docs/design/redesign-2026-09-01/`) is adopted wholesale
-in `src/report.css` — IBM Plex Sans/Mono, paper ground, flat sections with eyebrow headings, ΔG block ruled above and
-below, ladder as five rungs in a row, chart cards, ink buttons, rail cards, agent-purple pins and threads, 3 px radii.
-The morning's bento/navy ruling is superseded by the owner's instruction. Text floor 13 px kept. Header runs full width
-(outer 1fr grid columns absorb the slack); 390 px re-measured clean.
+**Visual language:** the designer's mockup (`docs/design/redesign-2026-09-01/`) was adopted in 007890a and **reverted the
+same evening on the owner's instruction**; the app is back on the navy/bento report theme of e365aa6. Kept from the
+interval: the Fork dropdown, the grouped compare picker, the header logo mark, the fixed approved-pin colour.
 Next if time: an activity feed (the call log as a timeline) and an agent-review card on pending proposals.
 
 ## Investigation workspace build (live 2026-08-31 as 5a885d9)

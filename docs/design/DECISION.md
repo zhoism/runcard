@@ -72,3 +72,7 @@ a left side nav, and an Overleaf-style collapsible split view for the compare ro
 The owner: "if I bring a bunch of stuff I expect change. Adopt it." The mockup in `redesign-2026-09-01/` is now the
 visual language of the app (IBM Plex, paper ground, flat sections, ink buttons, agent accent). The report theme's
 semantic colour code and the 13 px text floor carry over; its bento cards and navy header do not.
+
+## 2026-09-01 (later) — reverted
+The redesign adoption (007890a) was reverted on the owner's instruction; the report theme of e365aa6 stands. The
+mockup stays archived for reference. The Fork dropdown, grouped compare picker and logo mark are kept.

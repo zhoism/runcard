@@ -272,8 +272,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const net = idx.length ? forkNetwork(idx, id) : null;
   return (
     <section className="run">
-      <div className="run-id">{m.id}</div>
-      <div className="titlebar"><h1>{m.title}</h1>
+      <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
         {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {m.parent}</a>}
         <ForkMenu m={m} ens={ens} />
         {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</a>}
@@ -358,7 +357,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
 
       {ladder && (() => { const L = ladder; const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
         <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} assessed rungs verified{L.rungs.some(r => r.status === "partly established") ? ` · ${L.rungs.filter(r => r.status === "partly established").length} partly established` : ""} · 1 not assessed · computed from the archived data</span></h2>
-        <ol className="ladder">{L.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><div className="rung-head"><span className="dim mono">{i + 1}</span><span className={`badge ${cls(r.status)}`}>{r.status}</span></div><b className="rung-name">{r.rung}</b><span className="dim rung-desc">{r.short}</span>
+        <ol className="ladder">{L.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><span className="dim mono">{i + 1}.</span> <span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span>
           <details className="small"><summary className="dim">evidence</summary><p className="dim">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</p></details></li>)}</ol>
       </div>; })()}
 
