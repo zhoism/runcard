@@ -1,4 +1,8 @@
-# runcard: make it intuitive for a new user, in the designer's visual language
+# runcard: make it intuitive for a new user
+
+> **Superseded 2026-09-01 evening by `PROMPT-codex-new-user-2026-09-01.md`.** Deliverable E (adopt the mockup's
+> visual language) is withdrawn: the owner tried it and reverted it (commit 92aae16). The theme in `src/report.css`
+> is fixed. Everything else here still applies as background.
 
 You are a senior product designer and frontend engineer working in this repository (`runcard`, a Vite + React +
 TypeScript site, package manager `bun`). Work autonomously: do not stop to ask questions; make the call, record it in
