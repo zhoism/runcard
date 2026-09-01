@@ -64,6 +64,11 @@ code { font-family: var(--mono); font-size: 13.5px; background: var(--chip-bg); 
 .grid2 > .card { margin-bottom: 0; }
 .grid2 { margin-bottom: 16px; }
 
+/* breadcrumbs: the way back, and where this page sits */
+.crumbs { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 13.5px; color: var(--muted); margin: 0 0 10px; }
+.crumbs a { color: var(--blue); } .crumbs .mono { font-size: 13px; }
+.titlebar select.wide { max-width: min(380px, 100%); }
+
 /* run title row */
 .titlebar { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; }
 .titlebar .dim { font-family: var(--mono); font-size: 13.5px; }

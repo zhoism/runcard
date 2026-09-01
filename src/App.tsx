@@ -108,13 +108,13 @@ function ProposalThread({ p, compact }: { p: Proposal; compact?: boolean }) {
 }
 
 /** The compare picker: same-system runs first (those are the comparisons that mean something), then the rest; each option carries its id and length. */
-function CompareSelect({ idx, self, value, onPick }: { idx: IndexEntry[]; self: string; value: string; onPick: (id: string) => void }) {
+function CompareSelect({ idx, self, value, onPick, wide }: { idx: IndexEntry[]; self: string; value: string; onPick: (id: string) => void; wide?: boolean }) {
   const me = idx.find(r => r.id === self);
   const others = idx.filter(r => r.id !== self);
   const same = me ? others.filter(r => sameSystem(r, me)) : [];
   const rest = me ? others.filter(r => !sameSystem(r, me)) : others;
   const label = (r: IndexEntry) => `${r.title} · ${r.id} · ${r.production_ps} ps${r.parent === self ? " · fork of this run" : r.id === me?.parent ? " · parent of this run" : ""}`;
-  return <select value={value} aria-label="compare this run with" onChange={e => e.target.value && onPick(e.target.value)}>
+  return <select value={value} className={wide ? "wide" : undefined} aria-label="compare this run with" onChange={e => e.target.value && onPick(e.target.value)}>
     {value === "" && <option value="">compare with…</option>}
     {same.length > 0 && <optgroup label={`same prepared system (${same.length})`}>{same.map(r => <option key={r.id} value={r.id}>{label(r)}</option>)}</optgroup>}
     {rest.length > 0 && <optgroup label={same.length ? `other systems (${rest.length})` : "runs"}>{rest.map(r => <option key={r.id} value={r.id}>{label(r)}</option>)}</optgroup>}
@@ -272,6 +272,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const net = idx.length ? forkNetwork(idx, id) : null;
   return (
     <section className="run">
+      <nav className="crumbs" aria-label="breadcrumb"><a href="#/">← all runs</a><span aria-hidden="true">/</span>{(() => { const c = cohorts(idx).find(c => c.runs.some(r => r.id === id)); return c ? <><span>{c.title}</span><span aria-hidden="true">/</span></> : null; })()}<span className="mono">{m.id}</span></nav>
       <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
         {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {m.parent}</a>}
         <ForkMenu m={m} ens={ens} />
@@ -448,19 +449,19 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
   if (err) return <LoadError message={`compare ${a} vs ${b}: ${err}`} onRetry={() => setAttempt(n => n + 1)} />;
   if (!d) return <p className="dim" role="status">comparing…</p>;
   return <section>
-    <div className="titlebar"><h1>Compare <a href={`#/run/${a}`}>{idx.find(r => r.id === a)?.title ?? a}</a> vs <a href={`#/run/${b}`}>{idx.find(r => r.id === b)?.title ?? b}</a></h1><span className="dim">{a} · {b}</span>
-      <CompareSelect idx={idx} self={a} value={b} onPick={other => navigate(`/compare/${a}/${other}`)} /></div>
+    <nav className="crumbs" aria-label="breadcrumb"><a href="#/">← all runs</a><span aria-hidden="true">/</span><a href={`#/run/${a}`}>{a}</a><span aria-hidden="true">/</span><span>compare with <span className="mono">{b}</span></span></nav>
+    <div className="titlebar"><h1>Compare <a href={`#/run/${a}`}>{idx.find(r => r.id === a)?.title ?? a}</a> vs <a href={`#/run/${b}`}>{idx.find(r => r.id === b)?.title ?? b}</a></h1>
+      <CompareSelect idx={idx} self={a} value={b} onPick={other => navigate(`/compare/${a}/${other}`)} wide /></div>
     {/* The verdict first, in bold; the reasoning under it; the numbers live once, in the table below. */}
     <div className={`interp ${d.same_system ? "" : "warn"}`}><b>{d.verdict}</b><div className="dim">{d.interpretation}</div></div>
     <div className={d.system.length > 0 ? "grid2" : ""}>
       <div className="card"><h2>ΔG <span className="dim">kcal/mol{d.same_system ? "" : " · listed, not compared"}</span></h2><table><thead><tr><th>run</th><th className="num">ΔG</th></tr></thead><tbody><tr><td>{a}</td><td className="num">{fmt(d.delta_g.a)}</td></tr><tr><td>{b}</td><td className="num">{fmt(d.delta_g.b)}</td></tr>
         {d.run_to_run_spread && <tr><td>run-to-run mean ± SD (n={d.run_to_run_spread.all.n})</td><td className="num">{fmt(d.run_to_run_spread.all.mean)} ± {fmt(d.run_to_run_spread.all.sd)}</td></tr>}
         {d.delta_g.diff != null && <tr><td>ΔΔG ({a} − {b}){d.delta_g_vs_noise ? <span className="dim"> · √2·SD = {fmt(d.delta_g_vs_noise.sd_of_difference)}</span> : null}</td><td className="num">{fmt(d.delta_g.diff)}</td></tr>}</tbody></table>
-        <div className="dim mono small">seeds {a}: {d.realized_seeds.a.join(" ")}<br />seeds {b}: {d.realized_seeds.b.join(" ")}</div></div>
+        <div className="dim mono small">seeds {a}: {d.realized_seeds.a.join(" ")}<br />seeds {b}: {d.realized_seeds.b.join(" ")}</div>
+        {d.system.length === 0 && <div className="dim small" style={{ marginTop: 8 }}>identical prepared system{d.stages.length === 0 ? <>; stage inputs identical across all {d.stages_compared} stages (every &amp;cntrl key compared, seeds excluded) — only the seeds above differ</> : null}</div>}</div>
       {d.system.length > 0 && <div className="card"><h2>System</h2><table><thead><tr><th>field</th><th>{a}</th><th>{b}</th></tr></thead><tbody>{d.system.map(s => <tr key={s.field}><td>{s.field.replace(/_/g, " ")}</td><td className="mono">{show(s.a)}</td><td className="mono">{show(s.b)}</td></tr>)}</tbody></table></div>}
     </div>
-    {d.system.length === 0 && d.stages.length > 0 && <p className="dim small">identical prepared system</p>}
-    {d.system.length === 0 && d.stages.length === 0 && <p className="dim small">identical prepared system; stage inputs identical across all {d.stages_compared} stages (every &amp;cntrl key compared, seeds excluded) — only the seeds listed above differ</p>}
     {d.stages.length > 0 && <div className="card"><h2>Stage parameters</h2>{d.stages.map(s => <div key={s.stage}><h3>{s.stage}</h3><table><thead><tr><th>key</th><th>meaning</th><th>{a}</th><th>{b}</th><th>material?</th></tr></thead><tbody>{s.changes.map(c => <tr key={c.key} className={c.material ? "" : "dim"}><td className="mono">{c.key}</td><td>{c.meaning}</td><td className="mono">{c.a}</td><td className="mono">{c.b}</td><td>{c.material ? <span className="badge warn">material · {c.class.replace("_", " ")}</span> : <span className="badge">{d.same_system ? "not material" : "moot across systems"} · {c.class.replace("_", " ")}</span>}</td></tr>)}</tbody></table></div>)}</div>}
     {d.system.length > 0 && d.stages.length === 0 && <p className="dim small">no parameter differences (seeds excluded)</p>}
   </section>;
@@ -488,6 +489,7 @@ function Sidebar() {
     <div className="card">
       <h2>Proposals <span className="dim">agent proposes, you approve{allProposals.length ? ` · ${allProposals.filter(p => p.status === "pending").length} pending of ${allProposals.length}` : ""}</span></h2>
       {proposals.length === 0 && <p className="dim">None yet. When an agent calls <code>propose_change</code> or <code>fork_experiment</code>, the proposal appears as a comment pinned to the stage it targets; nothing is applied until you approve it there.</p>}
+      {proposals.length === 0 && <button className="ghost" onClick={() => { const run = currentRun || "1l2y-rep4"; set({ console: { tool: "propose_change", input: JSON.stringify({ run_id: run, stage: "product", edits: { dt: "0.001" }, reason: "halve the timestep — a test of the proposal flow" }, null, 1) } }); if (!currentRun) navigate(`/run/${run}`); }}>Try it: draft a proposal, then press Call</button>}
       {/* This run's proposals live on the page as pinned comments; the panel only points at them. Other runs' proposals are listed in full so nothing waits unseen. */}
       {(() => { const here = proposals.filter(p => p.run === currentRun); const pend = here.filter(p => p.status === "pending"); const stages = [...new Set(here.map(p => p.stage))];
         return here.length ? <p className="pinned-summary">{pend.length ? <b>{pend.length} awaiting your approval</b> : <span>{here.length} reviewed</span>} on this run — pinned at {stages.map((st, i) => <span key={st}>{i > 0 ? ", " : ""}<button className="linklike" onClick={() => set({ openStage: st })}>{st}</button></span>)}.</p> : null; })()}
