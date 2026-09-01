@@ -324,6 +324,60 @@ closed by execution.
 
 No batch is authorized beyond 06. Claimed files: none (idle). Readiness: idle.
 
+## REPLY RC-005 round 1 — ready_for_retest (2026-09-01)
+
+- batch_id: RC-20260901-07
+- issue_id: RC-005
+- round: 1
+- status: ready_for_retest
+- fixed_in: `5aa3d80`, deployed to https://runcard.vercel.app/
+- **retest against `/assets/index-BKr9BWEa.js`** — verified served by curl after deploy. Anything still on `index-Buc2vnBI.js` is the old build.
+
+**A — lineage was genuinely invisible. Fixed, and it was worse than filed.**
+The manifests have carried `parent` and `fork` since the ICE runs were extracted;
+nothing rendered them, so `1l2y-rep4-ice1` showed a ΔG with no sign it was a
+replicate. On this site specifically that is the worst form of the bug — an
+unlabelled replicate reads as an independent measurement of a different system.
+Lineage now appears in two places on purpose: a sentence under the title
+("Independent replicate of `1l2y-rep4` — same prepared system and protocol, fresh
+seeds."), because what a run *is* belongs before its number; and a `derived from`
+row in Provenance for a reader auditing rather than reading. `Manifest` gained the
+`parent`/`fork` fields the extractor already wrote.
+
+**B — reproduced, and the report understated it.** The entropy sentence was one of
+three sites. The same escape also hit the archived MMPBSA warning line and the
+confidence ladder's `to_climb` text, which printed `fork\_experiment`. Root cause
+is not a template: three different tools' generated prose flows through `md()`,
+which escapes `_` because a bare `_MMPBSA_info` would otherwise render as italic
+"MMPBSA" — the escape was defensive, not accidental. Added `prose()`, which emits
+underscored identifiers as code spans and escapes everything else, and routed every
+field carrying another tool's prose through it. Bare values (dates, stage names,
+numbers) still use `md()`; they have no identifiers to protect.
+
+**Scope note — one file in your list was not claimed.** RC-005 named `src/Viewer.tsx`
+as likely. Lineage is not rendered there; it is the 3D structure viewer, and another
+session owns that file. Claimed instead: `src/App.tsx`, `src/lib/types.ts`,
+`src/lib/evidenceBrief.ts`, `src/index.css`, `test/evidenceBrief.test.ts`.
+
+**Commands executed:** `bunx tsc -b --noEmit` clean; `bun --bun x vitest run`
+**649 passed** (was 648 — one added test asserts no backslash-escaped underscore
+survives anywhere in the brief, for four runs across both session modes, and that
+`` `_MMPBSA_info` `` appears as a code span); `bun --bun run build` clean; deployed
+from a clean worktree and the served asset hash verified by curl.
+
+**Retest suggestions:** open `1l2y-rep4-ice1` and look under the title, then at
+Provenance. For B, export the brief for `1l2y-rep4` both with and without session
+state and search the Markdown for `\_` — the ladder line is the one most likely to
+regress, since it was not in the original report.
+
+**Limitations.** The 390 px overflow check remains unverified by a real client and I
+have not re-run it here; your harness limitation stands and I am not substituting a
+source check for it. Nothing else in your passing-evidence list was touched: automode,
+the ladder, the global queue, both bundle paths, seed precedence, session inclusion
+and the console are unchanged by this commit.
+
+Claimed files: released. Readiness: ready.
+
 ## READY — batch 07 request (rewritten 2026-08-31, awaiting the user's start authorization in the Codex app)
 
 - target: https://runcard.vercel.app/ — **live = 0c6fc66**, bundle `/assets/index-Buc2vnBI.js`. Supersedes every earlier batch-07 draft (which named 2fabdc3 / `index-rt0eVFZ8.js`); ignore those build ids.
