@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>runcard — redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0F1B2D;
+    --paper:#FBFBF9;
+    --surface:#FFFFFF;
+    --line:#DEDCD5;
+    --line-soft:#EAE8E2;
+    --muted:#6B6F76;
+    --verified:#2F6B4F;
+    --verified-bg:#EAF2EC;
+    --pending:#A8791B;
+    --pending-bg:#F7EFDD;
+    --agent:#5B4B8A;
+    --agent-bg:#F1EEF8;
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'IBM Plex Sans',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{ font-family:'IBM Plex Mono',ui-monospace,monospace; }
+
+  /* header */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 32px; border-bottom:1px solid var(--line);
+    background:var(--surface); position:sticky; top:0; z-index:20;
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand .name{ font-weight:600; font-size:16px; letter-spacing:-0.01em; }
+  .brand .tag{ font-size:13px; color:var(--muted); }
+  .agent-pill{
+    display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted);
+    padding:6px 12px; border:1px solid var(--line); border-radius:20px;
+  }
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--muted); }
+  .dot.off{ background:#C9463F; }
+
+  /* page grid */
+  .page{
+    max-width:1180px; margin:0 auto;
+    display:grid; grid-template-columns:44px minmax(0,760px) 1fr;
+    gap:0 28px; padding:36px 32px 100px;
+  }
+  .gutter{ position:relative; }
+  .content{ min-width:0; }
+  .rail{ padding-top:2px; }
+
+  /* pins */
+  .pin{
+    position:absolute; width:24px; height:24px; border-radius:50%;
+    background:var(--agent-bg); border:1.5px solid var(--agent);
+    color:var(--agent); font-size:12px; font-weight:600;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-family:'IBM Plex Mono',monospace;
+  }
+  .pin:hover{ background:var(--agent); color:#fff; }
+  .pin-thread{
+    display:none; position:absolute; left:32px; top:-4px; width:300px;
+    background:var(--surface); border:1px solid var(--agent); border-radius:var(--radius);
+    padding:14px 16px; box-shadow:0 6px 20px rgba(15,27,45,.10); z-index:30;
+  }
+  .pin-thread.open{ display:block; }
+  .pin-thread .who{ font-size:12px; font-weight:600; color:var(--agent); display:flex; align-items:center; gap:6px; margin-bottom:6px;}
+  .pin-thread .who svg{ width:13px; height:13px; }
+  .pin-thread p{ font-size:13.5px; line-height:1.5; margin:0 0 12px; color:var(--ink); }
+  .pin-thread .diff{ font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--paper); border:1px solid var(--line-soft); border-radius:2px; padding:8px 10px; margin-bottom:12px; }
+  .pin-thread .diff .old{ color:#B5453D; text-decoration:line-through; opacity:.7; }
+  .pin-thread .diff .new{ color:var(--verified); }
+  .pin-actions{ display:flex; gap:8px; }
+  .btn{
+    font-family:inherit; font-size:12.5px; font-weight:500; border-radius:2px;
+    padding:6px 12px; cursor:pointer; border:1px solid var(--line);
+    background:var(--surface); color:var(--ink);
+  }
+  .btn:hover{ border-color:var(--ink); }
+  .btn.primary{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  .btn.primary:hover{ background:#1c2d47; }
+  .btn.ghost{ border-color:transparent; color:var(--muted); padding:6px 8px; }
+  .btn.small{ padding:4px 9px; font-size:12px; }
+
+  /* section rhythm */
+  section{ margin-bottom:44px; }
+  .eyebrow-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; }
+  h2{ font-size:15px; font-weight:600; margin:0; }
+  h2 .sub{ font-weight:400; color:var(--muted); font-size:13px; margin-left:8px; }
+
+  /* hero */
+  .run-id{ font-size:13px; color:var(--muted); }
+  h1{ font-size:24px; font-weight:600; letter-spacing:-0.01em; margin:2px 0 4px; }
+  .hero-line{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:26px; }
+  .method-tag{ font-size:13px; color:var(--muted); }
+  .compare-select{
+    font-size:13px; color:var(--muted); border:1px solid var(--line); border-radius:20px;
+    padding:6px 14px; background:var(--surface); cursor:pointer;
+  }
+
+  .dg-block{ position:relative; padding:24px 0 20px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .dg-value{ font-family:'IBM Plex Mono',monospace; font-size:52px; font-weight:600; line-height:1; letter-spacing:-0.02em; }
+  .dg-value .unit{ font-size:16px; font-weight:400; color:var(--muted); margin-left:10px; }
+  .dg-caption{ font-size:13px; color:var(--muted); margin-top:8px; max-width:56ch; line-height:1.5; }
+
+  .stat-strip{ display:flex; gap:36px; margin-top:20px; flex-wrap:wrap; }
+  .stat{ min-width:150px; }
+  .stat .k{ font-size:11.5px; color:var(--muted); margin-bottom:4px; }
+  .stat .v{ font-family:'IBM Plex Mono',monospace; font-size:14px; }
+  .stat .v .flag{ color:var(--verified); }
+
+  details.disclosure{ margin-top:16px; }
+  details.disclosure summary{ font-size:12.5px; color:var(--muted); cursor:pointer; list-style:none; display:flex; align-items:center; gap:6px; }
+  details.disclosure summary::-webkit-details-marker{ display:none; }
+  details.disclosure summary::before{ content:'▸'; font-size:10px; }
+  details.disclosure[open] summary::before{ content:'▾'; }
+  details.disclosure .body{ font-size:12.5px; color:var(--muted); line-height:1.6; margin-top:10px; padding:12px 14px; background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--radius); }
+
+  /* confidence ladder — condensed */
+  .ladder{ display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+  .rung{ flex:1; padding:14px 16px; border-right:1px solid var(--line); position:relative; }
+  .rung:last-child{ border-right:none; }
+  .rung .status{ font-size:10.5px; font-weight:600; letter-spacing:.02em; padding:2px 6px; border-radius:2px; display:inline-block; margin-bottom:8px; }
+  .rung .status.verified{ background:var(--verified-bg); color:var(--verified); }
+  .rung .status.pending{ background:var(--pending-bg); color:var(--pending); }
+  .rung .name{ font-size:13px; font-weight:500; margin-bottom:3px; }
+  .rung .desc{ font-size:12px; color:var(--muted); line-height:1.4; }
+
+  /* analyses */
+  .chip-row{ display:flex; gap:8px; }
+  .chip{
+    font-size:12.5px; padding:6px 13px; border-radius:20px; border:1px solid var(--line);
+    background:var(--surface); cursor:pointer; color:var(--muted);
+  }
+  .chip.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  .chart-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:18px; }
+  .chart-card{
+    border:1px solid var(--line); border-radius:var(--radius); padding:14px 14px 12px;
+    background:var(--surface); transition:opacity .15s ease;
+  }
+  .chart-card.hidden{ display:none; }
+  .chart-card .top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:2px; }
+  .chart-card .title{ font-size:12.5px; font-weight:600; }
+  .chart-card .cat{ font-size:10px; color:var(--muted); text-transform:lowercase; }
+  .chart-card svg{ width:100%; height:64px; margin:8px 0 6px; display:block; }
+  .chart-card .plain{ font-size:11.5px; color:var(--muted); line-height:1.45; }
+
+  /* fork */
+  .fork-row{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+  .fork-card{ border:1px solid var(--line); border-radius:var(--radius); padding:16px; background:var(--surface); display:flex; flex-direction:column; }
+  .fork-card .icon{ width:20px; height:20px; margin-bottom:10px; color:var(--muted); }
+  .fork-card .title{ font-size:13.5px; font-weight:600; margin-bottom:5px; }
+  .fork-card .desc{ font-size:12px; color:var(--muted); line-height:1.5; margin-bottom:14px; flex:1; }
+  .fork-card .badge{ font-size:10.5px; color:var(--pending); background:var(--pending-bg); border-radius:2px; padding:2px 6px; display:inline-block; margin-bottom:8px; width:max-content; }
+  .fork-actions{ display:flex; gap:8px; }
+
+  /* rail */
+  .rail-card{ border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); padding:16px; margin-bottom:14px; }
+  .rail-card h3{ font-size:12.5px; font-weight:600; margin:0 0 10px; }
+  .rail-empty{ font-size:12px; color:var(--muted); line-height:1.6; }
+  .rail-empty code{ background:var(--line-soft); padding:1px 5px; border-radius:2px; font-size:11px; }
+  .rail-cta{ width:100%; margin-top:12px; }
+  .activity-row{ display:flex; gap:8px; font-size:11.5px; padding:8px 0; border-top:1px solid var(--line-soft); }
+  .activity-row:first-of-type{ border-top:none; }
+  .activity-row .t{ color:var(--muted); white-space:nowrap; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="name">runcard</span>
+    <span class="tag">validated simulation records</span>
+  </div>
+  <div class="agent-pill"><span class="dot off"></span> agent not connected</div>
+</header>
+
+<div class="page">
+  <div class="gutter" id="gutter"></div>
+
+  <div class="content">
+
+    <!-- HERO -->
+    <section>
+      <div class="run-id mono">1l2y-rep4</div>
+      <div class="hero-line">
+        <h1>1L2Y + MOL, run 4</h1>
+        <span class="compare-select">compare with ▾</span>
+      </div>
+
+      <div class="dg-block" id="anchor-dg">
+        <span class="method-tag">Binding free energy — MM-GBSA, single trajectory, no entropy term</span>
+        <div class="dg-value">−19.20 <span class="unit">± 0.64 kcal/mol</span></div>
+        <div class="dg-caption">± is the run-to-run SD over 13 independent runs (2–30 ps) — quote this uncertainty, not the within-run SEM.</div>
+
+        <div class="stat-strip">
+          <div class="stat">
+            <div class="k">run-to-run (n=13)</div>
+            <div class="v">mean −17.85 · SD 0.64</div>
+          </div>
+          <div class="stat">
+            <div class="k">within-run SEM</div>
+            <div class="v">0.278 <span class="flag mono">corrected</span></div>
+          </div>
+          <div class="stat">
+            <div class="k">drift over 30 ps</div>
+            <div class="v">none detected</div>
+          </div>
+          <div class="stat">
+            <div class="k">method</div>
+            <div class="v">igb=5, saltcon=0.100</div>
+          </div>
+        </div>
+
+        <details class="disclosure">
+          <summary>how these numbers were computed</summary>
+          <div class="body">
+            Per-frame population SD 1.71, naive SEM 0.171 over 100 frames — frames are correlated, so the naive SEM understates the true uncertainty. Corrected SEM = SD·√(g/N) with g = 1 + 2Σ(1−t/N)C(t), τ = 0.82 frames. Drift verdict: |second half − first half| &gt; 2×√(SEM₁²+SEM₂²), each half autocorrelation-corrected.
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- CONFIDENCE -->
+    <section id="anchor-confidence">
+      <div class="eyebrow-row">
+        <h2>Confidence ladder <span class="sub">3 of 4 rungs verified</span></h2>
+      </div>
+      <div class="ladder">
+        <div class="rung">
+          <span class="status verified">verified</span>
+          <div class="name">Recomputable</div>
+          <div class="desc">Mean and SD of the 100 archived per-frame energies reproduce mmgbsa.dat.</div>
+        </div>
+        <div class="rung">
+          <span class="status pending">expected</span>
+          <div class="name">Repeatable</div>
+          <div class="desc">Seeds and inputs are archived for a pinned replay — not executed here.</div>
+        </div>
+        <div class="rung">
+          <span class="status verified">verified</span>
+          <div class="name">Independent</div>
+          <div class="desc">Spread reflects 13 separately seeded runs, not one trajectory.</div>
+        </div>
+        <div class="rung">
+          <span class="status verified">verified</span>
+          <div class="name">Input-checked</div>
+          <div class="desc">11 sanity rules on the .in files pass — not proof of convergence.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ANALYSES -->
+    <section id="anchor-analyses">
+      <div class="eyebrow-row">
+        <h2>Analyses <span class="sub">cpptraj</span></h2>
+        <div class="chip-row">
+          <span class="chip active" data-filter="all">all</span>
+          <span class="chip" data-filter="structure">structure</span>
+          <span class="chip" data-filter="dynamics">dynamics</span>
+          <span class="chip" data-filter="ensemble">ensemble</span>
+        </div>
+      </div>
+
+      <div class="chart-grid" id="chart-grid">
+        <div class="chart-card" data-cat="structure">
+          <div class="top"><span class="title">Backbone RMSD</span><span class="cat">structure</span></div>
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none"><polyline fill="none" stroke="#0F1B2D" stroke-width="1.4" points="0,58 20,40 40,32 60,28 80,22 100,18 120,14 140,10 160,8 180,6 200,5"/></svg>
+          <div class="plain">How far the protein backbone has drifted from its starting shape. Climbing early then flattening is normal settling.</div>
+        </div>
+        <div class="chart-card" data-cat="dynamics">
+          <div class="top"><span class="title">Per-residue RMSF</span><span class="cat">dynamics</span></div>
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none"><polyline fill="none" stroke="#0F1B2D" stroke-width="1.4" points="0,10 30,25 60,50 90,20 120,18 150,45 180,30 200,15"/></svg>
+          <div class="plain">Which residues wiggle the most. Peaks mark flexible loops or termini, not necessarily a problem.</div>
+        </div>
+        <div class="chart-card" data-cat="structure">
+          <div class="top"><span class="title">Radius of gyration</span><span class="cat">structure</span></div>
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none"><polyline fill="none" stroke="#0F1B2D" stroke-width="1.4" points="0,45 25,42 50,20 75,15 100,18 125,22 150,16 175,20 200,35"/></svg>
+          <div class="plain">How compact vs. extended the structure is over time. A stable band suggests the fold isn't unraveling.</div>
+        </div>
+        <div class="chart-card" data-cat="structure">
+          <div class="top"><span class="title">SASA</span><span class="cat">structure</span></div>
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none"><polyline fill="none" stroke="#0F1B2D" stroke-width="1.4" points="0,30 30,22 60,25 90,15 120,18 150,20 180,17 200,30"/></svg>
+          <div class="plain">Surface area exposed to solvent. Sudden jumps can mean partial unfolding or a pocket opening up.</div>
+        </div>
+        <div class="chart-card" data-cat="dynamics">
+          <div class="top"><span class="title">DSSP</span><span class="cat">dynamics</span></div>
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+            <polyline fill="none" stroke="#B5453D" stroke-width="1.2" points="0,10 50,10 90,50 200,52"/>
+            <polyline fill="none" stroke="#2F6B4F" stroke-width="1.2" points="0,50 60,50 90,15 130,15 160,45 200,48"/>
+          </svg>
+          <div class="plain">Secondary structure per residue over time — which parts are helix, sheet, or coil, and when that changes.</div>
+        </div>
+        <div class="chart-card" data-cat="dynamics">
+          <div class="top"><span class="title">H-bonds</span><span class="cat">dynamics</span></div>
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none"><polyline fill="none" stroke="#0F1B2D" stroke-width="1.2" points="0,10 5,50 10,10 20,50 25,10 40,50 45,10 60,50 70,10 85,50 95,10 110,50 120,10 140,50 150,10 170,50 180,10 200,50"/></svg>
+          <div class="plain">Protein–ligand hydrogen bonds present per frame. Frequent flips are normal for a weak or transient contact.</div>
+        </div>
+        <div class="chart-card" data-cat="ensemble">
+          <div class="top"><span class="title">Cα–Cα distance matrix</span><span class="cat">ensemble</span></div>
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none"><rect width="200" height="60" fill="#EAE8E2"/><rect x="10" y="10" width="180" height="40" fill="#C9C4B8"/></svg>
+          <div class="plain">Pairwise distances between backbone atoms — a fingerprint of the overall shape.</div>
+        </div>
+        <div class="chart-card" data-cat="ensemble">
+          <div class="top"><span class="title">Clustering</span><span class="cat">ensemble</span></div>
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+            <rect x="0" y="10" width="35" height="40" fill="#5B4B8A" opacity=".8"/>
+            <rect x="40" y="20" width="35" height="30" fill="#5B4B8A" opacity=".6"/>
+            <rect x="80" y="28" width="35" height="22" fill="#5B4B8A" opacity=".4"/>
+            <rect x="120" y="34" width="35" height="16" fill="#5B4B8A" opacity=".3"/>
+          </svg>
+          <div class="plain">Groups frames into recurring shapes. A few dominant clusters mean the trajectory settled somewhere consistent.</div>
+        </div>
+        <div class="chart-card" data-cat="ensemble">
+          <div class="top"><span class="title">PCA (Cα)</span><span class="cat">ensemble</span></div>
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+            <circle cx="30" cy="15" r="2" fill="#0F1B2D"/><circle cx="45" cy="20" r="2" fill="#0F1B2D"/>
+            <circle cx="90" cy="35" r="2" fill="#6B6F76"/><circle cx="105" cy="30" r="2" fill="#6B6F76"/>
+            <circle cx="150" cy="45" r="2" fill="#C9C4B8"/><circle cx="165" cy="50" r="2" fill="#C9C4B8"/>
+          </svg>
+          <div class="plain">The trajectory's motion projected onto its two biggest directions of variance — nearby dots are structurally similar.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FORK -->
+    <section id="anchor-fork">
+      <div class="eyebrow-row">
+        <h2>Fork this experiment</h2>
+      </div>
+      <div class="fork-row">
+        <div class="fork-card">
+          <div class="title">Reproduce</div>
+          <div class="desc">Rerun exactly as-is: same seeds, same build. Tests nothing new — confirms the pipeline replays.</div>
+          <div class="fork-actions">
+            <button class="btn small primary">Build bundle</button>
+            <button class="btn small ghost">Copy prompt</button>
+          </div>
+        </div>
+        <div class="fork-card">
+          <div class="title">Replicate</div>
+          <div class="desc">Same protocol, new seeds. An executed rerun joins the 13-run spread above.</div>
+          <div class="fork-actions">
+            <button class="btn small primary">Plan replicate</button>
+            <button class="btn small ghost">Copy prompt</button>
+          </div>
+        </div>
+        <div class="fork-card">
+          <span class="badge">needs your approval</span>
+          <div class="title">Extend</div>
+          <div class="desc">Change one variable, hold the rest fixed — e.g. temp0 → 310 K.</div>
+          <div class="fork-actions">
+            <button class="btn small primary">Prefill console</button>
+            <button class="btn small ghost">Copy prompt</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- RAIL: agent connection only -->
+  <div class="rail">
+    <div class="rail-card">
+      <h3>Agent</h3>
+      <div class="rail-empty">
+        No agent connected to this page. In Chrome, enable <code>chrome://flags/#enable-webmcp-testing</code> and reload — or open the Tool Console to call the 16 tools by hand.
+      </div>
+      <button class="btn rail-cta">Open Tool Console</button>
+    </div>
+    <div class="rail-card">
+      <h3>Recent activity</h3>
+      <div class="activity-row">
+        <span class="t mono">4:52p</span>
+        <span>export_evidence_brief — 4 sections prepared</span>
+      </div>
+      <div class="activity-row">
+        <span class="t mono">4:41p</span>
+        <span>explain_result called on this run</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---- inline agent pins (Figma-comment style, anchored to content) ----
+  const pins = [
+    {
+      anchor: 'anchor-dg', top: 8,
+      body: `<div class="who"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>agent proposal</div>
+      <p>The quoted ± mixes two run lengths (9 runs ≥10 ps vs. all 13 down to 2 ps). Restricting to the ≥10 ps subset changes the headline slightly.</p>
+      <div class="diff"><span class="old">−19.20 ± 0.64</span><br><span class="new">−19.20 ± 0.67</span> (n=9, ≥10 ps only)</div>
+      <div class="pin-actions">
+        <button class="btn small primary">Approve</button>
+        <button class="btn small">Dismiss</button>
+      </div>`
+    },
+    {
+      anchor: 'anchor-confidence', top: 6,
+      body: `<div class="who"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>agent proposal</div>
+      <p>Repeatability is marked "expected" but has never actually been executed. Suggest relabeling as <strong>untested</strong> until a pinned replay runs.</p>
+      <div class="pin-actions">
+        <button class="btn small primary">Approve</button>
+        <button class="btn small">Dismiss</button>
+      </div>`
+    },
+    {
+      anchor: 'anchor-analyses', top: 4,
+      body: `<div class="who"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>agent proposal</div>
+      <p>RMSD is still climbing at frame 500 with no plateau — the 30 ps production window may be too short to call this converged.</p>
+      <div class="pin-actions">
+        <button class="btn small primary">Approve</button>
+        <button class="btn small">Dismiss</button>
+      </div>`
+    }
+  ];
+
+  const gutter = document.getElementById('gutter');
+  pins.forEach((p, i) => {
+    const anchor = document.getElementById(p.anchor);
+    const pageTop = document.querySelector('.page').getBoundingClientRect().top + window.scrollY;
+    const y = anchor.getBoundingClientRect().top + window.scrollY - pageTop + p.top;
+
+    const wrap = document.createElement('div');
+    wrap.style.position = 'absolute';
+    wrap.style.top = y + 'px';
+    wrap.style.left = '0';
+
+    const pin = document.createElement('div');
+    pin.className = 'pin';
+    pin.textContent = i + 1;
+
+    const thread = document.createElement('div');
+    thread.className = 'pin-thread';
+    thread.innerHTML = p.body;
+
+    pin.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.pin-thread.open').forEach(t => { if (t !== thread) t.classList.remove('open'); });
+      thread.classList.toggle('open');
+    });
+
+    wrap.appendChild(pin);
+    wrap.appendChild(thread);
+    gutter.appendChild(wrap);
+  });
+
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.pin-thread.open').forEach(t => t.classList.remove('open'));
+  });
+
+  // approve/dismiss just close the thread + tiny feedback
+  gutter.addEventListener('click', (e) => {
+    if (e.target.matches('.btn.primary')) {
+      e.target.closest('.pin-thread').style.borderColor = '#2F6B4F';
+      e.target.textContent = 'Approved ✓';
+      e.target.disabled = true;
+    }
+    if (e.target.matches('.btn:not(.primary):not(.small.ghost)') && e.target.textContent === 'Dismiss') {
+      e.target.closest('.pin-thread').classList.remove('open');
+    }
+  });
+
+  // ---- analyses filter chips ----
+  const chips = document.querySelectorAll('.chip');
+  const cards = document.querySelectorAll('.chart-card');
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const f = chip.dataset.filter;
+      cards.forEach(card => {
+        card.classList.toggle('hidden', f !== 'all' && card.dataset.cat !== f);
+      });
+    });
+  });
+</script>
+
+</body>
+</html>
