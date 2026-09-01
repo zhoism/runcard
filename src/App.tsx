@@ -242,7 +242,7 @@ function EvidenceOverview({ ladder, explanation, investigation, validationVerdic
   return <section className="evidence-overview" aria-labelledby="evidence-overview-title">
     <h2 id="evidence-overview-title">Evidence overview <span className="dim">what this record supports before you build on it</span></h2>
     <div className="evidence-grid">
-      <div><h3>Checks supporting it</h3><p><b>{ladder.verified_of_assessable} assessed rungs verified.</b> Input sanity checks: {validationVerdict}. A passing input check is not convergence or physical accuracy.</p></div>
+      <div><h3>Checks supporting it</h3><p><b>{ladder.verified_of_assessable} assessed rungs verified.</b> Input sanity checks: <span className={`badge ${validationVerdict.toLowerCase()}`}>{validationVerdict}</span>. A passing input check is not convergence or physical accuracy.</p></div>
       <div><h3>Still unestablished</h3><p>{missing.map(r => `${r.rung}: ${r.status}`).join("; ")}. {explanation?.within_run?.verdict ? `Archived-window verdict: ${explanation.within_run.verdict}.` : "Within-run drift could not be assessed."}</p></div>
       <div><h3>Next relevant action</h3><p>{replicate?.to_climb ?? "Inspect the detailed evidence below."}</p>{plan && <p className="dim small"><b>Separate precision target:</b> {plan.recommendation}</p>}</div>
     </div>
