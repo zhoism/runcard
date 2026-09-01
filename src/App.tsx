@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Manifest, IndexEntry } from "./lib/types";
-import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal } from "./lib/runs";
+import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
@@ -38,11 +38,21 @@ export default function App() {
   );
 }
 
+function Mark() {
+  return (
+    <svg className="mark" viewBox="-12 -20 445 460" aria-hidden="true" fill="currentColor" stroke="currentColor" strokeWidth="20">
+      <path d="M14.1373 175.633C5.63734 165.633 12.1372 153.133 16.6372 149.633L163.637 30.6328C185.637 11.6328 247.137 -9.86717 295.137 44.6328C331.637 89.6326 313.637 145.633 281.137 174.133L163.637 269.633C155.637 278.633 127.137 300.633 150.137 345.133C178.137 385.133 219.69 370.466 234.137 358.633L380.137 240.133C385.137 236.133 395.637 230.633 405.637 241.133C415.422 251.406 408.804 262.966 404.637 267.133L260.137 385.133C234.137 406.133 170.637 427.633 122.637 369.133C87.1373 313.133 113.637 262.633 142.637 240.633L260.137 145.633C265.137 141.133 300.637 102.633 265.137 65.6327C236.737 36.0327 203.304 47.2994 190.137 56.6327C141.137 96.2994 42.4484 175.822 40.6373 177.633C37.1372 181.133 23.6368 186.809 14.1373 175.633Z" />
+      <path d="M34.6374 256.133C25.6373 245.133 32.4707 233.3 36.6374 230.133L210.137 89.6331C215.637 85.1329 229.137 80.6327 237.637 91.6331C245.137 101.633 239.471 112.633 235.637 116.133L59.6373 258.133C55.6373 261.133 44.6373 266.133 34.6374 256.133Z" />
+      <path d="M184.065 326.982C175.065 315.982 181.898 304.149 186.065 300.982L359.565 160.482C365.065 155.982 378.565 151.482 387.065 162.482C394.565 172.482 388.898 183.482 385.065 186.982L209.065 328.982C205.065 331.982 194.065 336.982 184.065 326.982Z" />
+    </svg>
+  );
+}
+
 function Header() {
   const st = useStore(s => s.webmcp);
   return (
     <header>
-      <a href="#/" className="brand">runcard</a>
+      <a href="#/" className="brand"><Mark />runcard</a>
       <span className="tag">validated simulation records</span>
       {st === "registered" ? <span className="webmcp registered" title="Tools registered with navigator.modelContext">WebMCP: registered · {TOOLS.length} tools</span>
        : st === "error" ? <span className="webmcp error" title="registerTool threw; see console">WebMCP: registration failed</span>
@@ -97,13 +107,46 @@ function ProposalThread({ p, compact }: { p: Proposal; compact?: boolean }) {
   </div>;
 }
 
+/** The compare picker: same-system runs first (those are the comparisons that mean something), then the rest; each option carries its id and length. */
+function CompareSelect({ idx, self, value, onPick }: { idx: IndexEntry[]; self: string; value: string; onPick: (id: string) => void }) {
+  const me = idx.find(r => r.id === self);
+  const others = idx.filter(r => r.id !== self);
+  const same = me ? others.filter(r => sameSystem(r, me)) : [];
+  const rest = me ? others.filter(r => !sameSystem(r, me)) : others;
+  const label = (r: IndexEntry) => `${r.title} · ${r.id} · ${r.production_ps} ps${r.parent === self ? " · fork of this run" : r.id === me?.parent ? " · parent of this run" : ""}`;
+  return <select value={value} aria-label="compare this run with" onChange={e => e.target.value && onPick(e.target.value)}>
+    {value === "" && <option value="">compare with…</option>}
+    {same.length > 0 && <optgroup label={`same prepared system (${same.length})`}>{same.map(r => <option key={r.id} value={r.id}>{label(r)}</option>)}</optgroup>}
+    {rest.length > 0 && <optgroup label={same.length ? `other systems (${rest.length})` : "runs"}>{rest.map(r => <option key={r.id} value={r.id}>{label(r)}</option>)}</optgroup>}
+  </select>;
+}
+
+/** GitHub's Fork dropdown: the three fork actions from the title bar, no scrolling needed. Escape or an outside click closes it. */
+function ForkMenu({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> | null }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (!open) return; const onDoc = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); }; const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); }; document.addEventListener("mousedown", onDoc); document.addEventListener("keydown", onKey); return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); }; }, [open]);
+  const kinds = forkKinds(m, ens);
+  const jump = () => { setOpen(false); const el = document.getElementById("fork-card"); el?.scrollIntoView({ behavior: "smooth", block: "start" }); el?.classList.add("flash"); setTimeout(() => el?.classList.remove("flash"), 1200); };
+  return <div className="fork-menu" ref={ref}>
+    <button type="button" className="fork-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(o => !o)}>Fork <span aria-hidden="true">▾</span></button>
+    {open && <div className="menu" role="menu" aria-label="fork this experiment">
+      {kinds.map(k => <button key={k.id} type="button" role="menuitem" className="menu-item" onClick={() => { setOpen(false); k.run(); }}>
+        <span className="menu-title">{k.title}{k.approval && <span className="badge warn">needs your approval</span>}</span>
+        <span className="menu-desc">{k.desc}</span>
+        <span className="menu-verb">{k.action} →</span>
+      </button>)}
+      <button type="button" role="menuitem" className="menu-item menu-more" onClick={jump}>All three, with prompts for your agent ↓</button>
+    </div>}
+  </div>;
+}
+
 /** Fork this experiment: three cards, one primary action each. Reproduce and replicate change no inputs, so they act at once;
     extend changes one variable and is prefilled into the console, where it becomes a proposal that waits for Approve. */
-function ForkCards({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> | null }) {
-  const [copied, setCopied] = useState<string | null>(null);
+/** The three ways to fork a run, each with its one verb, what it does, and the prompt to hand an agent. */
+function forkKinds(m: Manifest, ens: ReturnType<typeof ensemble> | null) {
   const card = `${window.location.origin}${window.location.pathname}#/run/${m.id}`;
-  const copy = async (id: string, text: string) => { try { await navigator.clipboard.writeText(text); setCopied(id); } catch { setCopied(`error:${id}`); } };
-  const kinds = [
+  return [
     { id: "reproduce", title: "Reproduce", desc: "Rerun exactly as-is: pinned seeds, same build. Confirms the pipeline replays; it cannot show the result is stable.", action: "Build bundle", approval: false,
       run: () => callTool("generate_rerun_bundle", { run_id: m.id, seed: "pinned", target: "local" }, "page"),
       prompt: `Build the pinned rerun bundle for ${card} and tell me what it contains and what running it would establish.` },
@@ -114,6 +157,11 @@ function ForkCards({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> |
       run: () => { set({ console: { tool: "fork_experiment", input: JSON.stringify({ run_id: m.id, kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" }, null, 1) } }); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); },
       prompt: `Using ${card}, prepare a controlled temperature change and explain what stays fixed. Stop at a pending proposal and wait for my approval.` },
   ];
+}
+function ForkCards({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> | null }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = async (id: string, text: string) => { try { await navigator.clipboard.writeText(text); setCopied(id); } catch { setCopied(`error:${id}`); } };
+  const kinds = forkKinds(m, ens);
   return <div className="card" id="fork-card"><h2>Fork this experiment <span className="dim">reproduce and replicate change no inputs; extend changes one and waits for your approval</span></h2>
     <div className="fork-cards">{kinds.map(k => <div key={k.id} className="fork-card">
       {k.approval && <span className="badge warn">needs your approval</span>}
@@ -227,9 +275,9 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
       <div className="run-id">{m.id}</div>
       <div className="titlebar"><h1>{m.title}</h1>
         {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {m.parent}</a>}
-        <button type="button" className="fork-btn" onClick={() => { const el = document.getElementById("fork-card"); el?.scrollIntoView({ behavior: "smooth", block: "start" }); el?.classList.add("flash"); setTimeout(() => el?.classList.remove("flash"), 1200); }}>Fork</button>
+        <ForkMenu m={m} ens={ens} />
         {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</a>}
-        <select value="" aria-label="compare this run with" onChange={e => e.target.value && navigate(`/compare/${id}/${e.target.value}`)}><option value="">compare with…</option>{others.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}</select></div>
+        <CompareSelect idx={idx} self={id} value="" onPick={other => navigate(`/compare/${id}/${other}`)} /></div>
       {/* Lineage is identity, not provenance trivia: a replicate has to say what it replicates before it shows
           a number, or a reader takes its ΔG for an independent measurement of a different thing. */}
       {m.parent && <p className="lineage">{m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{m.parent}</a>{m.fork?.seed === "fresh" ? " — same prepared system and protocol, fresh seeds" : ""}{m.fork?.complete === false ? " — partially applied" : ""}.</p>}
@@ -402,7 +450,7 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
   if (!d) return <p className="dim" role="status">comparing…</p>;
   return <section>
     <div className="titlebar"><h1>Compare <a href={`#/run/${a}`}>{idx.find(r => r.id === a)?.title ?? a}</a> vs <a href={`#/run/${b}`}>{idx.find(r => r.id === b)?.title ?? b}</a></h1><span className="dim">{a} · {b}</span>
-      <select value={b} aria-label="compare this run with" onChange={e => e.target.value && navigate(`/compare/${a}/${e.target.value}`)}>{idx.filter(r => r.id !== a).map(r => <option key={r.id} value={r.id}>{r.title}</option>)}</select></div>
+      <CompareSelect idx={idx} self={a} value={b} onPick={other => navigate(`/compare/${a}/${other}`)} /></div>
     {/* The verdict first, in bold; the reasoning under it; the numbers live once, in the table below. */}
     <div className={`interp ${d.same_system ? "" : "warn"}`}><b>{d.verdict}</b><div className="dim">{d.interpretation}</div></div>
     <div className={d.system.length > 0 ? "grid2" : ""}>
