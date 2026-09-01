@@ -42,12 +42,14 @@
    "gaff2"
   ],
   "leap_in": "source leaprc.protein.ff19SB\nsource leaprc.water.tip3p\nsource leaprc.gaff2\nLIG = loadmol2 MOL.mol2\nloadamberparams MOL.frcmod\ncheck LIG\nprot = loadpdb protein_clean.pdb\ncheck prot\nsaveamberparm prot protein.top protein.crd\nsaveamberparm LIG ligand.top ligand.crd\ncomp = combine { prot LIG }\nsaveamberparm comp comp_dry.top comp_dry.crd\nsolvateoct comp TIP3PBOX 10.0\naddions2 comp Na+ 0\naddions2 comp Cl- 0\nsaveamberparm comp comp_oct.top comp_oct.crd\nsavepdb comp comp_oct.pdb\nquit\n",
-  "composition_source": [
-   "MOL.mol2",
-   "_MMPBSA_receptor.pdb",
-   "_MMPBSA_complex.pdb",
-   "density.out NATOM"
-  ],
+  "composition_source": {
+   "protein_atoms": "_MMPBSA_receptor.pdb",
+   "ligand_atoms": "MOL.mol2",
+   "atom_types": "MOL.mol2",
+   "net_charge": "MOL.mol2",
+   "solvated_atoms": "density.out NATOM",
+   "dry_atoms": "_MMPBSA_complex.pdb"
+  },
   "build_inputs": {
    "present": [
     "MOL.mol2",

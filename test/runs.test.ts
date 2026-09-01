@@ -58,6 +58,31 @@ describe("diff/ensemble", () => {
     expect(LONG_RUN_MIN_PS).toBe(10); expect(e.long.n).toBe(9); expect(e.long.runs.every(r => r.production_ps >= 10)).toBe(true);
     expect(explainResult(A, idx, true).run_to_run.all.n).toBe(13);
   });
+  it("composition_source names, per field, exactly the values read from artifacts instead of the build pipeline", () => {
+    // "A number is a claim": a composition value that did not come from the s*.json the build pipeline validated
+    // has to say which file in the run it did come from. Per field, not all-or-nothing — a run with a partial
+    // pipeline (s2 but no s3) takes some fields from each, and one shared source line would be a false trace.
+    const FIELDS = ["protein_atoms", "ligand_atoms", "atom_types", "net_charge", "solvated_atoms", "dry_atoms"];
+    const at = (m: any, f: string) => ({ protein_atoms: m.system.protein.atoms, ligand_atoms: m.system.ligand.atoms,
+      atom_types: m.system.ligand.atom_types, net_charge: m.system.ligand.net_charge,
+      solvated_atoms: m.system.solvent.solvated_atoms, dry_atoms: m.system.solvent.dry_atoms }[f]);
+    let sawDerived = 0;
+    for (const r of idx) {
+      const cs = load(r.id).system.composition_source;
+      if (cs === undefined) continue;
+      sawDerived++;
+      expect(Array.isArray(cs), `${r.id}: composition_source must be per-field, not a flat source list`).toBe(false);
+      for (const [field, src] of Object.entries(cs)) {
+        expect(FIELDS, `${r.id}: unknown composition field`).toContain(field);
+        expect(typeof src, `${r.id}.${field}`).toBe("string");
+        // a source may only be claimed for a value that is actually on the card
+        expect(at(load(r.id), field), `${r.id}.${field} is sourced but null`).not.toBeNull();
+      }
+    }
+    expect(sawDerived, "the ICE replicates carry artifact-derived composition").toBe(4);
+    // runs built by the pipeline claim no artifact source, because none of their composition came from one
+    expect(load("1l2y-rep4").system.composition_source).toBeUndefined();
+  });
   it("cohorts: index groups by prepared system + protocol; largest cohort first, longest run first and marked start_here; single run keeps its title and has no SD", () => {
     const cs = cohorts(idx); expect(cs).toHaveLength(2);
     const [a, b] = cs;

@@ -110,30 +110,32 @@ def pdb_atoms(p):
 def system_from_artifacts(run, mol2):
     """Composition read from a run's own files, for runs built outside the s*.json pipeline.
 
-    ligand atoms / gaff2 types / net charge come from the mol2 leap.in loads; protein and dry-complex atom
-    counts from the topology split MMPBSA.py writes; solvated atoms from NATOM in the first .out. Anything
-    not present stays absent — solvent residues_added needs leap.log, which a bundle rerun does not produce."""
-    out = {}; src = []
+    Returns {field: (value, source_file)} so the caller can record provenance for exactly the fields it
+    actually takes from here — a field filled from an artifact and a field filled by the build pipeline must
+    not claim the same source. ligand atoms / gaff2 types / net charge come from the mol2 leap.in loads;
+    protein and dry-complex atom counts from the topology split MMPBSA.py writes; solvated atoms from NATOM.
+    Anything not present stays absent — solvent residues_added needs leap.log, which a bundle rerun does not
+    produce, and guessing it would put a number on the card that no file in the run supports."""
+    out = {}
     if mol2 and mol2.exists():
         t = rd(mol2)
         if "@<TRIPOS>ATOM" in t:
             rows = [l.split() for l in t.split("@<TRIPOS>ATOM")[1].split("@<TRIPOS>")[0].strip().splitlines()]
             rows = [r for r in rows if len(r) >= 9]
             if rows:
-                out["ligand_atoms"] = len(rows)
-                out["atom_types"] = sorted({r[5].split(".")[0] for r in rows})
+                out["ligand_atoms"] = (len(rows), mol2.name)
+                out["atom_types"] = (sorted({r[5].split(".")[0] for r in rows}), mol2.name)
                 # mol2 partial charges sum to the formal charge up to print precision; leap uses the integer
-                out["net_charge"] = round(sum(float(r[8]) for r in rows))
-                src.append(mol2.name)
+                out["net_charge"] = (round(sum(float(r[8]) for r in rows)), mol2.name)
     mmdir = run / "analysis/mmgbsa"
     rec, cx = pdb_atoms(mmdir / "_MMPBSA_receptor.pdb"), pdb_atoms(mmdir / "_MMPBSA_complex.pdb")
-    if rec: out["protein_atoms"] = rec; src.append("_MMPBSA_receptor.pdb")
-    if cx: out["dry_atoms"] = cx; src.append("_MMPBSA_complex.pdb")
-    first = next((p for p in sorted((run / "md").glob("*.out")) if p.exists()), None)
+    if rec: out["protein_atoms"] = (rec, "_MMPBSA_receptor.pdb")
+    if cx: out["dry_atoms"] = (cx, "_MMPBSA_complex.pdb")
+    # every stage .out reports the same NATOM for a given topology; name the file actually read, not "the run"
+    first = next(iter(sorted((run / "md").glob("*.out"))), None)
     if first:
         m = re.search(r"NATOM\s*=\s*(\d+)", rd(first))
-        if m: out["solvated_atoms"] = int(m.group(1)); src.append(f"{first.name} NATOM")
-    if out: out["source"] = src
+        if m: out["solvated_atoms"] = (int(m.group(1)), f"{first.name} NATOM")
     return out
 
 
@@ -190,21 +192,30 @@ def main():
     # the replication rung it exists to serve. Read the same quantities from artifacts the run does carry.
     # Never inherit them from the parent card: a number on a card is read from that run's files or it is null.
     fb = system_from_artifacts(run, mol2)
+    derived = {}
+    def take(pipeline_value, field):
+        """Prefer what the build pipeline validated; fall back to the run's own artifact and record which file
+        it came from. `is not None`, not truthiness: a net charge of 0 is a value, not a missing one."""
+        if pipeline_value is not None: return pipeline_value
+        if field not in fb: return None
+        value, src = fb[field]; derived[field] = src
+        return value
     system = {
-        "protein": {"atoms": v3.get("protein_atoms") or fb.get("protein_atoms"), "source_pdb": (build / "protein_in.pdb").name if build and (build/"protein_in.pdb").exists() else None},
-        "ligand": {"resname": ligres.group(1) if ligres else None, "atoms": v2.get("atom_count") or fb.get("ligand_atoms"),
-                   "atom_types": v2.get("atom_types") or fb.get("atom_types"), "charge_method": charge_method,
-                   "net_charge": v2.get("charge_sum") if v2.get("charge_sum") is not None else fb.get("net_charge"),
+        "protein": {"atoms": take(v3.get("protein_atoms"), "protein_atoms"), "source_pdb": (build / "protein_in.pdb").name if build and (build/"protein_in.pdb").exists() else None},
+        "ligand": {"resname": ligres.group(1) if ligres else None, "atoms": take(v2.get("atom_count"), "ligand_atoms"),
+                   "atom_types": take(v2.get("atom_types"), "atom_types"), "charge_method": charge_method,
+                   "net_charge": take(v2.get("charge_sum"), "net_charge"),
                    "frcmod_missing": v2.get("frcmod_missing")},
         "solvent": {"box": box.group(1) if box else None, "model": box.group(2) if box else None,
                     "buffer_A": float(box.group(3)) if box else None,
                     "residues_added": v3.get("solvent_residues_added"),
-                    "solvated_atoms": v3.get("solvated_atoms") or fb.get("solvated_atoms"),
-                    "dry_atoms": v3.get("dry_atoms") or fb.get("dry_atoms")},
+                    "solvated_atoms": take(v3.get("solvated_atoms"), "solvated_atoms"),
+                    "dry_atoms": take(v3.get("dry_atoms"), "dry_atoms")},
         "force_fields": ffs, "leap_in": leap,
     }
-    if fb and not v2 and not v3:
-        system["composition_source"] = fb["source"]
+    # per field, not all-or-nothing: a partial pipeline (s2 but no s3) fills some fields from artifacts and some
+    # from validation, and a card that traced all of them to the same place would be claiming a false source
+    if derived: system["composition_source"] = derived
 
     # --- results ---
     results = {}
