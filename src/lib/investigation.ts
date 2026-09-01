@@ -1,4 +1,5 @@
 import type { Proposal, forkExperiment, planSampling, recomputeResult } from "./runs";
+import type { Investigation } from "./investigate";
 
 export type InvocationSource = "webmcp" | "console" | "page";
 
@@ -45,6 +46,7 @@ export interface InvestigationState {
   forks: Record<string, Captured<ForkOutcome>>;
   bundle?: Captured<BundleSnapshot>;
   brief?: Captured<EvidenceBriefSnapshot>;
+  automode?: Captured<Investigation>;
 }
 
 export const emptyInvestigation = (runId: string): InvestigationState => ({ runId, forks: {} });

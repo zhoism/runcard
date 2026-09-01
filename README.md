@@ -16,7 +16,7 @@ work that already happened.
 
 Open the live URL in ChatGPT's built-in browser, or in Chrome with
 `chrome://flags/#enable-webmcp-testing` enabled. The header should read
-`WebMCP: registered · 15 tools`. Without the flag it reads
+`WebMCP: registered · 16 tools`. Without the flag it reads
 `no WebMCP here — use the Tool Console ↓`, and the in-page **Tool Console** runs
 the identical tool table by hand — one table drives both, so the console is never
 a mock.
@@ -42,10 +42,18 @@ A seven-step pass that works end-to-end on the live site with real numbers:
 
 ## The tools
 
-Fifteen; nine read-only. Of the six that are not, only `propose_change` and
+Sixteen; nine read-only. Of the seven that are not, only `propose_change` and
 `fork_experiment` prepare a change to a scientific input, and both stop at the
-Approve button. The other four — `generate_rerun_bundle`, `export_evidence_brief`,
-`recompute_result`, `plan_sampling` — write page state only.
+Approve button. The other five — `generate_rerun_bundle`, `export_evidence_brief`,
+`recompute_result`, `plan_sampling`, `investigate_run` — write page state only.
+
+`investigate_run` is **automode**: it reads the confidence ladder, works out which
+rung is actually holding a run back, and chases that rung with the read-only tools
+that bear on it. It is not a fixed sequence — `1l2y-rep4` (every assessable rung
+earned) is investigated differently from `3htb-jz4` (one run, nothing to replicate)
+and differently again from `1l2y-regression` (drifting, so window agreement proves
+nothing). It recommends one action in words and **creates nothing**. The console has
+an Auto/Manual switch: Auto calls it, Manual lets you pick any tool yourself.
 
 | | |
 |---|---|
@@ -136,7 +144,7 @@ pooled across all lengths — the honest number is the less flattering one.
 ```
 bun install
 bun run dev        # http://localhost:5173
-bun run test       # 643 tests
+bun run test       # 648 tests
 bun run build
 ```
 

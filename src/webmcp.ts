@@ -3,6 +3,7 @@
 // and the in-page Tool Console (so a human can call exactly what an agent can).
 import { loadIndex, loadRun, validateStage, validateAll, explainResult, diffRuns, makeProposal, rerunBundle, bundleGaps, ensemble, recomputeResult, planSampling, verdictOf, confidenceLadder, forkExperiment } from "./lib/runs";
 import { get, set, logCall, navigate, updateInvestigation } from "./store";
+import { investigateRun } from "./lib/investigate";
 import { checkAmberIn } from "./lib/amberCheck";
 import { buildEvidenceBrief, safeBriefFilename } from "./lib/evidenceBrief";
 import type { BundleSnapshot, EvidenceBriefSnapshot, InvocationSource } from "./lib/investigation";
@@ -60,6 +61,13 @@ export const TOOLS: Tool[] = [
   { name: "fork_experiment", readOnly: false, description: "Fork this experiment. kind='reproduce': rerun the original as exactly as possible (pinned seeds; establishes repeatable). kind='replicate': same protocol, independent seeds (establishes independently replicated; says how many runs plan_sampling wants). kind='extend': ask a nearby scientific question by changing ONE treatment variable (a &cntrl key of class physics / thermodynamic_state / sampling_length / restraints, e.g. {\"key\":\"temp0\",\"value\":\"310.0\"}) while every other condition is held; returns the controlled diff (treatment before → after per stage, controls held, validation before/after) and creates one pending proposal per affected stage — NOTHING is applied until a person clicks Approve; then generate_rerun_bundle writes the bundle with the parent link. Thermodynamic-state treatments apply to equilibration + production (the heating ramp is left alone); others to production only, unless stages is given.",
     inputSchema: S({ run_id: str("run id"), kind: str("reproduce, replicate or extend", { enum: ["reproduce", "replicate", "extend"] }), treatment: { type: "object", description: "extend only: the one variable to change", properties: { key: str("&cntrl key, e.g. temp0"), value: str("new value as a string, e.g. 310.0") }, required: ["key", "value"] }, question: str("extend only: the scientific question, one sentence"), stages: { type: "array", items: { type: "string" }, description: "extend only: override which stages receive the treatment" } }, ["run_id", "kind"]),
     run: async ({ run_id, ...o }) => { const r = forkExperiment(await loadRun(run_id), await loadIndex(), o); const { _proposals, ...out } = r as any; if (_proposals?.length) set(s => ({ proposals: [..._proposals, ...s.proposals] })); navigate(`/run/${run_id}`); return out; } },
+  { name: "investigate_run", readOnly: false, description: "Automode. Investigate one run end to end and tell me what to do about it. Reads the confidence ladder, works out which rung is actually holding this run back, and chases that rung with the read-only tools that bear on it — so the trace differs from run to run and changes when a run's evidence changes. It is not a fixed sequence: a run whose replication rung is closed is investigated differently from a single-run system, and differently again from a run that is drifting. Returns the ordered trace (each step: which tool, why it was chosen, what it found), the run's headline number with the uncertainty that should actually be quoted, the bottleneck rung and whether archived data or an off-site run could move it, and one recommended next action. It creates NOTHING: no proposal is queued, no bundle written, no scientific input changed. The recommendation is named for a person or an agent to act on deliberately.",
+    inputSchema: S({ run_id: str("id of the run to investigate") }, ["run_id"]),
+    run: async ({ run_id }: any) => {
+      const [m, idx] = await Promise.all([loadRun(run_id), loadIndex()]);
+      navigate(`#/run/${run_id}`);
+      return investigateRun(m, idx);
+    } },
   { name: "export_evidence_brief", readOnly: false, description: "Prepare a qualified Markdown evidence brief for one run. It returns the report to the caller and makes the same snapshot available for human copy/download on the page. include_session=false excludes transient reanalysis, plans, proposals and bundles. It does not approve, download, copy, post, email, write repository files, run MD, or validate against experiment.",
     inputSchema: S({ run_id: str("run id from list_runs"), include_session: { type: "boolean", description: "include this visit's run-scoped reanalysis, sampling plan, proposals and prepared bundle (default true)" } }, ["run_id"]),
     run: async (input) => {
@@ -105,6 +113,7 @@ function summarize(name: string, out: any): string {
         return r.planned_on
         ? `expected: ${r.additional_runs} more run${r.additional_runs === 1 ? "" : "s"} ≥ ${out.recommended_run_ps} ps for ±${T} (${r.planned_on} stratum: n=${r.n_now}, SD ${f(r.sd_used)}); ${one}`
         : `expected: only run of its system, no run-to-run estimate; ${one} for ±${T}; ≥ 3 independent runs of ≥ ${out.recommended_run_ps} ps before an ensemble uncertainty can be quoted`; }
+      case "investigate_run": return `${out.summary} Next: ${out.next?.rationale ?? "nothing outstanding"} (created nothing)`;
       case "export_evidence_brief": return `${out.filename} prepared with ${out.included_sections.length} sections; copy/download available on the page`;
     }
   } catch { /* fall through */ }
@@ -117,6 +126,7 @@ function recordOutcome(name: string, input: any, out: any, source: InvocationSou
   const completedAt = new Date().toISOString();
   if (name === "recompute_result") updateInvestigation(runId, current => ({ ...current, reanalysis: { runId, source, completedAt, value: out } }));
   if (name === "plan_sampling") updateInvestigation(runId, current => ({ ...current, samplingPlan: { runId, source, completedAt, value: out } }));
+  if (name === "investigate_run") updateInvestigation(runId, current => ({ ...current, automode: { runId, source, completedAt, value: out } }));
   if (name === "fork_experiment" && typeof out?.fork_id === "string") updateInvestigation(runId, current => ({ ...current, forks: { ...current.forks, [out.fork_id]: { runId, source, completedAt, value: out } } }));
   if (name === "generate_rerun_bundle" && out?._bundle) updateInvestigation(runId, current => ({ ...current, bundle: { runId, source, completedAt: out._bundle.generatedAt, value: out._bundle as BundleSnapshot } }));
   if (name === "export_evidence_brief" && out?._brief) updateInvestigation(runId, current => ({ ...current, brief: { runId, source, completedAt: out._brief.generatedAt, value: out._brief as EvidenceBriefSnapshot } }));

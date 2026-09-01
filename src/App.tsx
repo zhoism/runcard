@@ -250,14 +250,20 @@ function CurrentInvestigation({ runId, investigation }: { runId: string; investi
   // useSyncExternalStore as getSnapshot, so returning a fresh array here re-renders without end (React #185).
   const proposals = useStore(s => s.proposals).filter(p => p.run === runId);
   const [message, setMessage] = useState<string | null>(null);
+  const auto: any = investigation?.automode;
   const re = investigation?.reanalysis; const plan: any = investigation?.samplingPlan; const forks = Object.values(investigation?.forks ?? {}); const bundle = investigation?.bundle?.value; const brief = investigation?.brief?.value;
   const downloadBlob = (content: BlobPart, type: string, filename: string) => { const url = URL.createObjectURL(new Blob([content], { type })); const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); };
   const prepare = async () => { const raw = await callTool("export_evidence_brief", { run_id: runId, include_session: true }, "page"); const out = JSON.parse(raw); setMessage(out.error ? out.error : "Evidence brief prepared."); };
   const copyBrief = async () => { if (!brief) return; try { await navigator.clipboard.writeText(brief.markdown); setMessage("Brief copied."); } catch { setMessage("Clipboard unavailable — the prepared Markdown remains available to download."); } };
-  const hasActivity = !!(re || plan || forks.length || proposals.length || bundle);
+  const hasActivity = !!(auto || re || plan || forks.length || proposals.length || bundle);
   return <section className="card investigation" aria-labelledby="investigation-title">
     <h2 id="investigation-title">Current investigation <span className="dim">completed actions from this visit, scoped to {runId}</span></h2>
     {!hasActivity && <p className="dim">No transient analysis or follow-up has been prepared for this run. Ask an agent one of the example questions, or use the Tool Console.</p>}
+    {auto && <div className="investigation-item"><h3>Automode investigation <Source source={auto.source} /></h3>
+      <p>{auto.value.summary}</p>
+      <ol className="trace">{auto.value.steps.map((s: any, i: number) => <li key={i}><b className="mono">{s.tool}</b> <span className="dim">— {s.why}</span><div>{s.found}</div></li>)}</ol>
+      {auto.value.next && <p><b>Next:</b> {auto.value.next.rationale}{auto.value.next.tool && <> <span className="dim">— </span><button className="ghost" onClick={() => { set({ console: { tool: auto.value.next.tool, input: JSON.stringify(auto.value.next.input, null, 1) } }); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>prefill {auto.value.next.tool} →</button></>}</p>}
+      <p className="dim small">{auto.value.created}</p></div>}
     {re && <div className="investigation-item"><h3>Reanalysis <Source source={re.source} /></h3><p>Frames {re.value.window.start_frame}–{re.value.window.end_frame}{re.value.window.interval > 1 ? ` every ${re.value.window.interval}th` : ""}: <b>{fmt(re.value.delta_g.mean)} ± {fmt(re.value.delta_g.corrected_sem)} kcal/mol</b>, {re.value.delta_g.verdict}. Difference from archive: {fmt(re.value.vs_archived.diff)} kcal/mol. The archive is unchanged.</p></div>}
     {plan && <div className="investigation-item"><h3>Sampling plan <Source source={plan.source} /></h3><p><span className="badge warn">expected, not measured</span> Target ±{fmt(plan.value.target_uncertainty_kcal)} kcal/mol on the ensemble mean. {plan.value.recommendation}</p>{plan.value.run_to_run.n_needed_range && <p className="dim small">Estimation range n={plan.value.run_to_run.n_needed_range.low}–{plan.value.run_to_run.n_needed_range.high}. Principal assumptions: {plan.value.assumptions.join(" ")}</p>}</div>}
     {forks.map(f => { const v: any = f.value; return <div className="investigation-item" key={v.fork_id}><h3>{v.kind} fork <Source source={f.source} /></h3><p>{v.question || v.tests}</p>{v.treatment && <p><b>{v.treatment.key}</b>: {Object.entries(v.treatment.from).map(([s, x]) => `${s} ${x}`).join(", ")} → {v.treatment.to}; changed stages: {v.stages_changed.join(", ")}.</p>}<p className="dim small">{v.stages_unchanged_note || v.controls_note}</p></div>; })}
@@ -320,6 +326,7 @@ function Sidebar() {
   const allProposals = useStore(s => s.proposals); const calls = useStore(s => s.calls);
   const route = useStore(s => s.route); const webmcp = useStore(s => s.webmcp); const pre = useStore(s => s.console);
   const [tool, setTool] = useState(TOOLS[0].name); const [input, setInput] = useState("{}"); const [out, setOut] = useState(""); const [touched, setTouched] = useState(false);
+  const [mode, setMode] = useState<"auto" | "manual">("manual");
   // A page button can hand the console a drafted call (the human edits and presses Call — the console is the only path).
   const callRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setOut(""); setTouched(true); set({ console: null }); setTimeout(() => callRef.current?.focus(), 50); } }, [pre]);
@@ -349,11 +356,22 @@ function Sidebar() {
     <div className="card" id="tool-console">
       <h2>Tool console <span className="dim">the same tools an agent sees · ✎ = changes page state</span></h2>
       {webmcp !== "registered" && <p className="dim small">No agent is connected to this page. In Chrome, enable <code>chrome://flags/#enable-webmcp-testing</code> and reload to let an agent call these tools itself; or call them by hand here.</p>}
-      <select value={tool} aria-label="tool" onChange={e => { setTouched(true); setTool(e.target.value); setInput(prefill(e.target.value)); }}>{TOOLS.map(t => <option key={t.name} value={t.name}>{t.name}{t.readOnly ? "" : " ✎"}</option>)}</select>
+      {/* Auto and manual call the same table: auto is investigate_run, which picks the tools; manual is you picking.
+          Both go through callTool, so the activity log below records them identically. */}
+      <div className="mode" role="group" aria-label="console mode">
+        <button className={mode === "auto" ? "" : "ghost"} aria-pressed={mode === "auto"}
+          onClick={() => { setMode("auto"); setTool("investigate_run"); setInput(prefill("investigate_run")); }}>Auto</button>
+        <button className={mode === "manual" ? "" : "ghost"} aria-pressed={mode === "manual"}
+          onClick={() => setMode("manual")}>Manual</button>
+        <span className="dim small">{mode === "auto"
+          ? "investigate_run reads the ladder, chases whichever rung is holding this run back, and recommends one action. It creates nothing."
+          : "pick any of the 16 tools yourself."}</span>
+      </div>
+      {mode === "manual" && <select value={tool} aria-label="tool" onChange={e => { setTouched(true); setTool(e.target.value); setInput(prefill(e.target.value)); }}>{TOOLS.map(t => <option key={t.name} value={t.name}>{t.name}{t.readOnly ? "" : " ✎"}</option>)}</select>}
       {(() => { const q = t.description.indexOf("? "); const head = q > 0 ? t.description.slice(0, q + 1) : t.description; const rest = q > 0 ? t.description.slice(q + 2) : ""; return <div className="dim small">{head}{rest && <details className="small"><summary className="dim">what it returns</summary><p className="dim">{rest}</p></details>}</div>; })()}
       <div className="dim small mono" id="tool-schema">{JSON.stringify((t.inputSchema as any).properties && Object.fromEntries(Object.entries((t.inputSchema as any).properties).map(([k, v]: any) => [k, v.enum ? v.enum.join("|") : v.type])))}</div>
       <textarea value={input} onChange={e => { setTouched(true); setInput(e.target.value); }} rows={3} spellCheck={false} aria-label="tool input (JSON)" aria-describedby="tool-schema" aria-invalid={outIsError || undefined} />
-      <button ref={callRef} onClick={async () => { try { setOut(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setOut(String(e)); } }}>Call</button>
+      <button ref={callRef} onClick={async () => { try { setOut(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setOut(String(e)); } }}>{mode === "auto" ? "Investigate" : "Call"}</button>
       <div role="status" aria-live="polite">{out && <pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre>}</div>
     </div>
     {/* What the agent just did, announced to screen readers; the visible log is below. */}

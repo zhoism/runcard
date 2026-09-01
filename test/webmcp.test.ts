@@ -19,7 +19,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 describe("WebMCP registration (mocked browser API)", () => {
   it("reports unsupported without the API and still exposes the real table", async () => {
     setupGlobals(); const web = await import("../src/webmcp"); const store = await import("../src/store"); await web.registerWebMCP();
-    expect(web.TOOLS).toHaveLength(15); expect(web.TOOLS.at(-1)?.name).toBe("export_evidence_brief"); expect(store.get().webmcp).toBe("unsupported"); expect(store.get().tools).toEqual(web.TOOLS.map(t => t.name));
+    expect(web.TOOLS).toHaveLength(16); expect(web.TOOLS.at(-1)?.name).toBe("export_evidence_brief"); expect(web.TOOLS.map(t => t.name)).toContain("investigate_run"); expect(store.get().webmcp).toBe("unsupported"); expect(store.get().tools).toEqual(web.TOOLS.map(t => t.name));
   });
 
   it("reports registration failure", async () => {
