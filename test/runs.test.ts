@@ -536,3 +536,39 @@ describe("compact by default, detail on request", () => {
     expect(l.rungs.length).toBe(5); expect(l.rungs[0].evidence).toBeUndefined(); expect(lf.rungs[0].evidence).toMatch(/re-derived here/); expect(l.summary).toBe(lf.summary);
   });
 });
+
+describe("the rerun bundle reproduces the number, not just the trajectory", () => {
+  // The gap this closes: before it, "fork this experiment" handed back a bundle that could rerun the MD and
+  // then leave you with no way to compute the ΔG the card is built on. Every setting below is read from the
+  // run's own manifest, so a bundle is never carrying another system's masks.
+  it("carries an MM-GBSA step whose every parameter comes from this run's manifest", () => {
+    for (const id of ["1l2y-rep4", "3htb-jz4"]) {
+      const m = load(id), mm = m.results.mmgbsa;
+      const f = rerunBundle(m, { seed: "pinned", target: "local", approved: [] });
+      expect(Object.keys(f), id).toEqual(expect.arrayContaining(["analysis/mmgbsa.in", "run_analysis.sh"]));
+      const inp = f["analysis/mmgbsa.in"];
+      expect(inp).toContain(`igb=${mm.igb}, saltcon=${mm.saltcon}`);
+      expect(inp).toContain(`startframe=${mm.params.startframe}, endframe=${mm.params.endframe}, interval=${mm.params.interval}`);
+      // the receptor mask must be this run's, never the other system's
+      expect(f["run_analysis.sh"]).toContain(`-m '${mm.params.receptor_mask}'`);
+      expect(f["run_analysis.sh"]).toContain(`trajin $MD/${m.stages.find((s: any) => s.role === "production").name}.nc`);
+      expect(f["README.md"]).toContain(`receptor \`${mm.params.receptor_mask}\`, ligand \`${mm.params.ligand_mask}\``);
+    }
+    // and the two systems must not produce the same masks, or the manifest is not being read
+    const a = rerunBundle(load("1l2y-rep4"), { seed: "pinned", target: "local", approved: [] })["run_analysis.sh"];
+    const b = rerunBundle(load("3htb-jz4"), { seed: "pinned", target: "local", approved: [] })["run_analysis.sh"];
+    expect(a).toContain("-m ':1-20'"); expect(b).toContain("-m ':1-163'");
+  });
+  it("says plainly that it was not executed, and what a fresh seed means for the number", () => {
+    const pinned = rerunBundle(B, { seed: "pinned", target: "local", approved: [] })["README.md"];
+    const fresh = rerunBundle(B, { seed: "fresh", target: "local", approved: [] })["README.md"];
+    expect(pinned).toMatch(/should reproduce the archived -19\.1953 kcal\/mol on the same build/);
+    expect(fresh).toMatch(/independent sample: expect a ΔG within the run-to-run spread, not the archived value/);
+    for (const r of [pinned, fresh]) expect(r).toMatch(/Nothing here was executed by the page/);
+  });
+  it("adds SLURM directives to the analysis job too, not just the MD job", () => {
+    const f = rerunBundle(B, { seed: "pinned", target: "slurm", approved: [] });
+    expect(f["run_analysis.sh"].split("\n")[1]).toBe("#SBATCH --job-name=1l2y-rep4-mmgbsa");
+    expect(f["run.sh"]).toContain("#SBATCH --job-name=1l2y-rep4");
+  });
+});

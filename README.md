@@ -35,8 +35,13 @@ A seven-step pass that works end-to-end on the live site with real numbers:
    and stops asking when it doesn't.
 5. `fork_experiment` extend `temp0` 300 → 310 K → two pending proposals
    (density, product); the heating ramp is deliberately left alone.
-6. Click **Approve**, then `generate_rerun_bundle` → a self-contained 13-file
-   bundle whose `manifest.json` records the parent run and the fork.
+6. Click **Approve**, then `generate_rerun_bundle` → a self-contained 15-file
+   bundle whose `manifest.json` records the parent run and the fork. It carries
+   both halves: `run.sh` for the MD and `run_analysis.sh` + `analysis/mmgbsa.in`
+   for the MM-GBSA, so the bundle reproduces the card's headline ΔG and not just
+   its trajectory. Every analysis setting — masks, `igb`, `saltcon`, frame
+   window — is read from that run's manifest, so a 3HTB bundle carries
+   `:1-163`/`:164` and a 1L2Y one carries `:1-20`/`:21`.
 7. `export_evidence_brief` → a qualified Markdown snapshot of the archived
    evidence and the run-scoped work actually completed during this visit.
 

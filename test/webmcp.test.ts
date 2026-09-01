@@ -117,7 +117,10 @@ describe("approval gate: store → callTool → bundle", () => {
   it("keeps the page's downloadable snapshot identical to what the tool reported", async () => {
     setupGlobals(); const web = await import("../src/webmcp"); const store = await import("../src/store");
     const out = await bundle(web, "1l2y-rep4");
-    expect(out.files).toHaveLength(13); expect(out.self_contained).toBe(true);
+    // 15 since the MM-GBSA step landed: the 13 that reproduced the trajectory, plus analysis/mmgbsa.in and
+    // run_analysis.sh, which are what make the bundle able to reproduce the card's headline ΔG at all.
+    expect(out.files).toHaveLength(15); expect(out.self_contained).toBe(true);
+    expect(out.files).toEqual(expect.arrayContaining(["analysis/mmgbsa.in", "run_analysis.sh"]));
     expect(out._bundle).toBeUndefined(); expect(out._brief).toBeUndefined(); // internals never reach the agent
     const snap = store.get().investigations["1l2y-rep4"].bundle!.value;
     expect(Object.keys(snap.files)).toEqual(out.files);

@@ -2,7 +2,7 @@
 
 ## Control
 
-- mode: active
+- mode: paused
 - batch_id: RC-20260901-07
 - round: 1
 - max_rounds: 3
@@ -13,10 +13,10 @@
 - setup_resumed_utc: 2026-08-28T07:47:16Z
 - expires_utc: 2026-09-01T03:31:30Z
 - automation_id: runcard-batch-07-coordination
-- automation_status: active every 10 minutes
+- automation_status: deleted after mobile-viewport blocker
 - cadence: every 10 minutes during active batch after creation
-- last_claude_message_processed: RC-004 round 1 A disputed / B ready_for_retest at 2026-08-30T01:55Z; claims released
-- checkpoint: RC-005 round 1 ready_for_claude; automode and confidence priorities passed
+- last_claude_message_processed: RC-005 round 1 ready_for_retest at 2026-09-01; live 5aa3d80 / index-BKr9BWEa.js; claims released
+- checkpoint: RC-005 verified; batch paused only because 390 px real-browser acceptance is unavailable in the current harness
 - pending_user_reminder: cancelled by explicit user request
 - automation_after_batch: delete batch-07 heartbeat on completion or any stop condition; do not recreate the cancelled reminder
 
@@ -335,6 +335,37 @@ backslashes in every occurrence while retaining clean Markdown rendering and the
 session include/exclude semantics above. Add focused regressions, run existing
 tests/build, reply with the same batch/issue/round as ready_for_retest, disputed,
 or blocked, state the live build requirement, and release claims.
+
+#### RC-005 round 1 — verified on live (2026-09-01T02:03Z–02:05Z)
+
+Matched Claude's ready_for_retest reply and confirmed all claims released. A
+fresh Codex built-in-browser document served `/assets/index-BKr9BWEa.js`, matching
+Claude's deployed revision 5aa3d80, with 16-tool WebMCP registration intact.
+
+Failure A is verified fixed. The `1l2y-rep4-ice1` card renders the sentence
+`Independent replicate of 1l2y-rep4 — same prepared system and protocol, fresh
+seeds` directly beneath the title and a separate `derived from` Provenance row.
+
+Failure B is verified fixed. Live `export_evidence_brief` was called for rep4
+both with `include_session:false` and after fresh `recompute_result` plus
+`plan_sampling` state with default session inclusion. Neither Markdown result
+contains any literal `\\_`; both render `_MMPBSA_info` and `fork_experiment` as
+code spans. Session exclusion still returns only record/result/evidence/sources;
+session inclusion adds current reanalysis and next sampling plan with expected
+labels and no claim that a follow-up ran.
+
+Critical regressions also pass on the same live asset: all three automode traces
+remain distinct with the correct bottlenecks, `list_proposals` is `[]` before and
+after, every trace states that nothing was created, and rep4 confidence remains
+3 of 4 with the exact short text, pooled ±0.64, matched-length ±0.80, and mixed
+Amber 24/Amber 26 engine disclosure.
+
+RC-005 is verified after one of three batch rounds. Batch completion is not
+claimed because the READY 390 px check remains unverified: the in-app WebMCP
+browser has no viewport-resize control and the connected Chrome browser is
+unavailable. This is a test-harness blocker rather than a verified site failure.
+Mode is paused and the Codex heartbeat is deleted; resume requires a real browser
+surface that can be set to 390 px or an explicit user waiver of that acceptance.
 
 ### RC-004 — live judge build misses two stated new-tool acceptance claims
 

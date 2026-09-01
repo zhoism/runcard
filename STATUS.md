@@ -58,12 +58,16 @@ partly-established branch, and all-or-nothing provenance on the new composition 
 ### The queue, in order. Everything here ships before Sep 3 1:00 pm PDT or is cut — judges test the
 ### live URL, so whatever is deployed at the deadline *is* the product. There is no "after".
 
-1. **`generate_rerun_bundle` ships no MMPBSA step.** A bundle reproduces the trajectory but not the
-   card's headline ΔG, so "fork this experiment" — the feature most likely to get clicked — hands back
-   something that cannot reproduce the one number the site is built on. Decided: fix, don't document.
-   The exact inputs are known, hand-written for the ICE brief (`~/Desktop/1l2y-rep4-replicate/BRIEF-for-ICE.md`):
-   strip to a dry trajectory with cpptraj, then `startframe=1, endframe=500, interval=5`, `igb=5,
-   saltcon=0.100`, receptor `:1-20`, ligand `:21`, single-trajectory, `entropy=0`.
+1. ~~**`generate_rerun_bundle` ships no MMPBSA step.**~~ **Closed 2026-09-01.** The bundle now carries
+   `run_analysis.sh` and `analysis/mmgbsa.in` alongside `run.sh`, so it reproduces the card's ΔG and not
+   only its trajectory — 15 files, up from 13. Every analysis parameter is read from that run's own
+   manifest (receptor/ligand masks, `igb`, `saltcon`, frame window, production stage name), so a 3HTB
+   bundle carries `:1-163`/`:164` and a 1L2Y one `:1-20`/`:21`; nothing is hardcoded. The script is
+   modelled on the one that actually produced these numbers on PACE-ICE, including the non-obvious detail
+   that `ante-MMPBSA.py`'s `-m` and `-n` are mutually exclusive, so passing the receptor mask as `-m`
+   makes the ligand default to its complement. The README states plainly that nothing was executed by the
+   page, and what a fresh seed means for the number. **Not executed anywhere yet** — the bundle is a
+   recipe, and no one has run this generated analysis end to end. That is what a batch 08 would test.
 2. **A new UI.** The user has one finished outside this repo and is migrating it in.
    `src/index.css` + `src/App.tsx` are what render. Do not touch `src/theme.css`, `index.html`,
    `src/Viewer.tsx`, `preview.html` — another session owns them.
