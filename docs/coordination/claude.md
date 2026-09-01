@@ -388,6 +388,51 @@ itself at the `expires_utc` in codex.md (2026-09-01T03:31:30Z) or on any stop
 condition. Session-only: it dies with this Claude session, so if the session is
 closed, the loop is gone and the next batch needs it re-created.
 
+## STOP + 390 px closed by Claude — batch RC-20260901-07 (2026-09-01T02:1xZ)
+
+**Coordination task `f5f7bf85` cancelled** (CronDelete) on the user's report that
+the batch is terminated. It fired once while active, found no unprocessed
+`ready_for_claude`, and correctly rewrote nothing. No further polling is scheduled.
+
+**The one open acceptance item is now closed here, not by Codex.** Codex recorded
+the 390 px overflow check as a harness limitation: its in-app browser exposes real
+WebMCP but cannot resize, and it correctly refused to substitute source inspection.
+That is the same shape as the flag-off header pill in batch 04, and it is closed the
+same way — measured by Claude on the live asset with headless Chrome driving CDP
+`Emulation.setDeviceMetricsOverride` (headless clamps its own window to ~500 px, so
+the override is the only way to reach a real phone width).
+
+**This is not a WebMCP-client test and is not offered as one.** It is a rendering
+measurement on live `/assets/index-BKr9BWEa.js`, revision `5aa3d80`.
+
+| measured at 390×844, live | `1l2y-rep4-ice1` | `1l2y-rep4` |
+|---|---|---|
+| `document.scrollWidth / clientWidth` | 390 / 390 | 390 / 390 |
+| elements extending past 391 px | none | none |
+| first `dl.fork dd` | 324 × 68 | 324 × 68 |
+| `.lineage` | 354 × 34, wraps to two lines | absent (no parent) |
+
+The fork `dd` at 324 × 68 is the number that matters: the original defect made it
+0 px wide and 2176 px tall below 480 px. It reads as normal text.
+
+**Two surfaces were measured that RC-005 could not have covered**, because both
+postdate or were invisible to that test:
+- **the lineage line added for RC-005 A** — new content directly under the title, so
+  the fix for A could itself have caused the overflow A's own retest would look for.
+  It wraps within 390 px and renders only where a run has a parent.
+- **automode's trace** — Auto → Investigate at 390 px renders a 3-step ordered list
+  with no overflow, the Auto/Manual row wraps to 324 × 85, and the Proposals panel
+  still reads "None yet" afterwards. The creates-nothing invariant holds at phone
+  width as well as desktop.
+
+**Remaining limitation, stated plainly:** no real WebMCP client has verified this
+build at 390 px, and none is scheduled. What is verified is that the page does not
+scroll sideways and the fork descriptions are readable, measured on the deployed
+asset. RC-005's two failures were fixed in `5aa3d80` and remain `ready_for_retest`;
+they were never retested by Codex before the batch stopped.
+
+Claimed files: none. Readiness: idle. No batch is authorized beyond 07.
+
 ## READY — batch 07 request (rewritten 2026-08-31, awaiting the user's start authorization in the Codex app)
 
 - target: https://runcard.vercel.app/ — **live = 0c6fc66**, bundle `/assets/index-Buc2vnBI.js`. Supersedes every earlier batch-07 draft (which named 2fabdc3 / `index-rt0eVFZ8.js`); ignore those build ids.
