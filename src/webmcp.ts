@@ -126,6 +126,8 @@ function recordOutcome(name: string, input: any, out: any, source: InvocationSou
   const runId = typeof input?.run_id === "string" ? input.run_id : null;
   if (!runId) return;
   const completedAt = new Date().toISOString();
+  // A proposal is a comment on the page: it needs an author and a time. makeProposal is pure, so the stamp happens here.
+  set(s => s.proposals.some(p => !p.source) ? { proposals: s.proposals.map(p => p.source ? p : { ...p, source, t: Date.now() }) } : {});
   if (name === "recompute_result") updateInvestigation(runId, current => ({ ...current, reanalysis: { runId, source, completedAt, value: out } }));
   if (name === "plan_sampling") updateInvestigation(runId, current => ({ ...current, samplingPlan: { runId, source, completedAt, value: out } }));
   if (name === "investigate_run") updateInvestigation(runId, current => ({ ...current, automode: { runId, source, completedAt, value: out } }));

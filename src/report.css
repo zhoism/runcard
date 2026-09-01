@@ -138,7 +138,22 @@ button.stagebox:focus-visible { outline: 2px solid var(--blue); outline-offset: 
 .stagebox:has(.badge.fail)::before { background: var(--fail); box-shadow: 0 0 0 1px var(--fail); }
 .stage.open .stagebox::before { box-shadow: 0 0 0 2px var(--navy); }
 .stagename { font-family: var(--mono); font-weight: 600; font-size: 14px; color: var(--ink); }
+
+/* the thread: a comment card with the ask, the diff, and Approve / Reject */
+.threads { grid-column: 1 / -1; display: grid; gap: 10px; }
+.thread { border: 1px solid #e3c27c; border-left: 4px solid var(--warn); border-radius: 8px; padding: 12px 14px; background: var(--card); font-size: 14.5px; }
+.thread.approved { border-color: #bcd9c8; border-left-color: var(--pass); background: var(--pass-bg); } .thread.rejected { border-color: var(--line); border-left-color: var(--muted); opacity: .6; }
+.thread-who { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink-2); }
+.thread-who .badge { margin-left: auto; }
+.thread-ask { margin: 8px 0; font-size: 15px; }
+.thread-diff { font-size: 13.5px; background: var(--page); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+.thread-diff .k { color: var(--ink); font-weight: 600; } .thread-diff .old { color: var(--fail); opacity: .8; } .thread-diff .new { color: var(--pass); font-weight: 600; }
+.thread-diff .sans { font-family: var(--sans); }
+.thread-check { font-size: 13.5px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.thread .row { margin-top: 8px; gap: 4px; }
+.pinned-summary { font-size: 14.5px; margin: 0 0 8px; }
 .stagedetail { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.stagedetail > div { min-width: 0; } .stagedetail pre { overflow-x: auto; max-width: 100%; }
 @media (max-width: 1300px) { .stagedetail { grid-template-columns: 1fr; } }
 
 pre { background: #f7f8fa; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow: auto; font-family: var(--mono); font-size: 13px; line-height: 1.55; color: var(--ink-2); margin: 0; max-height: 360px; }
@@ -232,3 +247,16 @@ aside select:focus, aside textarea:focus { outline: none; border-color: var(--bl
 
 /* phones */
 @media (max-width: 700px) { .tag { display: none; } .webmcp::before { display: none; } .big { font-size: 23px; } }
+
+/* pins and link-buttons override the global navy button; they sit last so order, not specificity tricks, decides */
+/* proposal pins: Figma's comment marker (a bubble with a pointed bottom-left), hung beside the stage's dot */
+button.pin { position: absolute; top: -6px; left: 24px; width: 26px; height: 26px; padding: 0; margin: 0; border: 2px solid var(--card); border-radius: 50% 50% 50% 3px; background: var(--warn); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 3px rgba(20, 30, 45, .25); z-index: 1; transition: transform .12s; }
+button.pin:hover { transform: scale(1.12); background: var(--warn); border-color: var(--card); }
+buttonbutton.pin.approved { background: var(--pass); } button.pin.rejected { background: var(--muted); }
+buttonbutton.pin.approved:hover { background: var(--pass); } button.pin.rejected:hover { background: var(--muted); }
+.pin-glyph { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: #fff; color: var(--warn); font: 600 10px/1 var(--sans); }
+button.pin.approved .pin-glyph { color: var(--pass); } .pin.rejected .pin-glyph { color: var(--muted); }
+.pin-glyph.inline { width: 16px; height: 16px; background: var(--warn); color: #fff; vertical-align: -2px; }
+.thread.approved .pin-glyph.inline { background: var(--pass); } .thread.rejected .pin-glyph.inline { background: var(--muted); }
+button.linklike { background: none; border: 0; padding: 0; margin: 0; font: inherit; font-family: var(--mono); font-size: 13.5px; color: var(--blue); cursor: pointer; }
+button.linklike:hover { text-decoration: underline; background: none; }

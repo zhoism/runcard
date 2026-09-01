@@ -509,7 +509,7 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
 
 // ---- proposals (bounded edits, human-approved) -----------------------
 export interface ProposalChange { key: string; before: string | null; after: string; class: ParamClass; material: boolean; meaning: string | null }
-export interface Proposal { id: string; run: string; stage: string; edits: Record<string, string>; reason: string; before: Report; after: Report; mdin_after: string; status: "pending" | "approved" | "rejected"; changes: ProposalChange[]; material_classes: ParamClass[]; fork?: ForkMeta }
+export interface Proposal { id: string; run: string; stage: string; edits: Record<string, string>; reason: string; before: Report; after: Report; mdin_after: string; status: "pending" | "approved" | "rejected"; changes: ProposalChange[]; material_classes: ParamClass[]; fork?: ForkMeta; /** stamped by callTool: who proposed it and when */ source?: "webmcp" | "console" | "page"; t?: number }
 export function applyEdits(mdin: string, edits: Record<string, string>): string {
   let out = mdin;
   for (const [k, v] of Object.entries(edits)) {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Manifest, IndexEntry } from "./lib/types";
-import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks } from "./lib/runs";
+import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
@@ -75,6 +75,27 @@ function Home({ idx }: { idx: IndexEntry[] }) {
   );
 }
 
+/** A Figma-style comment marker on a stage: a bubble, not a numbered label. Amber = pending (needs you), green = approved, grey = rejected.
+    WebMCP does not expose the client's name, so the glyph is a generic agent mark; the thread names the source. */
+function ProposalPin({ proposals, onOpen }: { proposals: Proposal[]; onOpen: () => void }) {
+  if (!proposals.length) return null;
+  const pending = proposals.filter(p => p.status === "pending").length;
+  const cls = pending ? "pending" : proposals.every(p => p.status === "rejected") ? "rejected" : "approved";
+  const label = `${proposals.length} proposal${proposals.length === 1 ? "" : "s"} on this stage${pending ? `, ${pending} awaiting your approval` : ""}`;
+  return <button type="button" className={`pin ${cls}`} aria-label={label} title={label} onClick={onOpen}><span className="pin-glyph" aria-hidden="true">{proposals.length > 1 ? proposals.length : "✦"}</span></button>;
+}
+/** One proposal as a comment thread: who and when, the ask, the diff, validation after, and the only two verbs a person has. */
+function ProposalThread({ p, compact }: { p: Proposal; compact?: boolean }) {
+  const when = p.t ? new Date(p.t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
+  return <div className={`thread ${p.status}`}>
+    <div className="thread-who"><span className="pin-glyph inline" aria-hidden="true">✦</span> <b>{p.source === "webmcp" ? "agent proposal" : "proposal"}</b> {p.source && <Source source={p.source} />}{when && <span className="dim"> · {when}</span>}{compact && <span className="dim"> · <b>{p.run}</b> / {p.stage}</span>}{p.fork && <span className="dim"> · fork: {p.fork.kind}</span>}<span className={`badge ${p.status}`}>{p.status}</span></div>
+    <p className="thread-ask">{p.reason}</p>
+    <div className="thread-diff mono">{(p.changes ?? []).length ? p.changes.map(c => <div key={c.key}><span className="k">{c.key}</span> <s className="old">{c.before ?? "(unset)"}</s> <span className="new">{c.after}</span>{c.meaning && <span className="dim sans"> — {c.meaning}{c.material ? "" : " · not material"}</span>}</div>) : Object.entries(p.edits).map(([k, v]) => <div key={k}><span className="k">{k}</span> <span className="new">{v}</span></div>)}</div>
+    <div className="thread-check">{p.material_classes?.length ? <span className="badge warn">material · {p.material_classes.map(c => c.replace("_", " ")).join(", ")}</span> : null} validation after <Verdict r={p.after} />{p.after.findings.filter(f => f.level !== "PASS").map((f, i) => <div key={i} className="dim small">{f.level}: {f.rule} — {f.detail}</div>)}</div>
+    {p.status === "pending" && <div className="row"><button onClick={() => setProposalStatus(p.id, "approved")} disabled={p.after.hasFail}>Approve</button><button className="ghost" onClick={() => setProposalStatus(p.id, "rejected")}>Reject</button>{p.after.hasFail && <span className="dim small" style={{ alignSelf: "center" }}>cannot approve: the edit fails validation</span>}</div>}
+  </div>;
+}
+
 /** GitHub's network graph for an experiment: the parent, the runs re-executed from its bundle, and whether they agree.
     The verdict is computed (forkNetwork); tension is shown in amber, not hidden, because surfacing it is the point. */
 function ForkNetworkCard({ net, compact }: { net: ReturnType<typeof forkNetwork>; compact?: boolean }) {
@@ -129,6 +150,13 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const [open, setOpen] = useState<string | null>(null);
   const investigation = useStore(s => s.investigations[id]);
   const re = investigation?.reanalysis?.value;
+  // Proposals are comments pinned to the stage they target. Filter outside the selector (React #185).
+  const runProposals = useStore(s => s.proposals).filter(p => p.run === id);
+  const openStage = useStore(s => s.openStage);
+  const seenProposal = useRef<string | null>(null);
+  // A new pending proposal on this run opens its thread, so the reader sees what the agent asked for without hunting.
+  useEffect(() => { const p = runProposals[0]; if (p && p.status === "pending" && seenProposal.current !== p.id) { seenProposal.current = p.id; setOpen(p.stage); } }, [runProposals]);
+  useEffect(() => { if (openStage) { setOpen(openStage); set({ openStage: null }); setTimeout(() => document.getElementById(`stage-${openStage}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 30); } }, [openStage]);
   useEffect(() => {
     let live = true; setM(null); setErr(null);
     loadRun(id).then(x => { if (live) setM(x); }, e => { if (live) setErr(String(e?.message ?? e)); });
@@ -203,8 +231,10 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
           <button type="button" className="stagebox" id={`stage-${s.name}`} aria-expanded={open === s.name} aria-controls={open === s.name ? "stagedetail" : undefined} onClick={() => setOpen(open === s.name ? null : s.name)}>
             <span className="stagename">{s.name}</span><span className="dim">{s.role}{s.length_ps != null ? ` · ${s.length_ps} ps` : ""}</span>
             <span className="dim">{s.cntrl.temp0 ? `${s.cntrl.temp0} K` : ""}{s.role === "minimization" ? "" : s.cntrl.ntp === "1" ? " NPT" : s.cntrl.ntb === "1" ? " NVT" : ""}{s.cntrl.ntr === "1" ? " restrained" : ""}</span>
-            {verdictOf(reports[s.name]) !== overall || overall !== "PASS" ? <Verdict r={reports[s.name]} /> : null}</button></div>)}</div>
+            {verdictOf(reports[s.name]) !== overall || overall !== "PASS" ? <Verdict r={reports[s.name]} /> : null}</button>
+          <ProposalPin proposals={runProposals.filter(p => p.stage === s.name)} onOpen={() => setOpen(s.name)} /></div>)}</div>
         {open && (() => { const s = m.stages.find(x => x.name === open)!; const r = reports[open]; return <div className="stagedetail" id="stagedetail" role="region" aria-labelledby={`stage-${open}`}>
+          {runProposals.some(p => p.stage === open) && <div className="threads">{runProposals.filter(p => p.stage === open).map(p => <ProposalThread key={p.id} p={p} />)}</div>}
           <div><h3>{s.name}.in</h3><pre>{s.mdin}</pre>
             <div className="dim">restarts from {s.restart_from || "initial coordinates"} · {s.role === "minimization" ? `seed ${s.realized_seed ?? "n/a"} (unused by minimization)` : `requested ig=${s.requested_seed ?? "unset (pmemd default -1)"} → realized seed ${s.realized_seed ?? "n/a"}`} · wall {s.wall_s ?? "?"} s · {s.finished ? "finished" : "not finished"}{s.envelope?.crashes?.length ? ` · crashes: ${s.envelope.crashes.join(", ")}` : ""}</div></div>
           <div><h3>Validation</h3><ul className="findings">{r.findings.map((f, i) => <li key={i}><span className={`badge ${f.level.toLowerCase()}`}>{f.level}</span> <b>{f.rule}</b> — {f.detail}</li>)}</ul></div>
@@ -372,15 +402,11 @@ function Sidebar() {
   return <aside>
     <div className="card">
       <h2>Proposals <span className="dim">agent proposes, you approve{allProposals.length ? ` · ${allProposals.filter(p => p.status === "pending").length} pending of ${allProposals.length}` : ""}</span></h2>
-      {proposals.length === 0 && <p className="dim">None yet. An agent can call <code>propose_change</code>; nothing is applied until you approve it here.</p>}
-      {proposals.map(p => <div key={p.id} className={`proposal ${p.status}`}>
-        <div><b>{p.run}</b> / {p.stage} <span className={`badge ${p.status}`}>{p.status}</span>{p.fork && <span className="dim small"> · fork {p.fork.kind}{p.fork.question ? `: ${p.fork.question}` : ""}</span>}</div>
-        <div className="mono">{(p.changes ?? []).map(c => `${c.key}: ${c.before ?? "(unset)"} → ${c.after}`).join(" · ") || Object.entries(p.edits).map(([k, v]) => `${k}=${v}`).join(", ")}{p.material_classes?.length ? <> <span className="badge warn">material · {p.material_classes.map(c => c.replace("_", " ")).join(", ")}</span></> : null}</div>
-        <div className="dim">{p.reason}</div>
-        <div>before <Verdict r={p.before} /> → after <Verdict r={p.after} /></div>
-        {p.after.findings.filter(f => f.level !== "PASS").map((f, i) => <div key={i} className="dim small">{f.level}: {f.rule} — {f.detail}</div>)}
-        {p.status === "pending" && <div className="row"><button onClick={() => setProposalStatus(p.id, "approved")} disabled={p.after.hasFail}>Approve</button><button className="ghost" onClick={() => setProposalStatus(p.id, "rejected")}>Reject</button>{p.after.hasFail && <span className="dim small" style={{ alignSelf: "center" }}>cannot approve: the edit fails validation</span>}</div>}
-      </div>)}
+      {proposals.length === 0 && <p className="dim">None yet. When an agent calls <code>propose_change</code> or <code>fork_experiment</code>, the proposal appears as a comment pinned to the stage it targets; nothing is applied until you approve it there.</p>}
+      {/* This run's proposals live on the page as pinned comments; the panel only points at them. Other runs' proposals are listed in full so nothing waits unseen. */}
+      {(() => { const here = proposals.filter(p => p.run === currentRun); const pend = here.filter(p => p.status === "pending"); const stages = [...new Set(here.map(p => p.stage))];
+        return here.length ? <p className="pinned-summary">{pend.length ? <b>{pend.length} awaiting your approval</b> : <span>{here.length} reviewed</span>} on this run — pinned at {stages.map((st, i) => <span key={st}>{i > 0 ? ", " : ""}<button className="linklike" onClick={() => set({ openStage: st })}>{st}</button></span>)}.</p> : null; })()}
+      {proposals.filter(p => p.run !== currentRun).map(p => <ProposalThread key={p.id} p={p} compact />)}
     </div>
     <div className="card" id="tool-console">
       <h2>Tool console <span className="dim">the same tools an agent sees · ✎ = changes page state</span></h2>

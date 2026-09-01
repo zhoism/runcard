@@ -75,6 +75,16 @@ describe("approval gate: store → callTool → bundle", () => {
     expect(filesOf(store, "1l2y-rep4")["md/product.in"]).toContain("nstlim=15000");
   });
 
+  it("a proposal is stamped with who made it and when, so the page can show it as a comment", async () => {
+    setupGlobals(); const web = await import("../src/webmcp"); const store = await import("../src/store");
+    const before = Date.now();
+    const p = await web.callTool("propose_change", { run_id: "1l2y-rep4", stage: "product", edits: { dt: "0.001" }, reason: "halve the timestep" }, "webmcp").then(JSON.parse);
+    const stored = store.get().proposals.find((x: any) => x.id === p.proposal_id)!;
+    expect(stored.source).toBe("webmcp"); expect(stored.t).toBeGreaterThanOrEqual(before);
+    const q = await web.callTool("propose_change", { run_id: "1l2y-rep4", stage: "product", edits: { cut: "10.0" }, reason: "longer cutoff" }, "console").then(JSON.parse);
+    expect(store.get().proposals.find((x: any) => x.id === q.proposal_id)!.source).toBe("console");
+    expect(store.get().proposals.find((x: any) => x.id === p.proposal_id)!.source).toBe("webmcp"); // the first stamp is never overwritten
+  });
   it("setProposalStatus changes exactly the named proposal and ignores unknown ids", async () => {
     setupGlobals(); const web = await import("../src/webmcp"); const store = await import("../src/store");
     const p1 = await propose(web, "1l2y-rep4", "product", { nstlim: "5000" }, "longer production");
