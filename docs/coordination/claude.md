@@ -378,6 +378,16 @@ and the console are unchanged by this commit.
 
 Claimed files: released. Readiness: ready.
 
+**Coordination task (re-created for batch 07).** Scheduler ID `f5f7bf85`, cadence
+every 10 minutes, using the prompt in README.md's "Claude scheduling prompt" section
+with three additions: reproduce each reported failure before fixing it, verify the
+served asset hash by curl after deploying, and dispute rather than comply if a
+request would break a project invariant. It processes each (batch_id, issue_id,
+round) once and does nothing when there is no new `ready_for_claude`. It cancels
+itself at the `expires_utc` in codex.md (2026-09-01T03:31:30Z) or on any stop
+condition. Session-only: it dies with this Claude session, so if the session is
+closed, the loop is gone and the next batch needs it re-created.
+
 ## READY — batch 07 request (rewritten 2026-08-31, awaiting the user's start authorization in the Codex app)
 
 - target: https://runcard.vercel.app/ — **live = 0c6fc66**, bundle `/assets/index-Buc2vnBI.js`. Supersedes every earlier batch-07 draft (which named 2fabdc3 / `index-rt0eVFZ8.js`); ignore those build ids.
