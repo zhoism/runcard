@@ -77,15 +77,15 @@ partly-established branch, and all-or-nothing provenance on the new composition 
    into the manifest (`results.mmgbsa.radii`) and emitted from there; the four ICE runs archived no dry
    topology, so their bundles omit `--radii` and say so instead of guessing. Receipts:
    `docs/verification/20260901-generated-analysis-execution/`.
-2. **A new UI — resolved 2026-09-01: the app is the preprint theme** (`src/theme.css`, commit
-   0602fc2). The overnight pass built and compared two directions (record: `docs/design/DECISION.md`);
-   the user rejected the amber redesign on preview AND the original dark `index.css`, and chose the
-   preprint design they had iterated on earlier. `src/main.tsx` imports `./theme.css`; `index.html`
-   must keep the Newsreader + JetBrains Mono font links. `amber.css` and `index.css` stay in-tree as
-   reference only — do not import either unasked. `src/App.tsx` and all tool logic untouched
-   throughout. Verified on theme.css as the app: 654 tests, tsc, build; no overflow at 390–2560; run,
-   home, compare rendered; sticky rail keeps Approve/Call in view. **Production still serves the dark
-   UI — deploy is pending the user's ok.**
+2. **A new UI — resolved 2026-09-01: the app is the "report" theme** (`src/report.css`, commit
+   a20b924), built to designer Lailai Zhang's rulings from their Figma review (Inter + mono only,
+   deep-blue nav with white text, white bento cards on grey, green/amber/red semantics with PASS now
+   color-coded, warnings as bold lowercased banners with a caption keeping the verbatim claim honest,
+   rail sized to the viewport). Full ruling record: `docs/design/DECISION.md` addendum. `theme.css`
+   (preprint), `amber.css`, `index.css` are all rejected reference-only — never import them unasked.
+   App.tsx changes were minimal: Verdict always emits the verdict class, and the warning caption
+   copy. Verified: 654 tests, tsc, build; no overflow at 390/1440. **Production still serves the old
+   dark UI — deploy is pending the user's ok.**
 3. **Demo video + Devpost writeup.** Last, after 1 and 2, so it shows the finished thing.
 
 **Batch 07 is done** (2026-09-01, stopped early). It verified automode's two critical invariants, the
@@ -110,9 +110,10 @@ a five-minute judging pass, and each risks regressing code that is currently gre
 
 ### Constraints that will bite a new session
 
-- **What renders is `src/theme.css` (preprint) + `src/App.tsx`** since 0602fc2. `src/amber.css` and
-  `src/index.css` are rejected designs kept as reference-only; do not import them. The file-ownership
-  split between sessions is over.
+- **What renders is `src/report.css` + `src/App.tsx`** since a20b924 (the designer-spec report look).
+  `src/theme.css`, `src/amber.css`, `src/index.css` are rejected designs kept as reference-only; do
+  not import them. Figma comments are read via `~/.figma-token` + REST, not the MCP. The
+  file-ownership split between sessions is over.
 - **`useStore` passes its selector straight to `useSyncExternalStore` as `getSnapshot`**
   (`src/store.ts:12`), so a selector returning a fresh array or object loops forever (React #185).
   Subscribe to the stable value and filter outside the selector. This shipped once.
