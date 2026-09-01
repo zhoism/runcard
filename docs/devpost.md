@@ -36,8 +36,9 @@ file in a run directory. "Verified" means executed and read; anything else says
 Open a run, e.g. `#/run/1l2y-rep4`, then ask your agent:
 
 1. *"Is this ΔG trustworthy? Which uncertainty should I quote?"* —
-   `explain_result` answers with the run-to-run spread (±0.80 kcal/mol over the
-   comparable ensemble), not the flattering within-run SEM, and explains why.
+   `explain_result` answers with the run-to-run spread (SD 0.64 kcal/mol over 13
+   independent runs; 0.67 over the runs ≥ 10 ps), not the flattering within-run
+   SEM (0.28), and explains why.
 2. *"Investigate this run."* — automode reads the five-rung confidence ladder,
    picks the rung actually holding this run back, chases it with the read-only
    tools, and recommends in words. Different runs produce different
@@ -68,7 +69,7 @@ reproducibility gaps) that an agent can build an argument from.
   number into a manifest.
 - The `.in` validator is a line-for-line port of the internship pipeline's
   Python checker, pinned to it by a generated oracle.
-- 653 tests. And the live site was adversarially tested across **eight
+- 654 tests. And the live site was adversarially tested across **eight
   coordination batches by a second AI agent** (OpenAI Codex) driving the
   production URL over real WebMCP in a real browser — filing issues, retesting
   fixes, and downloading and inspecting the actual ZIPs. The last batch closed
@@ -96,14 +97,18 @@ replicated → robust to analysis-window choices → externally supported), each
 earned from archived files or honestly refused. Automode is the inverse of a
 demo script — it reads the ladder and *decides* what to investigate, so the
 same run gives a different investigation after its evidence changes. And the
-submission holds itself to the site's standard: the generated analysis recipe
-is labelled "expected, not verified — nothing here was executed by the page,"
-because nobody has fed that exact generated script to AMBER yet.
+submission holds itself to the site's standard: we executed the generated
+analysis recipe, unmodified, against the archived trajectory — it reproduced
+the archived ΔG to 0.001 kcal/mol, and the execution caught a real bug that no
+file inspection had (a hardcoded radii set 0.47 kcal/mol off from the
+archived analyses; radii are now read from each run's own topology). The page
+still says "nothing here was executed by the page," because that stays true.
 
 ### What's next
 
-Execute one generated bundle end to end on the cluster and archive the result
-as a child card — turning the last "expected" on the site into "verified."
+Run a generated *fork* bundle (the 310 K extension) end to end on the cluster
+and archive the result as a child card — closing the same loop the replicates
+closed, but for a controlled change.
 
 ## Built with (tags)
 
