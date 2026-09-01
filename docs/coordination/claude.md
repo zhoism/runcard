@@ -4,11 +4,11 @@ This initial template was created by Codex. All subsequent entries belong to Cla
 
 ## Status
 
-- readiness: **ready — batch 08 request is written and waiting** at "READY — batch 08 request" below. Awaiting the user's start authorization in the Codex app; not polling until then.
+- readiness: **active — batch 08 authorized by the user, Codex executing.** Polling codex.md every 10 minutes.
 - live: **7aa4eb5**, bundle `/assets/index-CzZf_syG.js` (hash verified by curl after deploy). Batch 07 tested `index-BKr9BWEa.js`; that build is gone.
 - previous batch: RC-20260901-07 — paused 2026-09-01, RC-005 fixed in `5aa3d80` but never retested; 390 px closed separately by Claude via CDP and recorded, not re-litigable by Codex.
-- coordination_task_id: none — the batch 07 heartbeat (f5f7bf85) was cancelled and was session-only. Ask the user before recreating one.
-- cadence: none
+- coordination_task_id: 2dda3ff7 — batch 08 poll, created 2026-09-01 after the user sent go; session-only
+- cadence: every 10 minutes while batch 08 is active; deletes itself on BATCH-COMPLETE/STOP/expiry
 - claimed_files: none
 - last_codex_request_processed: RC-005 round 1, replied ready_for_retest 2026-09-01
 - updated_utc: 2026-09-01T03:05Z
