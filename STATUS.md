@@ -25,7 +25,7 @@ Updated 2026-08-31. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP
 | Tools (`src/webmcp.ts`, `src/lib/runs.ts`) | done locally — 15 tools; one table drives WebMCP + in-page console. Tool 15, `export_evidence_brief`, prepares a qualified Markdown snapshot and does not approve, download, post, or run MD |
 | WebMCP in a real agent | **verified 2026-08-28** in ChatGPT's browser (localhost) and **2026-08-29 on the live URL** by Codex's browser (batch RC-20260828-02, `docs/coordination/`): 10 tools registered, full demo flow `validate_stage` → `explain_result` → `propose_change` → human Approve → `generate_rerun_bundle` with the approved dt=0.001 landing in the downloaded ZIP; live 404 recovery; 390 px no overflow; zero failures. **Batch 03 (2026-08-29, live d604351):** 12 tools registered; `recompute_result` + `plan_sampling` → `propose_change` → Approve → bundle chain verified from the downloaded ZIP; one real bug (RC-003, stale `ps` in the mdin title after a duration edit) found and fixed. **Batch 04 (2026-08-30, live 7d77378 → 2f7ac29):** 14 tools registered; `confidence_ladder` 2 of 4 + "partly established" accepted as the honest state (RC-004 A disputed, accepted); `fork_experiment` extend temp0=310 → 2 proposals → Approve both → 13-file self-contained bundle with Fork lineage, partial-approval warning, `stages:["heat"]` error, console prefill all verified live; RC-004 B (replicate on a 1-run site gave a null recommendation) fixed and verified on 2f7ac29. Codex's browser cannot capture downloads, so ZIPs are inspected from user-supplied archives: the **full fork** archive is verified (13 entries, 13475 B, SHA-256 `6005ea20…d8ae048` — `heat.in` temp0=300.0, `density.in`/`product.in` temp0=310.0 with ig=-1, README lineage with no partial warning, `manifest.json` parent=1l2y-rep4 and `fork.complete: true`). The **partial-approval** archive is verified too (13 entries, 13514 B, SHA-256 `e355d370…d4c854a5` — `density.in` 310 K, `product.in` and `heat.in` 300 K, README carries the partial-approval warning, `manifest.json` `stages_applied=[density]`, `stages_not_applied=[product]`, `fork.complete: false`). **Batch 04 complete** 2026-08-31T02:15Z after one fix/retest round, zero open issues. **Batch 05 (2026-08-31T02:18Z): passed clean, zero of three rounds used** — 14 tools, ladder 2 of 4 + partly established, replicate guidance, invalid-stage error, console prefill, and both bundle paths re-verified from Codex's own downloads (full `ee6f81b6…cc24f5c6`, 13475 B, `fork.complete=true`; partial `cfd194e1…1dc22dca25`, 13514 B, `fork.complete=false`). **Batch 06 (2026-08-31T02:20Z): passed clean, zero of three rounds used** — same matrix, both bundle paths re-verified from its own downloads (full `b24565b9…`, `fork.complete=true`; partial `4f2c1e94…`, `fork.complete=false`). **Batches 04–06 are complete; Codex mode is `complete`, its heartbeat deleted, and no `ready_for_claude` request is open.** Across the three batches the live build was exercised by a real WebMCP client 3× end-to-end with six independently downloaded archives inspected byte-for-byte; the only code change required was RC-004 B. The one item Codex structurally cannot test — the **flag-off header pill** — was verified here instead on live `index-DwFbZHdi.js` via headless Chrome (no WebMCP): the pill renders `no WebMCP here — use the Tool Console ↓` as `<a href="#tool-console">`, and clicking it scrolls 0 → 192 px with the Tool Console in view (top 147 px) while the hash stays `#/run/1l2y-rep4` and the h1 stays `1L2Y + MOL, run 4` — it does not route home |
 | Page renders | verified (headless Chrome): home, run, compare. WebGL-less browsers get a fallback instead of a crash |
-| Deploy | `https://runcard.vercel.app` public since 2026-08-28 (Deployment Protection off). **Live = b1ee36a** (deployed 2026-08-31 from a clean `git worktree` of HEAD, bundle `index-ImjCbwKG.js` — the four PACE-ICE replicates; verified live by headless CDP on `#/run/1l2y-rep4`: `index.json` serves 14 runs with all four `1l2y-rep4-ice*` at 30 ps under `Amber 24 SANDER (2024)`, and the ladder renders **3 of 4** with rung 3 *verified* — "6 of 3 needed ✓" — including the engine-mix sentence (4 SANDER, 2 PMEMD) and the wider matched-length SD ±0.80. No page errors. Previous: 2fabdc3 / `index-rt0eVFZ8.js`, 1dac802 / `index-CHGgfGiH.js`, 5a885d9 / `index-D3GpiLiC.js`, 2f7ac29 / `index-DwFbZHdi.js`, 7d77378 / `index-B7PiDcQK.js`, 6f317dc / `index-DEIhYtI0.js`, 3ef2cb5 / `index-BTW4-AZd.js`, fd8620c / `index-DsyBgKpr.js`, 662e98d / `index-CZfZNhsT.js`, b4491c3 / `index-Y31UbNAm.js`, ff85e2f / `index-USiMctXW.js`, f64789f / `index-CqSj8sfl.js`, 097a01a / `index-D8epXSVf.js`, 46ca5ba / `index-D_Ku5S9V.js`, d604351 / `index-DoMhorJt.js`). Deploy from a worktree whenever another session has uncommitted edits in the working tree; missing manifest → 404, which the loader handles. Project is not git-connected: every deploy is a CLI deploy |
+| Deploy | `https://runcard.vercel.app` public since 2026-08-28 (Deployment Protection off). **Live = f8aedc7** (deployed 2026-08-31 from a clean `git worktree` of HEAD, bundle `index-ImjCbwKG.js` — same bundle hash as b1ee36a because nothing in `src/` changed after it; the manifests did, and live serves the per-field `composition_source`. The b1ee36a verification below still describes this build: verified live by headless CDP on `#/run/1l2y-rep4`: `index.json` serves 14 runs with all four `1l2y-rep4-ice*` at 30 ps under `Amber 24 SANDER (2024)`, and the ladder renders **3 of 4** with rung 3 *verified* — "6 of 3 needed ✓" — including the engine-mix sentence (4 SANDER, 2 PMEMD) and the wider matched-length SD ±0.80. No page errors. Previous: 2fabdc3 / `index-rt0eVFZ8.js`, 1dac802 / `index-CHGgfGiH.js`, 5a885d9 / `index-D3GpiLiC.js`, 2f7ac29 / `index-DwFbZHdi.js`, 7d77378 / `index-B7PiDcQK.js`, 6f317dc / `index-DEIhYtI0.js`, 3ef2cb5 / `index-BTW4-AZd.js`, fd8620c / `index-DsyBgKpr.js`, 662e98d / `index-CZfZNhsT.js`, b4491c3 / `index-Y31UbNAm.js`, ff85e2f / `index-USiMctXW.js`, f64789f / `index-CqSj8sfl.js`, 097a01a / `index-D8epXSVf.js`, 46ca5ba / `index-D_Ku5S9V.js`, d604351 / `index-DoMhorJt.js`). Deploy from a worktree whenever another session has uncommitted edits in the working tree; missing manifest → 404, which the loader handles. Project is not git-connected: every deploy is a CLI deploy |
 | Demo video, Devpost text | not started |
 | UI polish | first pass done 2026-08-28 (f39c348): sentence-case headings, ≥13 px text, ΔG at heading size, no horizontal overflow at 390 px (measured via CDP), header badge explains itself without WebMCP, Tool Calls panel readable, tool descriptions question-led, `explain_result.brief`. PASS is neutral and scoped as an input sanity check (2bd3127). **Correction 2026-08-31:** the "no horizontal overflow at 390 px" claim below stopped being true once the Fork card landed — its action column is `max-content` and its longest button is ~366 px, which starved the description column to 0 px wide and 2176 px tall and scrolled the page 103 px sideways at ≤ 480 px. Measured on live at 390/414/480 px, fixed in `dl.fork` with a stacking media query, re-measured clean (390/390, description 324×68). Codex review batch 1 (`docs/coordination/`): RC-001, RC-002 fixed (a44bb7f). Not done: PLIP png/residue repeat, 12-thumbnail gallery hierarchy, MMPBSA warning styling, preprint theme (separate chat) |
 
@@ -42,6 +42,53 @@ Updated 2026-08-31. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP
 **Also done (second commit):** entropy caveat — `tools/extract_run.py` now records `params.entropy` from `_MMPBSA_info` (all runs: `0`, manifests re-extracted, only that field and the `extracted` date changed); `explain_result.entropy_term` + a sentence in `what_it_is` ("effective interaction energy for ranking, not an absolute binding free energy"); the ΔG card heading says "no entropy term". Drifting-run projection — `plan_sampling` no longer prints a single-run length for a run whose verdict is not "no drift detected" (`expected_length_for_target_ps: null` + `expected_length_note`; recommendation and panel line say so).
 
 **Not done (from the review):** repeated facts on the run page (ps/seed/AmberTools ×2–3), same-system compare repeating ΔΔG, 2560 px `.app` max-width, `plateau_sem` naming, counter-ion count in the fingerprint, focus management on route change, a `webmcp.test.ts`. RC-002 keyboard disclosures still only partially retested. `index.css` changes must be mirrored in `theme.css` when the preprint theme lands.
+
+## Handoff — 2026-08-31, end of the replication session
+
+**Live = HEAD = f8aedc7**, pushed. 643 tests, `tsc` and `build` clean. No known open bugs.
+
+What this session did: took four real 30 ps replicates run on Georgia Tech PACE-ICE from a
+`generate_rerun_bundle` output, extracted them as cards, and flipped `1l2y-rep4`'s
+"independently replicated" rung from *partly established* to **verified** on real data (3 of 4).
+Four extractor defects surfaced and were fixed (sander banners, sander wall time, per-run
+`env.lock.yml`, composition read from artifacts when the build pipeline's `s*.json` is absent),
+plus two found by reviewing the session's own diff: dead coverage on the ladder's
+partly-established branch, and all-or-nothing provenance on the new composition fallback.
+
+### The queue, in order. Everything here ships before Sep 3 1:00 pm PDT or is cut — judges test the
+### live URL, so whatever is deployed at the deadline *is* the product. There is no "after".
+
+1. **Codex batch 07.** Request is written in `docs/coordination/claude.md` but still names an older
+   build; retarget it to `f8aedc7` / `index-ImjCbwKG.js` first. The user starts it in the Codex app —
+   never Claude. This is the only real-WebMCP-client verification of anything since `2f7ac29`.
+2. **`generate_rerun_bundle` ships no MMPBSA step.** A bundle reproduces the trajectory but not the
+   card's headline ΔG, so "fork this experiment" hands back something that cannot reproduce the one
+   number the site is built on. Decided: fix, don't document. The exact inputs are known — they were
+   hand-written for the ICE brief (`~/Desktop/1l2y-rep4-replicate/BRIEF-for-ICE.md`): strip to a dry
+   trajectory with cpptraj, then `startframe=1, endframe=500, interval=5`, `igb=5, saltcon=0.100`,
+   receptor `:1-20`, ligand `:21`, single-trajectory, `entropy=0`.
+3. **A new UI.** The user has one finished outside this repo and is migrating it in a fresh session.
+4. **Demo video + Devpost writeup.** Last, after 2 and 3, so it shows the finished thing.
+
+**Cut:** the cosmetic leftovers listed under "Not done (from the review)" — pre-existing, invisible in
+a five-minute judging pass, and each risks regressing code that is currently green.
+
+### Constraints that will bite a new session
+
+- **`src/theme.css`, `index.html`, `src/Viewer.tsx`, `preview.html` belong to another session.** Do not
+  edit them. `theme.css` is the unlanded preprint theme, imported only by `src/main.preview.tsx`, so it
+  is *not* what renders. What renders is `src/index.css` + `src/App.tsx`.
+- **`useStore` passes its selector straight to `useSyncExternalStore` as `getSnapshot`**
+  (`src/store.ts:12`), so a selector returning a fresh array or object loops forever (React #185).
+  Subscribe to the stable value and filter outside the selector. This shipped once.
+- **Node.** System Node 20.12 breaks the npm scripts inside rolldown. Use `bun --bun x vitest run`,
+  `bunx tsc -b --noEmit`, `bun --bun run build`, `bun --bun run dev`.
+- **Deploys silently no-op.** Three times now. Always `curl` the live bundle hash and compare against
+  `dist/assets/` after deploying, and re-run if it did not change.
+- **Deploy from a clean `git worktree` of HEAD** plus `cp -R .vercel`, because other sessions leave
+  uncommitted files in the working tree. The project is not git-connected; every deploy is a CLI deploy.
+- **Reviewing this repo:** commit or ignore `docs/` first. The cloud review of this session's work saw
+  ~20,600 insertions of which 151 were code, and returned one documentation nit.
 
 ## Confidence ladder + fork (2026-08-29, vision doc → code)
 
