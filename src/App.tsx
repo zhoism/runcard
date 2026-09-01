@@ -4,6 +4,7 @@ import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diff
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
+import { analysisInfo, ANALYSIS_CATEGORIES, type AnalysisCategory } from "./lib/analysisCatalog";
 import { TOOLS, callTool } from "./webmcp";
 import { Viewer, Boundary } from "./Viewer";
 import type { InvestigationState } from "./lib/investigation";
@@ -93,6 +94,24 @@ function ProposalThread({ p, compact }: { p: Proposal; compact?: boolean }) {
     <div className="thread-diff mono">{(p.changes ?? []).length ? p.changes.map(c => <div key={c.key}><span className="k">{c.key}</span> <s className="old">{c.before ?? "(unset)"}</s> <span className="new">{c.after}</span>{c.meaning && <span className="dim sans"> — {c.meaning}{c.material ? "" : " · not material"}</span>}</div>) : Object.entries(p.edits).map(([k, v]) => <div key={k}><span className="k">{k}</span> <span className="new">{v}</span></div>)}</div>
     <div className="thread-check">{p.material_classes?.length ? <span className="badge warn">material · {p.material_classes.map(c => c.replace("_", " ")).join(", ")}</span> : null} validation after <Verdict r={p.after} />{p.after.findings.filter(f => f.level !== "PASS").map((f, i) => <div key={i} className="dim small">{f.level}: {f.rule} — {f.detail}</div>)}</div>
     {p.status === "pending" && <div className="row"><button onClick={() => setProposalStatus(p.id, "approved")} disabled={p.after.hasFail}>Approve</button><button className="ghost" onClick={() => setProposalStatus(p.id, "rejected")}>Reject</button>{p.after.hasFail && <span className="dim small" style={{ alignSelf: "center" }}>cannot approve: the edit fails validation</span>}</div>}
+  </div>;
+}
+
+/** The cpptraj plots as a filterable gallery: each has a name, a family and a one-line meaning from the catalogue. */
+function AnalysesCard({ m }: { m: Manifest }) {
+  const [filter, setFilter] = useState<AnalysisCategory | "all">("all");
+  const items = Object.entries(m.analyses).filter(([k]) => k !== "plip").map(([k, a]) => ({ key: k, png: a.png, ...analysisInfo(k) }));
+  const present = ANALYSIS_CATEGORIES.filter(c => items.some(i => i.category === c));
+  const shown = items.filter(i => filter === "all" || i.category === filter);
+  return <div className="card"><h2>Analyses <span className="dim">cpptraj · {items.length} plots</span></h2>
+    {present.length > 1 && <div className="pills" role="group" aria-label="filter analyses by family">
+      {(["all", ...present] as const).map(c => <button key={c} type="button" className={`pill ${filter === c ? "on" : ""}`} aria-pressed={filter === c} onClick={() => setFilter(c)}>{c}{c !== "all" && <span className="count">{items.filter(i => i.category === c).length}</span>}</button>)}
+    </div>}
+    <div className="gallery">{shown.map(i => <figure key={i.key} className="analysis">
+      <figcaption><b>{i.name}</b><span className="dim">{i.category}</span></figcaption>
+      <a href={`/runs/${m.id}/${i.png}`} target="_blank" rel="noopener" title={`open ${i.png} full size`}><img src={`/runs/${m.id}/${i.png}`} alt={`${i.name} plot`} loading="lazy" /></a>
+      {i.shows && <p className="dim small">{i.shows}</p>}
+    </figure>)}</div>
   </div>;
 }
 
@@ -277,8 +296,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
         <AgentPrompts runId={m.id} partnerId={ens?.all.runs.find(r => r.id !== m.id)?.id ?? others[0]?.id} />
       </div>
 
-      <div className="card"><h2>Analyses <span className="dim">cpptraj</span></h2>
-        <div className="gallery">{Object.entries(m.analyses).filter(([k]) => k !== "plip").map(([k, a]) => <figure key={k}><a href={`/runs/${m.id}/${a.png}`} target="_blank" rel="noopener" title={`open ${a.png} full size`}><img src={`/runs/${m.id}/${a.png}`} alt="" loading="lazy" /></a><figcaption>{k}</figcaption></figure>)}</div></div>
+      <AnalysesCard m={m} />
 
       <div className="card"><h2>Provenance</h2>
         <dl>{m.parent && <><dt>derived from</dt><dd><a href={`#/run/${m.parent}`}>{m.parent}</a>{m.fork ? <span className="dim"> · {m.fork.kind}{m.fork.seed ? `, ${m.fork.seed} seed` : ""}{m.fork.complete === false ? ", partially applied" : ""}</span> : null}</dd></>}

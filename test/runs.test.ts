@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks } from "../src/lib/runs";
+import { ANALYSIS_CATALOG, ANALYSIS_CATEGORIES, analysisInfo } from "../src/lib/analysisCatalog";
 import { mean, sd, round } from "../src/lib/stats";
 // mmgbsa.dat prints DELTA TOTAL to 4 dp and the per-frame series is archived at the same precision, so a correct
 // reconstruction still differs from the printed value by up to 5e-5 from that printing alone. toBeCloseTo(_, 4)
@@ -618,5 +619,15 @@ describe("fork network", () => {
     const fake = idx.map(r => r.id === "1l2y-rep4" ? { ...r, delta_g: -17.5 } : r);
     const net = forkNetwork(fake, "1l2y-rep4");
     expect(net.status).toBe("agree"); expect(net.verdict).toMatch(/Within 2 SDs/);
+  });
+});
+
+describe("analysis catalogue", () => {
+  it("every cpptraj analysis in every manifest has a name, a family and a one-line meaning; unknown keys fall back to 'other'", () => {
+    const dirs = readdirSync("public/runs", { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name);
+    for (const d of dirs) for (const k of Object.keys(load(d).analyses)) { if (k === "plip") continue;
+      const info = analysisInfo(k); expect(info.name, k).not.toBe(k); expect(ANALYSIS_CATEGORIES, k).toContain(info.category); expect(info.shows.length, k).toBeGreaterThan(20); }
+    expect(analysisInfo("mystery")).toEqual({ name: "mystery", category: "other", shows: "" });
+    expect(Object.values(ANALYSIS_CATALOG).every(i => !/\d+\.\d+ ?kcal/.test(i.shows))).toBe(true); // meanings describe the plot type, never a run's number
   });
 });
