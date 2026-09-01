@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 .vercel
 __pycache__/
+
+# design pass screenshots (regenerable)
+docs/design/shots/

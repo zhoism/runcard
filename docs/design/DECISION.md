@@ -1,0 +1,52 @@
+# Design decision — 2026-09-01 overnight UI pass
+
+Two directions were built against the unchanged `src/App.tsx` markup and compared on the three key
+screens (home/cohort, run detail, compare) at 390/1440/2560 px. Screenshots in `docs/design/shots/`
+(gitignored, regenerable: load each stylesheet via a preview entry and screenshot with headless Chrome).
+
+## Direction R — "preprint" (control, refined original)
+
+`src/theme.css`, viewable via `preview.html` (loads `src/main.preview.tsx`). Cream paper #f4f1ea,
+Newsreader serif, terracotta accent, hairline rules, stage ticks on a line. Brought up to date in this
+pass (lineage, cohorts, mode switch, trace, fork stacking, `.ladder`, sticky rail). It is competent and
+calm — and it is almost exactly the templated look AI design output defaults to (cream + high-contrast
+serif + terracotta; broadsheet hairlines). It also styles the agent rail as more of the same article,
+which undersells the one thing runcard is about.
+
+## Direction N — "amber record" (chosen, now the production stylesheet)
+
+`src/amber.css`, imported by `src/main.tsx`. Thesis: **two readers, one record** — serif carries human
+explanation, mono carries machine-verifiable fact. The engine is Amber; amber preserves specimens.
+
+- Ground `--bench #f1f1ec` (cool lab-bench, deliberately not cream); ink `#21241f` graphite.
+- Accent `--amber #a05a0e`; the headline ΔG sits in a translucent **resin field**
+  (`--resin` gradient + amber left rule) — preserved evidence, not a hero stat.
+- **The agent rail is a graphite instrument panel** (`--panel #24261f`, text `#e5e3d6`, actions in
+  `--warn-b #d9a83d`): the human/agent boundary of WebMCP made visible. Sticky, own scrollbar; the
+  grid paints the column full-height via `.app::after`. Judges watch proposals and the tool log land here.
+- Type: IBM Plex Serif (400/500/600) + IBM Plex Mono (400/500) — the "man and machine" family, loaded
+  in `index.html`. Root 17.5px, nothing under 14px.
+- Section heads: mono, sentence case, prefixed `&` (Fortran-namelist vernacular — every stage input on
+  the page starts `&cntrl`). The prefix is CSS `content: "&" / ""` so accessible names stay clean.
+- Status marks are square ticks (`■`), echoed by the stage-pipeline squares; PASS stays uncoloured.
+- pass `#37613d` / warn `#8a5f07` / fail `#9c3218`, brightened variants on the panel; plot blue `#2f5f8f`.
+
+## Why N
+
+Equal usability (same markup, same hierarchy decisions), stronger identity, and the identity encodes the
+product's actual differentiators: provenance (resin/amber), machine-verifiability (mono facts), and the
+human-approves/agent-proposes split (light page / graphite rail). R is the safest evolution; it is also
+the look every third AI-generated page has this year.
+
+## Rules that still bind (from the earlier design critique)
+
+Hierarchy with one primary; never repeat a fact on a page; no oversized numbers; group related info;
+sticky nav owns its z-index; nothing under 14px; sentence-case titles.
+
+## Verified in this pass
+
+654 tests, `tsc -b`, `vite build` clean. DevTools inspection at 390 (emulated) / 1440 / 2560: no
+horizontal overflow, no console errors. Exercised live: stage disclosure, propose_change →
+Approve → generate_rerun_bundle (15 files, approved dt captured), automode trace, evidence brief,
+404 recovery, compare (same- and cross-system). Real-WebMCP registration is unchanged
+(`src/webmcp.ts` untouched); only the stylesheet import and font links changed in the entry path.

@@ -77,9 +77,15 @@ partly-established branch, and all-or-nothing provenance on the new composition 
    into the manifest (`results.mmgbsa.radii`) and emitted from there; the four ICE runs archived no dry
    topology, so their bundles omit `--radii` and say so instead of guessing. Receipts:
    `docs/verification/20260901-generated-analysis-execution/`.
-2. **A new UI.** The user has one finished outside this repo and is migrating it in.
-   `src/index.css` + `src/App.tsx` are what render. Do not touch `src/theme.css`, `index.html`,
-   `src/Viewer.tsx`, `preview.html` — another session owns them.
+2. ~~**A new UI.**~~ **Landed 2026-09-01** (overnight design pass, this session). What renders is now
+   `src/amber.css` — the "amber record" direction: cool lab-bench ground, IBM Plex Serif/Mono, the
+   headline ΔG in a translucent resin field, and the agent rail as a sticky graphite instrument panel.
+   Two directions were built on unchanged `App.tsx` markup and compared at 390/1440/2560 px before
+   choosing; the decision record and token system are in `docs/design/DECISION.md`. The runner-up
+   "preprint" theme (`src/theme.css` + `preview.html`) is kept as reference; `src/index.css` is retired
+   but kept in-tree. `src/App.tsx` and all tool logic untouched. Verified: 654 tests, tsc, build; DevTools
+   pass with no overflow and no console errors; propose → Approve → bundle, automode, brief, 404,
+   compare all exercised on the themed app.
 3. **Demo video + Devpost writeup.** Last, after 1 and 2, so it shows the finished thing.
 
 **Batch 07 is done** (2026-09-01, stopped early). It verified automode's two critical invariants, the
@@ -104,9 +110,9 @@ a five-minute judging pass, and each risks regressing code that is currently gre
 
 ### Constraints that will bite a new session
 
-- **`src/theme.css`, `index.html`, `src/Viewer.tsx`, `preview.html` belong to another session.** Do not
-  edit them. `theme.css` is the unlanded preprint theme, imported only by `src/main.preview.tsx`, so it
-  is *not* what renders. What renders is `src/index.css` + `src/App.tsx`.
+- **What renders is `src/amber.css` + `src/App.tsx`** (since 2026-09-01). `src/theme.css` +
+  `preview.html`/`src/main.preview.tsx` are the runner-up design kept for reference; `src/index.css` is
+  retired. The file-ownership split between sessions is over.
 - **`useStore` passes its selector straight to `useSyncExternalStore` as `getSnapshot`**
   (`src/store.ts:12`), so a selector returning a fresh array or object loops forever (React #185).
   Subscribe to the stable value and filter outside the selector. This shipped once.
