@@ -50,3 +50,20 @@ horizontal overflow, no console errors. Exercised live: stage disclosure, propos
 Approve → generate_rerun_bundle (15 files, approved dt captured), automode trace, evidence brief,
 404 recovery, compare (same- and cross-system). Real-WebMCP registration is unchanged
 (`src/webmcp.ts` untouched); only the stylesheet import and font links changed in the entry path.
+
+## Addendum — 2026-09-01: designer rulings land as the "report" theme
+
+Lailai Zhang reviewed the preprint UI (Figma file `Runcard`, comments pulled via REST) and overrode
+three defended stances; the user accepted the rulings. What renders now is `src/report.css`:
+
+- Two fonts (Inter + JetBrains Mono for machine text); hierarchy by size/weight, no italics, no caps.
+- Muted deep blue / white / grey; deep-blue top nav carries white text, logo returns home.
+- One semantic code everywhere: green = pass, amber = needs attention, red = fail. PASS is now
+  colored (ruling #4); the copy still scopes it as an input sanity check.
+- Warnings are emphasized banners, bold and lowercased for display (ruling #3); the caption states
+  the source file prints them in capitals, so the verbatim claim stays honest.
+- Bento cards on a grey ground; the rail is sized to fit the viewport (ruling #1).
+
+Not done from the spec (structural, post-deadline unless asked): splitting the report into pages with
+a left side nav, and an Overleaf-style collapsible split view for the compare route.
+`theme.css` (preprint) and `amber.css` remain in-tree as reference only.

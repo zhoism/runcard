@@ -12,8 +12,8 @@ import type { InvestigationState } from "./lib/investigation";
 const fmtArgs = (input: unknown) => input && typeof input === "object" && !Array.isArray(input) ? Object.entries(input as Record<string, unknown>).map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`).join(" ") : input == null ? "" : JSON.stringify(input);
 const show = (v: unknown) => Array.isArray(v) ? v.join(" ") : v == null ? "—" : String(v);
 const fmt = (n: number | null | undefined, d = 2) => n == null ? "—" : n.toFixed(d);
-/** PASS is deliberately uncoloured: the validator is a sanity check of the input file, not evidence of physical validity. WARN/FAIL are coloured because they need attention. */
-const Verdict = ({ r }: { r: Report }) => { const v = verdictOf(r); return <span className={`badge ${v === "PASS" ? "" : v.toLowerCase()}`}>{v}</span>; };
+/** One color code everywhere (design ruling 2026-09-01): green pass, amber warn, red fail. The copy still scopes PASS as an input sanity check, not physical validity. */
+const Verdict = ({ r }: { r: Report }) => { const v = verdictOf(r); return <span className={`badge ${v.toLowerCase()}`}>{v}</span>; };
 /** Visually hidden, read by screen readers. Inline so it survives a stylesheet swap. */
 const srOnly = { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" } as const;
 
@@ -158,7 +158,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
               {u && <p className="dim">Corrected SEM = SD·√(g/N) with g = 1 + 2Σ(1−t/N)C(t) (τ = {u.integrated_autocorrelation_time_frames} frames); drift verdict: {u.thresholds.drifting_if}; too short if {u.thresholds.too_short_if}. Reconstructed from the per-frame mdout files; the full window reproduces mmgbsa.dat exactly.</p>}
             </details>
             {mm.warnings.map((w, i) => { const quiet = resid != null && resid.fraction_of_delta_g < 1e-3; return <div key={i} className={`warnbox ${quiet ? "quiet" : ""}`}>⚠ {w}
-              <div className="dim">Recorded verbatim from mmgbsa.dat.{resid ? ` The internal-term residual it accompanies: ${resid.total.mean} ± ${resid.total.sd} kcal/mol per frame (${(resid.fraction_of_delta_g * 100).toFixed(3)} % of ΔG), from ${resid.dominant_term}; the exact trigger is not recorded, so this is consistent with the warning, not its proven cause${quiet ? " — below 0.1 % of ΔG, shown for the record" : ""}.` : " Ask the agent to explain_result for what it means."}</div></div>; })}
+              <div className="dim">Recorded from mmgbsa.dat — shown lowercased; the file prints it in capitals.{resid ? ` The internal-term residual it accompanies: ${resid.total.mean} ± ${resid.total.sd} kcal/mol per frame (${(resid.fraction_of_delta_g * 100).toFixed(3)} % of ΔG), from ${resid.dominant_term}; the exact trigger is not recorded, so this is consistent with the warning, not its proven cause${quiet ? " — below 0.1 % of ΔG, shown for the record" : ""}.` : " Ask the agent to explain_result for what it means."}</div></div>; })}
           </> : <p className="dim">no MM-GBSA result</p>}
         </div>
         {m.results.plip && <div className="card">
@@ -170,7 +170,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
       </div>
 
       <div className="card">
-        <h2>Stages <span className={`badge ${overall === "PASS" ? "" : overall.toLowerCase()}`}>input checks {overall}</span></h2>
+        <h2>Stages <span className={`badge ${overall.toLowerCase()}`}>input checks {overall}</span></h2>
         <p className="dim small">11 rules on each .in file (timestep vs SHAKE, cutoff, thermostat, barostat, restarts, seeds, output cadence): a sanity check of the input files, not evidence of convergence or physical accuracy and not a rung of the confidence ladder — select a stage for its input and findings.</p>
         {/* Each stage is a native disclosure button: Tab reaches it, Enter/Space toggle it, aria-expanded carries the state. The arrow is decoration. */}
         <div className="stages">{m.stages.map((s, i) => <div key={s.name} className={`stage ${open === s.name ? "open" : ""}`}>
