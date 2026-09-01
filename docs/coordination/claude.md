@@ -324,30 +324,52 @@ closed by execution.
 
 No batch is authorized beyond 06. Claimed files: none (idle). Readiness: idle.
 
-## READY — batch 07 request (written 2026-08-31, awaiting the user's start authorization in the Codex app)
+## READY — batch 07 request (rewritten 2026-08-31, awaiting the user's start authorization in the Codex app)
 
-- target: https://runcard.vercel.app/ — **live = 2fabdc3**, bundle `/assets/index-rt0eVFZ8.js` (deployed 2026-08-31 from a clean worktree of HEAD; supersedes 5a885d9 / `index-D3GpiLiC.js` and 2f7ac29 / `index-DwFbZHdi.js`).
+- target: https://runcard.vercel.app/ — **live = 0c6fc66**, bundle `/assets/index-Buc2vnBI.js`. Supersedes every earlier batch-07 draft (which named 2fabdc3 / `index-rt0eVFZ8.js`); ignore those build ids.
 - test permissions, unchanged from batches 04–06: Codex **may click Approve and download bundles** during a batch, and must record every proposal it approved. The product's Approve button itself is unchanged.
 
-**What changed since 2f7ac29 (one commit, 5a885d9):** the investigation-workspace build — a 15th tool `export_evidence_brief`, a per-run `investigations` store replacing the old global bundle/reanalysis keys, and a reworked home and run page — plus a fix pass on it.
+**What changed since 2f7ac29 (the last build a real client tested).** Four things, in rough order of risk:
 
-**Read this first — why a re-test matters more than usual.** The run page was crashing in *production* builds and only there: `useStore` hands its selector to `useSyncExternalStore` as `getSnapshot`, and `CurrentInvestigation` returned a freshly filtered array on every call, so React re-rendered without end (#185) and the error boundary rendered "could not render" in place of the whole page. Dev builds tolerate it, the repo has no DOM test library, and all 634 tests passed throughout. It was found only by driving a *production* build in headless Chrome. Treat any page-level oddity as a first-class failure, not cosmetic.
+1. **Automode** — a 16th tool `investigate_run`, plus an Auto/Manual switch in the Tool Console. It orchestrates the other tools; if it is wrong, it is wrong loudly and in the first minute.
+2. **Four real replicates** (`1l2y-rep4-ice1..4`) run on Georgia Tech PACE-ICE from a bundle this site generated. The site now has **14 runs**, and `1l2y-rep4`'s confidence ladder moved from **2 of 4** to **3 of 4** — the "independently replicated" rung is now *verified*. Batches 04–06 verified the old 2-of-4 wording as honest; this asks you to check the new wording just as hard.
+3. **The investigation-workspace build** (15th tool `export_evidence_brief`, per-run `investigations` store, reworked home and run pages) and its fix pass. Never tested by a real client.
+4. Extractor and provenance work with no UI surface.
 
-**Acceptance to verify in the real browser (Chrome flag on), on 1l2y-rep4 unless stated:**
-- discovery shows **15** tools; header says `WebMCP: registered · 15 tools`.
-- the run page renders fully — no "could not render". Card order is: Binding free energy → Stages → System → Structure → Evidence overview → Current investigation → Confidence ladder → Fork this experiment → Analyses → Provenance.
-- "Evidence overview" has **three** cells (checks supporting it / still unestablished / next relevant action) and does **not** restate the ΔG number.
-- "Fork this experiment" ends with three copy-paste prompts as code blocks (not textareas), each naming **this** run's card URL. Open `3htb-jz4`: the prompts name `3htb-jz4`, not a hardcoded `1l2y-rep4`.
-- **the approval queue is global.** `fork_experiment` extend temp0 → 310.0 → two pending proposals. Now navigate to Home and to a compare page: the Proposals panel still lists **both**, each labelled with its run, the header reads `2 pending of 2`, and it never says "None yet". This is the regression that shipped in the pre-fix build and no automated test can cover it.
-- Approve both → `generate_rerun_bundle` (fresh/local) → the "Prepared rerun bundle" item shows a disclosure reading **"13 files in this bundle"** that expands to the 13 filenames, plus a Download button. ZIP: `md/density.in` and `md/product.in` at `temp0=310.0`, `md/heat.in` at `300.0`, `manifest.json` `fork.complete: true`.
-- Approve only ONE of the two → README `⚠ partially approved`, `manifest.json` `fork.complete: false`.
-- `export_evidence_brief {"run_id":"1l2y-rep4"}` → returns Markdown and the page offers Copy / Download Markdown. Check the brief's claims against the page: it must distinguish archive from reanalysis, label projections *expected*, and never assert a follow-up was run. `include_session:false` must exclude the reanalysis, proposals and bundle sections.
-- `fork_experiment {"run_id":"3htb-jz4","kind":"replicate"}` still reports `minimum_runs: 3`, `additional_runs: 2` (batch 04 regression).
-- Tool Console: on a run page `explain_result` is prefilled with that run's id and Call works.
-- **phone width.** At 390 px the run page must not scroll sideways and the "Fork this experiment" descriptions must read as normal text. This regressed unnoticed: the action column is `max-content` and its longest button is ~366 px, which starved the description column to 0 px wide and 2176 px tall at ≤ 480 px. Fixed in `dl.fork` with a stacking media query and re-measured (390/390); confirm on the device you test with.
+**Read this first.** The run page once crashed in a way no test caught: `useStore` hands its selector to `useSyncExternalStore` as `getSnapshot`, and a component returned a freshly filtered array on every call, so React re-rendered without end (#185) and the error boundary replaced the whole page with "could not render". Correction to the earlier draft of this request, which said dev builds tolerate it: **they do not** — a dev server fails identically and prints `The result of getSnapshot should be cached to avoid an infinite loop`. It shipped because nobody opened the page after the change, not because dev hid it. Treat any page-level oddity as a first-class failure, not cosmetic.
 
-- discovery reports **nine** read-only tools of fifteen: `recompute_result` and `plan_sampling` now record run-scoped page state, so they are no longer flagged `readOnlyHint: true`.
-- `propose_change {"run_id":"1l2y-rep4","stage":"product","edits":{"ig":"424242"},"reason":"pin my own seed"}` → Approve → `generate_rerun_bundle` with **seed `pinned`** → `md/product.in` must contain `ig=424242`, not the archived seed, and the README's seed-policy line must say that stage is no longer a replay. (Before this build the approval was silently overwritten while the README and brief still claimed it.)
-- the evidence brief's "Sources and limits" line must print artifact names cleanly — `_MMPBSA_info`, not `\_MMPBSA\_info`.
+### Acceptance — automode (new, highest priority)
+
+- discovery shows **16** tools, **nine read-only**; header reads `WebMCP: registered · 16 tools`.
+- `investigate_run {"run_id":"1l2y-rep4"}` returns `bottleneck.rung` = **repeatable**, and `next.input` = `{run_id, kind:"reproduce"}`.
+- `investigate_run {"run_id":"3htb-jz4"}` returns `bottleneck.rung` = **independently replicated**, and the `plan_sampling` step must read "no run-to-run estimate exists yet (1 run); 2 more comparable independent runs…" — it must **not** contain `?`, `null`, `undefined` or `NaN`.
+- `investigate_run {"run_id":"1l2y-regression"}` returns `bottleneck.rung` = **robust to analysis-window choices** and says the series is *drifting*.
+- **The three traces must differ.** If all three return the same sequence of steps, automode is a fixed script and the page's claim that it reasons is false — report that as a failure, not a nit.
+- **It must create nothing.** After running all three: the Proposals panel still says "None yet", no bundle download appears, and no proposal exists anywhere. This is the invariant the whole feature rests on. Report any queued proposal as **critical**.
+- the automode result renders on the page under "Current investigation" as a numbered trace, ending with a line beginning "nothing — automode is read-only".
+- Tool Console: clicking **Auto** switches the button label to **Investigate** and hides the tool picker; clicking **Manual** brings the picker back with all 16 tools.
+
+### Acceptance — the confidence ladder after replication
+
+- on `1l2y-rep4`, rung 3 reads **verified**, short text exactly: `seed-replicated ✓ (13 same-protocol runs, 2–30 ps) · at this run's length (30 ps): 6 of 3 needed ✓`, and the ladder summary says **3 of 4**.
+- its evidence must disclose the engine mix: `Engines at this length: Amber 24 SANDER (2024) (4), Amber 26 PMEMD (2026) (2)`. Four of the six 30 ps runs used a different MD engine than the parent; if the page counted them without saying so it would be overstating. **Check that sentence is present** — its absence is a correctness failure, not a wording nit.
+- the evidence also reports the matched-length spread `(SD ±0.80)`, which is *wider* than the pooled `±0.64`. Both numbers should appear; the page is expected to show the less flattering one, not hide it.
+- home lists **14 runs**; `1l2y-rep4-ice1` opens, shows `Amber 24 SANDER (2024)` in provenance, and names `1l2y-rep4` as its parent.
+
+### Acceptance — carried forward from the untested build
+
+- the run page renders fully — no "could not render". Card order: Binding free energy → Stages → System → Structure → Evidence overview → Current investigation → Confidence ladder → Fork this experiment → Analyses → Provenance.
+- "Evidence overview" has **three** cells and does **not** restate the ΔG number.
+- "Fork this experiment" ends with three copy-paste prompts as code blocks, each naming **this** run's URL. On `3htb-jz4` they must name `3htb-jz4`, not a hardcoded `1l2y-rep4`.
+- **the approval queue is global.** `fork_experiment` extend temp0 → 310.0 → two pending proposals. Navigate to Home and to a compare page: the panel still lists **both**, each labelled with its run, header reads `2 pending of 2`, and it never says "None yet".
+- Approve both → `generate_rerun_bundle` (fresh/local) → "Prepared rerun bundle" shows a disclosure reading **"13 files in this bundle"** expanding to 13 filenames, plus Download. ZIP: `md/density.in` and `md/product.in` at `temp0=310.0`, `md/heat.in` at `300.0`, `manifest.json` `fork.complete: true`.
+- Approve only ONE → README `⚠ partially approved`, `manifest.json` `fork.complete: false`.
+- `propose_change {"run_id":"1l2y-rep4","stage":"product","edits":{"ig":"424242"},"reason":"pin my own seed"}` → Approve → bundle with seed **`pinned`** → `md/product.in` contains `ig=424242`, not the archived seed, and the README's seed-policy line says that stage is no longer a replay.
+- `export_evidence_brief {"run_id":"1l2y-rep4"}` → Markdown plus Copy / Download on the page; it must distinguish archive from reanalysis, label projections *expected*, never assert a follow-up was run, and print `_MMPBSA_info` cleanly (not `\_MMPBSA\_info`). `include_session:false` excludes reanalysis, proposals and bundle sections.
+- `fork_experiment {"run_id":"3htb-jz4","kind":"replicate"}` still reports `minimum_runs: 3`, `additional_runs: 2`.
+- Tool Console on a run page: `explain_result` prefilled with that run's id, Call works.
+- **phone width.** At 390 px the run page must not scroll sideways and the "Fork this experiment" descriptions must read as normal text.
+
+**Known limitation, not a bug to file:** `generate_rerun_bundle` ships the MD inputs but no MMPBSA step, so a bundle reproduces the trajectory and not the card's ΔG. Already on the fix list; do not spend a round on it.
 
 Claimed files: none (idle). Readiness: ready.
