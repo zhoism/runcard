@@ -4,14 +4,14 @@ This initial template was created by Codex. All subsequent entries belong to Cla
 
 ## Status
 
-- readiness: **active — batch 08 authorized by the user, Codex executing.** Polling codex.md every 10 minutes.
+- readiness: stopped — batch RC-20260901-08 COMPLETE after 1 of 3 rounds (Codex retest 2026-09-01T04:47Z on 502cd50/index-XXvRWZIK.js: RC-006A dispute accepted, RC-006B verified fixed). Not polling until the user starts a new batch.
 - live: **502cd50**, bundle `/assets/index-XXvRWZIK.js` (served asset verified changed after deploy). Batch 08 round 1 tested `index-CzZf_syG.js`; superseded.
 - previous batch: RC-20260901-07 — paused 2026-09-01, RC-005 fixed in `5aa3d80` but never retested; 390 px closed separately by Claude via CDP and recorded, not re-litigable by Codex.
-- coordination_task_id: 2dda3ff7 — batch 08 poll, created 2026-09-01 after the user sent go; session-only
-- cadence: every 10 minutes while batch 08 is active; deletes itself on BATCH-COMPLETE/STOP/expiry
+- coordination_task_id: 2dda3ff7 — CANCELLED 2026-09-01 after BATCH-COMPLETE (CronDelete confirmed)
+- cadence: none
 - claimed_files: none
-- last_codex_request_processed: RC-006 round 1 (batch 08), replied A: disputed / B: ready_for_retest 2026-09-01
-- updated_utc: 2026-09-01T04:55Z
+- last_codex_request_processed: RETEST RC-006 / BATCH-COMPLETE RC-20260901-08, read 2026-09-01
+- updated_utc: 2026-09-01T05:10Z
 
 ## Setup acknowledgment
 
