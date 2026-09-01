@@ -2,23 +2,23 @@
 
 ## Control
 
-- mode: paused
-- batch_id: RC-20260901-07
+- mode: complete
+- batch_id: RC-20260901-08
 - round: 1
 - max_rounds: 3
-- user_start_authorization: user explicitly authorized batch 07 in this Codex task on 2026-08-31; Approve/Download allowed only for documented acceptance steps and every approval must be recorded
-- batch_started_utc: 2026-09-01T01:31:30Z
+- user_start_authorization: user explicitly authorized batch 08 and confirmed go in this Codex task on 2026-09-01; Approve/Download allowed only for documented acceptance steps and every approval must be recorded
+- batch_started_utc: 2026-09-01T04:20:45Z
 - test_target: https://runcard.vercel.app/
 - created_utc: 2026-08-28T07:32:54Z
 - setup_resumed_utc: 2026-08-28T07:47:16Z
-- expires_utc: 2026-09-01T03:31:30Z
-- automation_id: runcard-batch-07-coordination
-- automation_status: deleted after mobile-viewport blocker
+- expires_utc: 2026-09-01T06:20:45Z
+- automation_id: runcard-batch-08-coordination
+- automation_status: deleted after batch-08 completion
 - cadence: every 10 minutes during active batch after creation
-- last_claude_message_processed: RC-005 round 1 ready_for_retest at 2026-09-01; live 5aa3d80 / index-BKr9BWEa.js; claims released
-- checkpoint: RC-005 verified; batch paused only because 390 px real-browser acceptance is unavailable in the current harness
+- last_claude_message_processed: RC-006 round 1 A disputed / B ready_for_retest at 2026-09-01T04:55Z; retested on index-XXvRWZIK.js
+- checkpoint: batch 08 complete; RC-006A dispute accepted and RC-006B verified
 - pending_user_reminder: cancelled by explicit user request
-- automation_after_batch: delete batch-07 heartbeat on completion or any stop condition; do not recreate the cancelled reminder
+- automation_after_batch: delete batch-08 heartbeat on completion or any stop condition; do not recreate the cancelled reminder
 
 ## USER-PERMISSIONS — 2026-08-28T07:55:46Z
 
@@ -28,6 +28,117 @@ no automatic commits/pushes/deployments, and no automatic website Approve clicks
 User requested a reminder to revoke access tomorrow morning, interpreted and
 announced as August 29 at 09:00 Eastern. Codex will use its existing heartbeat
 for the reminder after this bounded batch stops; Claude's loop still cancels.
+
+## BATCH-START RC-20260901-08 — 2026-09-01T04:20:45Z
+
+The user explicitly authorized batch 08 and then confirmed `go`. This batch has
+a maximum of three fix/retest rounds counted across the whole batch and an
+absolute expiry of 2026-09-01T06:20:45Z, which must never be extended or reset
+automatically. Target is https://runcard.vercel.app/; user-reported live revision
+and bundle are 7aa4eb5 / `/assets/index-CzZf_syG.js`, superseding batch 07's
+`index-BKr9BWEa.js`. Codex must record the asset actually served by the real
+built-in browser with WebMCP enabled.
+
+Scope is exactly `READY — batch 08 request` in claude.md. Priority 1 is the new
+15-file MM-GBSA analysis recipe in generated bundles. Codex must generate and
+download pinned/local bundles for both `1l2y-rep4` and `3htb-jz4` and verify that
+their receptor masks differ (`:1-20` versus `:1-163`). Equal masks are critical.
+Also verify rep4 MM-GBSA parameters, production trajectory input, SLURM job-name
+placement, and pinned/fresh README claims. The recipe is not to be executed;
+non-execution is an explicit honest limitation, not a bug.
+
+Priority 2 is a fresh live retest of RC-005 A/B on this new build: ICE lineage
+must be visible while the parent run has no lineage treatment, and evidence
+briefs in both session modes must contain no backslash-escaped underscore and
+must render `_MMPBSA_info` as a code span. Priority 3 is a fast regression of
+the batch-07 passes: 16/nine tool discovery, three distinct read-only automode
+traces with an empty proposal queue, 3-of-4 mixed-engine confidence, global
+proposal persistence, full/partial fork lineage, custom ig=424242 precedence,
+and console prefill. The 390 px measurement is expressly out of scope.
+
+For batch 08 only, the user authorizes Codex to click Approve and Download in
+documented acceptance steps and requires every approved proposal to be recorded.
+This does not authorize source edits, deletions, commits, pushes, deployments,
+installations, permission changes, manifest-number edits, scientific-rule
+changes, or approval outside the acceptance. Claude remains source writer.
+
+## REQUEST RC-006 — round 1 — 2026-09-01T04:34:36Z — ready_for_claude
+
+Live built-in-browser/WebMCP verification served the expected
+`/assets/index-CzZf_syG.js`. Discovery/header passed at 16 tools, nine read-only.
+The batch's critical cross-system guard passed on the downloaded archives:
+`1l2y-rep4` uses receptor `:1-20` / ligand `:21`; `3htb-jz4` uses receptor
+`:1-163` / ligand `:164`, and the latter archive contains no `:1-20`. Both ZIPs
+are CRC-clean with 15 files, the expected MM-GBSA window, and self-contained
+build inputs. Pinned and fresh README claims are correctly distinguished.
+
+Two verified failures remain on this exact live asset:
+
+- **RC-006A — SLURM analysis job name misses the required suffix.** Real WebMCP
+  call `generate_rerun_bundle({run_id:"1l2y-rep4", seed:"pinned",
+  target:"slurm"})` returns a 15-file bundle whose `run_analysis.sh` line 2 is
+  `#SBATCH --job-name=1l2y-rep4`. Batch-08 acceptance requires exactly
+  `#SBATCH --job-name=1l2y-rep4-mmgbsa`. Please make the surgical job-name fix.
+- **RC-006B — automode contradicts the self-contained bundle.** Real WebMCP call
+  `investigate_run({run_id:"1l2y-rep4"})` chooses a
+  `generate_rerun_bundle` trace step and reports: `the bundle is a recipe:
+  MOL.mol2, MOL.frcmod, protein_clean.pdb must come from the original build
+  directory`. In the same clean live session, direct `generate_rerun_bundle`
+  returns `self_contained:true`, `still_needed_from_original_build:[]`, and the
+  downloaded ZIP contains all three files under `build/`. This is a visible
+  correctness contradiction in judge-facing automode. Make its finding derive
+  from the current bundle completeness rather than stale wording.
+
+Retest RC-006A/B on a newly deployed asset without changing this batch's expiry
+or round budget. No other fix is requested. RC-005 A/B passed on this build:
+the ICE child has the under-title parent sentence plus `derived from` provenance,
+the parent does not; both evidence-brief session modes contain no `\\_`, and
+`` `_MMPBSA_info` `` is a code span. Fast regressions passed: three distinct
+automode traces with an empty proposal queue, 3-of-4 ladder with the exact
+four-SANDER/two-PMEMD disclosure, global queue persistence, full/partial fork
+lineage, custom seed precedence, 3HTB replicate counts, and console prefill/Call.
+
+Approved proposals under the user's documented batch-08 permission:
+
+- `pmti676ln1` — `1l2y-rep4` density `temp0: 300.0 -> 310.0` (full fork
+  `fmti676lm1`).
+- `pmti676ln2` — `1l2y-rep4` product `temp0: 300.0 -> 310.0` (same full fork).
+- `pmti689qw1` — `1l2y-rep4` density `temp0: 300.0 -> 310.0` (partial fork
+  `fmti689qu1`); `pmti689qw2` product remained pending and was not approved.
+- `pmti68rxh1` — `1l2y-rep4` product `ig: -1 -> 424242`.
+
+The earlier exploratory fork `fmti66ed21` created pending proposals
+`pmti66ed41`/`pmti66ed42`; neither was approved, and a full page reload discarded
+that test document before the correct in-app navigation retest. Do not infer an
+approval from their creation.
+
+## RETEST RC-006 / BATCH-COMPLETE RC-20260901-08 — 2026-09-01T04:47:28Z
+
+Retested Claude's matching round-1 reply through the real Codex built-in browser
+and live WebMCP. The actually served asset is `/assets/index-XXvRWZIK.js`, matching
+Claude's deployed revision `502cd50`.
+
+- **RC-006A dispute accepted.** The WebMCP tool result exposes the MD script in
+  its `run_sh` field, whose line 2 is correctly the unsuffixed
+  `#SBATCH --job-name=1l2y-rep4`; that was the string Codex mistakenly attributed
+  to the analysis script. The authorized download saved
+  `/Users/kevinzhou/Downloads/1l2y-rep4-rerun-pinned-slurm.zip`: 15 CRC-clean
+  files, 14189 bytes, SHA-256
+  `6c08fe9b5dae2a29c40e0a9740bafb349e7b35a994d390a81cfec2e183d78935`.
+  Direct archive inspection by filename proves `run.sh` line 2 is
+  `#SBATCH --job-name=1l2y-rep4`, while `run_analysis.sh` line 2 is exactly
+  `#SBATCH --job-name=1l2y-rep4-mmgbsa`. The implementation was already correct.
+- **RC-006B verified.** `investigate_run({run_id:"1l2y-rep4"})` now reports:
+  `seeds, environment pins, leap.in and its build inputs are all archived, so a
+  pinned bundle is self-contained`. The stale `must come from the original build
+  directory` claim is absent. `list_proposals` was empty before and after, and
+  automode still states that it created nothing.
+
+Batch 08 is complete after one fix/retest round. All acceptance checks either
+passed or, for RC-006A, were resolved as tester file-attribution error with the
+downloaded archive as evidence. No new proposals were created or approved during
+this retest; only the documented SLURM bundle was downloaded. Delete the matching
+heartbeat and do not recreate the cancelled Full Access reminder.
 
 ## BATCH-START RC-20260901-07 — 2026-09-01T01:31:30Z
 
