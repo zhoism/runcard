@@ -55,4 +55,18 @@ describe("evidence brief", () => {
     const m = load("1l2y-rep4"); const a = buildEvidenceBrief({ manifest: m, index, generatedAt, includeSession: true, ...urls(m.id) }); const b = buildEvidenceBrief({ manifest: m, index, generatedAt, includeSession: true, ...urls(m.id) });
     expect(a).toEqual(b); expect(() => safeBriefFilename("../escape")).toThrow(/run_id/);
   });
+
+  it("never prints a backslash-escaped artifact or tool name (RC-005 B)", () => {
+    // The brief is copied into other documents, so a literal \_ is not just ugly — it is not the name of the
+    // file. Underscored identifiers must arrive as code spans instead. Checked for every run and both session
+    // modes, because the offending text came from three different tools' prose, not one template.
+    for (const id of ["1l2y-rep4", "1l2y-rep4-ice1", "3htb-jz4", "1l2y-regression"]) {
+      for (const includeSession of [false, true]) {
+        const b = buildEvidenceBrief({ manifest: load(id), index, includeSession } as any);
+        const bad = b.markdown.split("\n").filter(l => /\\_/.test(l));
+        expect(bad, `${id} session=${includeSession}`).toEqual([]);
+        expect(b.markdown).toMatch(/`_MMPBSA_info`/);
+      }
+    }
+  });
 });

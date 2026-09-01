@@ -2,23 +2,23 @@
 
 ## Control
 
-- mode: complete
-- batch_id: RC-20260831-06
-- round: 0
+- mode: active
+- batch_id: RC-20260901-07
+- round: 1
 - max_rounds: 3
-- user_start_authorization: user explicitly authorized sequential batches 04, 05, and 06 in this Codex task on 2026-08-29; all three are complete
-- batch_started_utc: 2026-08-31T02:18:34Z
+- user_start_authorization: user explicitly authorized batch 07 in this Codex task on 2026-08-31; Approve/Download allowed only for documented acceptance steps and every approval must be recorded
+- batch_started_utc: 2026-09-01T01:31:30Z
 - test_target: https://runcard.vercel.app/
 - created_utc: 2026-08-28T07:32:54Z
 - setup_resumed_utc: 2026-08-28T07:47:16Z
-- expires_utc: 2026-08-31T04:18:34Z
-- automation_id: runcard-judge-batches-04-06
-- automation_status: deleted after batch 06 completion
+- expires_utc: 2026-09-01T03:31:30Z
+- automation_id: runcard-batch-07-coordination
+- automation_status: active every 10 minutes
 - cadence: every 10 minutes during active batch after creation
 - last_claude_message_processed: RC-004 round 1 A disputed / B ready_for_retest at 2026-08-30T01:55Z; claims released
-- checkpoint: batches 04-06 complete; no further testing scheduled
+- checkpoint: RC-005 round 1 ready_for_claude; automode and confidence priorities passed
 - pending_user_reminder: cancelled by explicit user request
-- automation_after_batch: completed; heartbeat deleted and cancelled reminder not recreated
+- automation_after_batch: delete batch-07 heartbeat on completion or any stop condition; do not recreate the cancelled reminder
 
 ## USER-PERMISSIONS — 2026-08-28T07:55:46Z
 
@@ -28,6 +28,34 @@ no automatic commits/pushes/deployments, and no automatic website Approve clicks
 User requested a reminder to revoke access tomorrow morning, interpreted and
 announced as August 29 at 09:00 Eastern. Codex will use its existing heartbeat
 for the reminder after this bounded batch stops; Claude's loop still cancels.
+
+## BATCH-START RC-20260901-07 — 2026-09-01T01:31:30Z
+
+The user explicitly authorized batch 07 with a maximum of three fix/retest rounds
+counted across the whole batch. Absolute expiry is 2026-09-01T03:31:30Z and must
+not be extended or reset automatically. Target is https://runcard.vercel.app/;
+user-reported live revision/build is 0c6fc66 / `/assets/index-Buc2vnBI.js`, which
+supersedes the stale 2fabdc3 draft. Codex must record the asset actually served
+by the built-in browser and test only through real WebMCP with the flag enabled.
+
+Scope is exactly `READY — batch 07 request` in claude.md. Highest priority is
+the 16th tool `investigate_run`: the three named runs must produce different
+reasoned traces and all automode calls must leave the global proposal store and
+bundle state untouched. A fixed trace is a failure; any queued proposal is
+critical. Second priority is the post-replication 3-of-4 confidence ladder,
+including the exact engine-mix disclosure and matched-length versus pooled
+spread. Remaining acceptance covers every carried-forward 15-tool surface,
+global proposal persistence, complete and partial fork bundles, custom pinned
+seed precedence, evidence brief semantics, single-run replication, console,
+rendering/card order, run-specific prompts, and 390 px overflow. The documented
+missing MMPBSA step is a known limitation and must not be filed.
+
+For this batch only, the user authorizes Codex to click Approve and Download in
+documented acceptance flows and requires every approved proposal to be recorded.
+This does not authorize approval outside those steps, source edits, deletions,
+commits, pushes, deployments, installations, permission changes, manifest-number
+edits, or scientific-rule changes. Claude remains source writer. If browser or
+WebMCP is unavailable, stop as blocked rather than substituting source calls.
 
 ## BATCH-START RC-20260830-04 — 2026-08-30T01:38:49Z
 
@@ -209,6 +237,104 @@ The user asked us to establish communication. They previously asked us not to
 start website testing; that gate remains closed until they explicitly start it.
 
 ## Review requests
+
+### RC-005 — ICE lineage absent from card and evidence brief escapes an artifact name
+
+- batch_id: RC-20260901-07
+- issue_id: RC-005
+- round: 1
+- status: ready_for_claude
+- severity: P2 (two explicit judge-acceptance claims on new, previously untested surfaces)
+- tested_utc: 2026-09-01T01:31Z–01:41Z
+- target: https://runcard.vercel.app/
+- actual_live_asset: `/assets/index-Buc2vnBI.js` (matches user-reported live
+  revision 0c6fc66; stale 2fabdc3 draft ignored)
+- browser: Codex built-in browser with real WebMCP; 16 tools discovered, nine
+  annotated read-only
+
+Verified failure A — the ICE replicate card does not visibly name its parent:
+1. Loaded Home in the real browser. `list_runs` returned 14 runs and Home rendered
+   14 data rows, including `1l2y-rep4-ice1`.
+2. Opened the visible link `1L2Y + MOL, run 4 replicate 1`.
+3. The card rendered fully and visibly named engine `Amber 24 SANDER (2024)`.
+4. Actual: the rendered card contains no unqualified `1l2y-rep4` parent ID and
+   no visible `parent` label. Searching the complete semantic page snapshot for
+   `1l2y-rep4` excluding the current run id `1l2y-rep4-ice1` returned zero
+   matches; the Provenance section lists pipeline, environment, seeds, and
+   leap.in but no lineage.
+5. Expected by READY: the ICE replicate card names `1l2y-rep4` as its parent.
+
+Verified failure B — evidence brief prints the forbidden escaped artifact name:
+1. Called `export_evidence_brief({"run_id":"1l2y-rep4",
+   "include_session":false})` through live WebMCP.
+2. Actual entropy sentence in returned/downloadable Markdown reads
+   `entropy=0 in \\_MMPBSA\\_info`. The later Sources list independently prints
+   `_MMPBSA_info` cleanly, so the brief is internally inconsistent.
+3. Repeated after live `recompute_result` and `plan_sampling` state, then exported
+   with the default session inclusion. The same escaped entropy text remains.
+4. Expected by READY: print `_MMPBSA_info` cleanly, not
+   `\\_MMPBSA\\_info`, everywhere in the evidence brief.
+
+Passing high-priority evidence retained for regression:
+- Automode passed the two critical invariants. `investigate_run` returned three
+  materially different traces: rep4 bottleneck repeatable with next input
+  `{run_id:"1l2y-rep4",kind:"reproduce"}`; 3htb-jz4 bottleneck independently
+  replicated with the complete no-spread/2-more plan; regression bottleneck
+  robust-to-window-choices with a drifting diagnosis. `list_proposals` was `[]`
+  before and after all three, no bundle appeared, every result ended with
+  `nothing — automode is read-only`, and the visible Current investigation used
+  an ordered list. Auto hid the picker and showed Investigate; Manual restored
+  the 16-tool picker.
+- Confidence passed: rep4 is 3 of 4; independent rung is verified with exact
+  `13 same-protocol` / `30 ps: 6 of 3 needed` short text. Expanded evidence shows
+  pooled SD ±0.64, matched-length SD ±0.80, and exact engine mix
+  `Amber 24 SANDER (2024) (4), Amber 26 PMEMD (2026) (2)`.
+- Run page renders without the React error and card order matches READY. Evidence
+  overview has exactly the three requested cells and does not restate ΔG. Rep4
+  and 3htb-jz4 each show three run-specific copy prompts with their own URLs.
+- The approval queue is global: pending rep4 density/product proposals survived
+  Run → Home → Compare with header `2 pending of 2`, correct run labels, and no
+  `None yet` regression.
+- Full extension fork `fmthzwf5u1`: Codex approved `pmthzwf5v1` (density) and
+  `pmthzwf5w2` (product). Prepared bundle disclosed and expanded all 13 files.
+  Downloaded `(9).zip`: 13 CRC-clean entries, heat 300 K, density/product 310 K,
+  parent rep4, fork.complete=true; 13473 bytes; SHA-256
+  `334b59fb6816d8f7c09e1bd606ded9ce4fdc594be80d46c8d02b89a83fbc7078`.
+- Isolated partial fork `fmthzz8vg1`: Codex approved `pmthzz8vi1` density;
+  `pmthzz8vj2` product remained pending. Downloaded `(10).zip`: 13 CRC-clean
+  entries, density 310 K, heat/product 300 K, explicit partial warning,
+  fork.complete=false; 13514 bytes; SHA-256
+  `e52c4e02ecf6d9579e5dcbddc3525591cd062fa315db8213e8d3273337d7358e`.
+- Custom-seed acceptance: Codex approved `pmthzzw6q1` for product ig=424242.
+  The pinned bundle kept ig=424242 and README says that stage is no longer a
+  replay. Downloaded pinned ZIP: 13 CRC-clean entries, 12734 bytes; SHA-256
+  `f7e5e14147f3297d96d32ecde4d25189656e4b0db21bbec8fa38659615fd7a7a`.
+- Evidence brief Copy/Download controls render. With session state, reanalysis
+  and sampling-plan sections are included and projections are labelled expected;
+  no follow-up is claimed executed. `include_session:false` excludes reanalysis,
+  sampling-plan, proposals, and bundle sections. 3htb replicate and Tool Console
+  prefill/Call pass.
+
+Harness limitation, not dispatched as a site failure: this in-app browser exposes
+the live WebMCP client but not viewport resizing; its current viewport is 1280 px.
+The connected Chrome browser is unavailable, so the 390 px overflow check remains
+unverified. Do not replace it with source inspection or call it passed.
+
+Allowed scope: Claude may claim the smallest run-card lineage rendering and
+evidence-brief Markdown formatting code plus meaningful existing tests. Likely
+files may include `src/Viewer.tsx`, `src/lib/runs.ts`, and their existing tests,
+but inspect current diffs and claim only what is necessary. Preserve all passing
+automode, ladder, global queue, bundles, seed precedence, session inclusion, and
+console behavior. Do not change validator/scientific rules, manifests or their
+numbers, unrelated theme/layout, dependencies, permissions, or build provenance.
+No commit, push, or deployment is authorized by this request.
+
+Acceptance: on a matching live deployment, the `1l2y-rep4-ice1` card visibly
+labels parent `1l2y-rep4`; exported Markdown prints `_MMPBSA_info` without literal
+backslashes in every occurrence while retaining clean Markdown rendering and the
+session include/exclude semantics above. Add focused regressions, run existing
+tests/build, reply with the same batch/issue/round as ready_for_retest, disputed,
+or blocked, state the live build requirement, and release claims.
 
 ### RC-004 — live judge build misses two stated new-tool acceptance claims
 

@@ -132,6 +132,9 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
     <section className="run">
       <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
         <select value="" aria-label="compare this run with" onChange={e => e.target.value && navigate(`/compare/${id}/${e.target.value}`)}><option value="">compare with…</option>{others.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}</select></div>
+      {/* Lineage is identity, not provenance trivia: a replicate has to say what it replicates before it shows
+          a number, or a reader takes its ΔG for an independent measurement of a different thing. */}
+      {m.parent && <p className="lineage">{m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{m.parent}</a>{m.fork?.seed === "fresh" ? " — same prepared system and protocol, fresh seeds" : ""}{m.fork?.complete === false ? " — partially applied" : ""}.</p>}
 
       <div className={m.results.plip ? "grid2" : ""}>
         <div className="card">
@@ -223,7 +226,8 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
         <div className="gallery">{Object.entries(m.analyses).filter(([k]) => k !== "plip").map(([k, a]) => <figure key={k}><a href={`/runs/${m.id}/${a.png}`} target="_blank" rel="noopener" title={`open ${a.png} full size`}><img src={`/runs/${m.id}/${a.png}`} alt="" loading="lazy" /></a><figcaption>{k}</figcaption></figure>)}</div></div>
 
       <div className="card"><h2>Provenance</h2>
-        <dl><dt>pipeline stages</dt><dd className="mono">{Object.entries(m.pipeline.stage_envelopes).map(([k, ok]) => `${k}:${ok ? "ok" : "FAILED"}`).join("  ")} <span className="dim">({m.pipeline.skills.join(" → ")})</span></dd>
+        <dl>{m.parent && <><dt>derived from</dt><dd><a href={`#/run/${m.parent}`}>{m.parent}</a>{m.fork ? <span className="dim"> · {m.fork.kind}{m.fork.seed ? `, ${m.fork.seed} seed` : ""}{m.fork.complete === false ? ", partially applied" : ""}</span> : null}</dd></>}
+          <dt>pipeline stages</dt><dd className="mono">{Object.entries(m.pipeline.stage_envelopes).map(([k, ok]) => `${k}:${ok ? "ok" : "FAILED"}`).join("  ")} <span className="dim">({m.pipeline.skills.join(" → ")})</span></dd>
           <dt>environment</dt><dd className="mono">{Object.entries(m.environment.conda_lock).map(([k, v]) => `${k}=${v}`).join("  ")} <a href="/runs/env.lock.yml" target="_blank">full lock</a></dd>
           <dt>seeds</dt><dd className="mono">{m.stages.map(s => `${s.name}:${s.realized_seed ?? "-"}`).join("  ")}</dd>
           <dt>leap.in</dt><dd><pre className="small">{m.system.leap_in}</pre></dd></dl></div>

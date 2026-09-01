@@ -83,3 +83,7 @@ dl.fork { grid-template-columns: max-content 1fr max-content; align-items:start;
 ol.trace { margin:6px 0 8px; padding-left:20px; font-size:14px; }
 ol.trace li { padding:3px 0; }
 ol.trace li > div { color:var(--fg); }
+
+/* lineage sits between the title and the result: it is what the run IS, not a provenance footnote */
+.lineage { margin:-4px 0 12px; font-size:14px; color:var(--dim); }
+.lineage a { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

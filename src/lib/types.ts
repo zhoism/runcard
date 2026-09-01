@@ -10,6 +10,9 @@ export interface Stage {
 export interface Manifest {
   id: string; title: string; schema: string; engine: string;
   source?: { run_dir: string; extracted: string };
+  /** Set by tools/extract_run.py when the run directory carried a bundle's manifest.json. */
+  parent?: string;
+  fork?: { kind: string; parent: string; seed?: string; edits_applied?: unknown[]; complete?: boolean };
   system: {
     protein: { atoms: number | null; source_pdb: string | null };
     ligand: { resname: string | null; atoms: number | null; atom_types: string[] | null; charge_method: string | null; net_charge: number | null; frcmod_missing: string[] | null };

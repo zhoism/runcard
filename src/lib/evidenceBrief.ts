@@ -17,6 +17,15 @@ export interface EvidenceBriefInput {
 const md = (value: unknown) => String(value ?? "").replace(/([\\`*_{}<>#|])/g, "\\$1").replaceAll("[", "\\[").replaceAll("]", "\\]").replace(/\r?\n/g, " ");
 /** Inside a code span Markdown takes backslashes literally, so escape nothing and just neutralise backticks. */
 const code = (value: unknown) => String(value ?? "").replace(/`/g, "'").replace(/\r?\n/g, " ");
+/** Markdown-escape prose, but emit artifact and file names as code spans rather than escaping their
+ *  underscores. `_MMPBSA_info` cannot simply be left bare — a leading and trailing underscore is emphasis,
+ *  so `_MMPBSA_info` would render as italic "MMPBSA" — but escaping it puts literal backslashes in a brief
+ *  people copy, and the Sources list already prints the same filename cleanly. A code span is both correct
+ *  Markdown and the actual name of the file. */
+const prose = (value: unknown) => String(value ?? "").replace(/\r?\n/g, " ")
+  .split(/([A-Za-z0-9]*_[A-Za-z0-9_]*[A-Za-z0-9](?:\.[A-Za-z0-9.]+)?)/g)
+  .map((part, i) => i % 2 === 1 ? `\`${part.replace(/`/g, "'")}\`` : md(part))
+  .join("");
 const n = (value: number | null | undefined, digits = 2) => value == null ? "not available" : value.toFixed(digits);
 const section = (title: string, body: string[]) => [`## ${title}`, "", ...body, ""];
 
@@ -55,14 +64,14 @@ export function buildEvidenceBrief(input: EvidenceBriefInput): EvidenceBriefSnap
       : `- Run-to-run population: not available. This is the only run of its prepared system, so between-run variation cannot be estimated.`,
     explanation.uncertainty ? `- Within-run population: naive frame SEM ${n(explanation.uncertainty.per_frame_sem, 3)} kcal/mol; autocorrelation-corrected SEM ${n(explanation.uncertainty.corrected_sem, 3)} kcal/mol (N_eff ≈ ${md(explanation.uncertainty.n_eff)}). These do not replace the run-to-run spread.` : `- Within-run uncertainty: per-frame evidence was not available for a corrected estimate.`,
     `- Window qualification: ${md(explanation.uncertainty?.verdict ?? "not assessed")}. This tests the archived window and does not establish longer-timescale equilibration or physical accuracy.`,
-    explanation.entropy_term ? `- Entropy: ${md(explanation.entropy_term)}. ${md(explanation.what_it_is)}` : `- Scope: ${md(explanation.what_it_is ?? explanation.brief)}`,
-    ...(mm.warnings ?? []).map(w => `- Archived MM-GBSA warning: ${md(w)}${explanation.warning_note ? ` ${md(explanation.warning_note)}` : ""}`),
+    explanation.entropy_term ? `- Entropy: ${prose(explanation.entropy_term)}. ${prose(explanation.what_it_is)}` : `- Scope: ${prose(explanation.what_it_is ?? explanation.brief)}`,
+    ...(mm.warnings ?? []).map(w => `- Archived MM-GBSA warning: ${prose(w)}${explanation.warning_note ? ` ${prose(explanation.warning_note)}` : ""}`),
   ] : ["- No MM-GBSA result was archived for this run."];
   lines.push(...section("Result and scope", result));
 
   const checks = [
     `- Input sanity checks performed while preparing this report: **${validation.verdict}** across ${validation.stages.length} stages. PASS means the stored inputs passed the implemented rules; it is not convergence or physical validation.`,
-    ...ladder.rungs.map(r => `- **${md(r.rung)} — ${md(r.status)}.** ${md(r.short)}${r.to_climb ? ` Missing/next evidence: ${md(r.to_climb)}` : ""}`),
+    ...ladder.rungs.map(r => `- **${md(r.rung)} — ${md(r.status)}.** ${prose(r.short)}${r.to_climb ? ` Missing/next evidence: ${prose(r.to_climb)}` : ""}`),
   ];
   lines.push(...section("Evidence checks", checks));
 
@@ -82,15 +91,15 @@ export function buildEvidenceBrief(input: EvidenceBriefInput): EvidenceBriefSnap
     const range = p.run_to_run?.n_needed_range;
     lines.push(...section("Next sampling plan", [
       `- **Expected, not measured.** Target SEM of the ensemble mean: ±${n(p.target_uncertainty_kcal)} kcal/mol.`,
-      `- ${md(p.recommendation)}`,
-      ...(range ? [`- Plug-in estimation range: n=${range.low}–${range.high}; ${md(range.note)}`] : []),
-      ...((p.assumptions ?? []).map((a: string) => `- Assumption: ${md(a)}`)),
+      `- ${prose(p.recommendation)}`,
+      ...(range ? [`- Plug-in estimation range: n=${range.low}–${range.high}; ${prose(range.note)}`] : []),
+      ...((p.assumptions ?? []).map((a: string) => `- Assumption: ${prose(a)}`)),
     ]));
   }
 
   if (proposals.length || investigation?.bundle) {
     included.push("proposals_and_prepared_bundle");
-    const proposalLines = proposals.length ? proposals.map(p => `- Proposal \`${code(p.id)}\` (${md(p.stage)}): **${md(p.status)}** — ${md(p.reason)}; ${p.changes.map(c => `${md(c.key)} ${md(c.before ?? "unset")} → ${md(c.after)}`).join(", ")}.`) : ["- No proposals were generated in this session."];
+    const proposalLines = proposals.length ? proposals.map(p => `- Proposal \`${code(p.id)}\` (${md(p.stage)}): **${md(p.status)}** — ${prose(p.reason)}; ${p.changes.map(c => `${md(c.key)} ${md(c.before ?? "unset")} → ${md(c.after)}`).join(", ")}.`) : ["- No proposals were generated in this session."];
     const bundle = investigation?.bundle?.value;
     const bundleLines = bundle ? [
       `- Bundle snapshot: \`${code(bundle.name)}\`, prepared ${md(bundle.generatedAt)}. Prepared does not mean the simulation was run.`,
