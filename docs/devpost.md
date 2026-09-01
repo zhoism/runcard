@@ -117,19 +117,7 @@ as a child card — turning the last "expected" on the site into "verified."
 
 ---
 
-## Appendix — demo video shot list (~2 min, record AFTER the new UI lands)
+## Appendix — demo video
 
-One continuous take on the live URL, agent visible in split screen.
-
-1. **0:00–0:25** — open `1l2y-rep4`, ask "is this number trustworthy?" →
-   explain_result: quote ±0.80 run-to-run, not the within-run SEM. Say: "the
-   page just refused the flattering error bar."
-2. **0:25–0:55** — automode. It picks the bottleneck rung, runs read-only
-   tools, recommends in words. Point at the empty proposal queue: "it can
-   reason; it cannot act."
-3. **0:55–1:35** — fork to 310 K → proposal pending → human clicks Approve →
-   download the 15-file bundle, show `analysis/mmgbsa.in` masks are this run's
-   own. "Agent proposes, human approves, bundle reproduces the number."
-4. **1:35–2:00** — the ICE story: bundle ran on a real cluster, four
-   replicates came back, the rung flipped to verified with the engine mix
-   disclosed. End on the ladder.
+Superseded: the recording plan lives in `docs/video-plan.md` (six short clips, ≤2:00, built to the
+Devpost recording rules — cold open on the agent working, no live typing, captions over narration).
