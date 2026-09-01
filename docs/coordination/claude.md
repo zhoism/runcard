@@ -433,6 +433,49 @@ they were never retested by Codex before the batch stopped.
 
 Claimed files: none. Readiness: idle. No batch is authorized beyond 07.
 
+## READY — batch 08 request (written 2026-09-01, awaiting the user's start authorization in the Codex app)
+
+- target: https://runcard.vercel.app/ — **live = 7aa4eb5**, bundle `/assets/index-CzZf_syG.js`, hash verified by curl after deploy. Supersedes batch 07's `index-BKr9BWEa.js`.
+- test permissions, unchanged: Codex **may click Approve and download bundles** during a batch, and must record every proposal it approves.
+
+**What changed since batch 07 stopped.** One thing, and it is the item batch 07 was told not to file:
+
+`generate_rerun_bundle` shipped the MD inputs but no MM-GBSA step, so a bundle
+reproduced the trajectory and not the card's headline ΔG. That is the single claim
+this site rests on, in the feature most likely to be clicked. It is now fixed: the
+bundle carries `run_analysis.sh` and `analysis/mmgbsa.in` beside `run.sh`. **13 files
+→ 15.** Every analysis parameter is read from that run's own manifest, so a 3HTB
+bundle must carry different masks than a 1L2Y one.
+
+### Priority 1 — the MM-GBSA step (new, never tested by any client)
+
+- `generate_rerun_bundle {"run_id":"1l2y-rep4","seed":"pinned","target":"local"}` → the page's file list shows **15 files**, including `analysis/mmgbsa.in` and `run_analysis.sh`.
+- download the ZIP. `analysis/mmgbsa.in` must contain `igb=5, saltcon=0.100` and `startframe=1, endframe=500, interval=5`.
+- `run_analysis.sh` must contain `-m ':1-20'` and `trajin $MD/product.nc`.
+- **now do the same for `3htb-jz4`** and confirm the masks differ: that bundle must contain `-m ':1-163'`, and must NOT contain `:1-20`. If both systems produce the same mask, the settings are hardcoded rather than read from the manifest — report that as **critical**, because it would mean a bundle silently carries another system's analysis.
+- `target:"slurm"` → `run_analysis.sh` line 2 is `#SBATCH --job-name=1l2y-rep4-mmgbsa`.
+- README must contain a "Reproducing the number" section naming this card's own settings, must say **"Nothing here was executed by the page"**, and with `seed:"pinned"` must say it should reproduce `-19.1953`; with `seed:"fresh"` it must instead say to expect a value within the run-to-run spread. A README that promises a fresh-seed rerun will reproduce the archived number is a **correctness failure**, not wording.
+
+**Not in scope and not a bug:** nobody has executed this generated analysis end to end. It is a recipe. Do not file its non-execution; do not attempt to run AMBER.
+
+### Priority 2 — retest RC-005, which batch 07 never got to
+
+Both were fixed in `5aa3d80` and carry only Claude's verification.
+- **A:** open `1l2y-rep4-ice1`. It must visibly name `1l2y-rep4` as its parent — a sentence under the title and a `derived from` row in Provenance. On `1l2y-rep4` (no parent) neither should appear.
+- **B:** `export_evidence_brief {"run_id":"1l2y-rep4"}`, both `include_session` true and false. Search the Markdown for a backslash before an underscore. There must be none anywhere — the original report found it in the entropy sentence, but it was also in the archived MMPBSA warning and in the ladder's to_climb text, which printed `fork\_experiment`. `` `_MMPBSA_info` `` must appear as a code span.
+
+### Priority 3 — regression on what batch 07 already passed
+
+Re-verify quickly; all of this passed on `index-Buc2vnBI.js` and should be untouched:
+16 tools with nine read-only; automode's three differing traces and its empty proposal
+queue afterwards; the 3-of-4 ladder with the exact engine-mix sentence; the global
+proposal queue surviving Run → Home → Compare; full and partial fork bundles with
+correct `fork.complete`; pinned custom seed `ig=424242` precedence; console prefill.
+
+**Harness limitation to carry forward, not to re-litigate:** your in-app browser cannot resize, so 390 px stays outside your reach. Claude measured it on live `index-BKr9BWEa.js` and recorded the numbers above; it is labelled a rendering measurement, not a WebMCP-client test. Do not substitute source inspection for it.
+
+Claimed files: none (idle). Readiness: ready.
+
 ## READY — batch 07 request (rewritten 2026-08-31, awaiting the user's start authorization in the Codex app)
 
 - target: https://runcard.vercel.app/ — **live = 0c6fc66**, bundle `/assets/index-Buc2vnBI.js`. Supersedes every earlier batch-07 draft (which named 2fabdc3 / `index-rt0eVFZ8.js`); ignore those build ids.
