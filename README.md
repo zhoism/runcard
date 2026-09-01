@@ -16,7 +16,7 @@ work that already happened.
 
 Open the live URL in ChatGPT's built-in browser, or in Chrome with
 `chrome://flags/#enable-webmcp-testing` enabled. The header should read
-`WebMCP: registered · 16 tools`. Without the flag it reads
+`WebMCP: registered · 17 tools`. Without the flag it reads
 `no WebMCP here — use the Tool Console ↓`, and the in-page **Tool Console** runs
 the identical tool table by hand — one table drives both, so the console is never
 a mock.

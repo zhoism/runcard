@@ -38,4 +38,4 @@ export interface Manifest {
 }
 export interface SystemKey { ligand: string | null; ligand_atoms: number | null; atom_types: string[]; charge_method: string | null; net_charge: number | null; protein_atoms: number | null; force_fields: string[]; solvent: string | null; box: string | null; buffer_A: number | null }
 /** `protocol`: production-stage physics / thermodynamic-state / restraint parameters + MM-GBSA model, joined (tools/build_index.py); `seed`: the production stage's realized seed. Both drive the "independently replicated" rung. */
-export interface IndexEntry { id: string; title: string; ligand: string; protein_atoms: number; production_ps: number; delta_g: number; plip: boolean; engine: string; system: SystemKey; protocol?: string; seed?: number | null }
+export interface IndexEntry { id: string; title: string; ligand: string; protein_atoms: number; production_ps: number; delta_g: number; plip: boolean; engine: string; system: SystemKey; protocol?: string; seed?: number | null; parent?: string | null; fork?: { kind: string; seed?: string; complete?: boolean } | null }

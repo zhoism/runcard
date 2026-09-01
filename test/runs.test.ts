@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks } from "../src/lib/runs";
 import { mean, sd, round } from "../src/lib/stats";
 // mmgbsa.dat prints DELTA TOTAL to 4 dp and the per-frame series is archived at the same precision, so a correct
 // reconstruction still differs from the printed value by up to 5e-5 from that printing alone. toBeCloseTo(_, 4)
@@ -587,5 +587,36 @@ describe("the rerun bundle reproduces the number, not just the trajectory", () =
     const f = rerunBundle(B, { seed: "pinned", target: "slurm", approved: [] });
     expect(f["run_analysis.sh"].split("\n")[1]).toBe("#SBATCH --job-name=1l2y-rep4-mmgbsa");
     expect(f["run.sh"]).toContain("#SBATCH --job-name=1l2y-rep4");
+  });
+});
+
+describe("fork network", () => {
+  it("1l2y-rep4 has four replicate forks on SANDER; the parent sits beyond 2 run-to-run SDs, reported as tension with the engine confound named", () => {
+    const net = forkNetwork(idx, "1l2y-rep4");
+    expect(net.forks.map(f => f.id)).toEqual(["1l2y-rep4-ice1", "1l2y-rep4-ice2", "1l2y-rep4-ice3", "1l2y-rep4-ice4"]);
+    expect(net.forks.every(f => f.kind === "replicate" && f.seed === "fresh" && f.production_ps === 30)).toBe(true);
+    expect(net.engines).toEqual({ parent: "Amber 26 PMEMD (2026)", forks: ["Amber 24 SANDER (2024)"] });
+    const g = net.forks.map(f => f.delta_g); const mean = g.reduce((a, b) => a + b, 0) / 4;
+    expect(net.fork_mean).toBeCloseTo(mean, 6);
+    expect(net.parent_offset_kcal).toBeCloseTo(-19.1953 - mean, 6);
+    expect(net.run_to_run_sd).toBeCloseTo(ensemble(idx, "1l2y-rep4").all.sd!, 9);
+    expect(net.sign_agrees).toBe(true);
+    expect(Math.abs(net.parent_offset_sd!)).toBeGreaterThan(2);
+    expect(net.status).toBe("tension");
+    expect(net.verdict).toMatch(/Beyond 2 SDs/); expect(net.verdict).toMatch(/engines differ/); expect(net.verdict).toMatch(/same sign/);
+  });
+  it("a run with no forks says so and points at fork_experiment; a fork itself has no network", () => {
+    const net = forkNetwork(idx, "3htb-jz4");
+    expect(net.n).toBe(0); expect(net.status).toBe("none"); expect(net.verdict).toMatch(/fork_experiment/);
+    expect(forkNetwork(idx, "1l2y-rep4-ice1").n).toBe(0);
+    expect(() => forkNetwork(idx, "nope")).toThrow(/no run 'nope'/);
+  });
+  it("forkNetworks lists exactly the parents that have forks on the site", () => {
+    expect(forkNetworks(idx).map(n => [n.parent.id, n.n])).toEqual([["1l2y-rep4", 4]]);
+  });
+  it("agree: a parent within 2 SDs of its forks", () => {
+    const fake = idx.map(r => r.id === "1l2y-rep4" ? { ...r, delta_g: -17.5 } : r);
+    const net = forkNetwork(fake, "1l2y-rep4");
+    expect(net.status).toBe("agree"); expect(net.verdict).toMatch(/Within 2 SDs/);
   });
 });

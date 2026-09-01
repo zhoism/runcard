@@ -35,7 +35,7 @@ reader-facing layer only — nothing runs or is authored here.
 
 - **A number is a claim.** Every figure on the page traces to a file in a run
   directory. "Verified" means executed and read; otherwise say "expected".
-- **Human approves, agent proposes.** Seven of the sixteen tools are not
+- **Human approves, agent proposes.** Seven of the seventeen tools are not
   read-only. Only `propose_change` and `fork_experiment` can prepare a change to
   a scientific input, and both stop at the Approve button; the other five write page
   state only (a bundle, a brief, a reanalysis, a plan or an automode trace shown on

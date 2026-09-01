@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Manifest, IndexEntry } from "./lib/types";
-import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual } from "./lib/runs";
+import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
@@ -61,17 +61,37 @@ function Home({ idx }: { idx: IndexEntry[] }) {
     <section>
       <h1>Simulation runs and their evidence</h1>
       <p className="lede">Each row is a molecular-dynamics run rendered from its artifacts: stages, parameters, seeds, results, environment. Runs of the same prepared system and protocol are grouped; their run-to-run spread is the uncertainty that matters. Open one and ask your agent about it — the page registers WebMCP tools (<code>navigator.modelContext</code>) to validate stages, compare runs, explain uncertainty, plan sampling, and prepare a controlled follow-up that waits for your approval.</p>
+      {forkNetworks(idx).map(net => <ForkNetworkCard key={net.parent.id} net={net} />)}
       {cs.map(c => (
         <section key={c.key} className="cohort">
           <h2>{c.title} <span className="dim">— {cohortLine(c)}</span></h2>
           <div className="tablewrap"><table className="runs">
             <thead><tr><th>run</th><th>ligand</th><th>protein atoms</th><th>production</th><th>ΔG MM-GBSA <span className="dim">kcal/mol</span></th><th>PLIP</th></tr></thead>
-            <tbody>{c.runs.map(r => <tr key={r.id} onClick={() => navigate(`/run/${r.id}`)}><td><a href={`#/run/${r.id}`}>{r.title}</a>{r.id === c.start_here && <span className="badge start">start here · longest run</span>}<div className="dim">{r.id}</div></td><td>{r.ligand}</td><td>{r.protein_atoms}</td><td>{r.production_ps} ps</td><td className="num">{fmt(r.delta_g)}</td><td>{r.plip ? "✓" : ""}</td></tr>)}</tbody>
+            <tbody>{c.runs.map(r => <tr key={r.id} onClick={() => navigate(`/run/${r.id}`)}><td><a href={`#/run/${r.id}`}>{r.title}</a>{r.id === c.start_here && <span className="badge start">start here · longest run</span>}<div className="dim">{r.id}{r.parent ? <span className="forkmark"> ↳ fork of {r.parent}</span> : null}{(() => { const k = idx.filter(x => x.parent === r.id).length; return k ? <span className="forkmark"> · {k} forks</span> : null; })()}</div></td><td>{r.ligand}</td><td>{r.protein_atoms}</td><td>{r.production_ps} ps</td><td className="num">{fmt(r.delta_g)}</td><td>{r.plip ? "✓" : ""}</td></tr>)}</tbody>
           </table></div>
         </section>
       ))}
     </section>
   );
+}
+
+/** GitHub's network graph for an experiment: the parent, the runs re-executed from its bundle, and whether they agree.
+    The verdict is computed (forkNetwork); tension is shown in amber, not hidden, because surfacing it is the point. */
+function ForkNetworkCard({ net, compact }: { net: ReturnType<typeof forkNetwork>; compact?: boolean }) {
+  const cls = net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : "";
+  const label = net.status === "agree" ? "forks agree" : net.status === "tension" ? "forks in tension" : net.status === "sign" ? "sign only" : "no forks";
+  const Node = ({ n, role }: { n: ReturnType<typeof forkNetwork>["parent"]; role: "parent" | "fork" }) => <a className={`node ${role}`} href={`#/run/${n.id}`}>
+    <span className="node-id mono">{n.id}</span><span className="dim">{n.engine} · {n.production_ps} ps{role === "fork" && n.kind ? ` · ${n.kind}${n.seed === "fresh" ? ", fresh seeds" : ""}${n.complete === false ? ", partial" : ""}` : ""}</span><span className="node-dg mono">{fmt(n.delta_g)}</span>
+  </a>;
+  return <section className="card network" aria-labelledby={`network-${net.parent.id}`}>
+    <h2 id={`network-${net.parent.id}`}>Fork network <span className={`badge ${cls}`}>{label}</span>{compact ? null : <span className="dim">{net.n} runs re-executed from {net.parent.id}'s rerun bundle, each a card that points back at its parent</span>}</h2>
+    <div className="tree">
+      <Node n={net.parent} role="parent" />
+      <ul className="forks">{net.forks.map(f => <li key={f.id}><Node n={f} role="fork" /></li>)}</ul>
+    </div>
+    <p className="verdict">{net.verdict}</p>
+    {!compact && <p className="dim small">ΔG in kcal/mol, MM-GBSA. Agreement is judged against the run-to-run SD of the whole same-system cohort, the uncertainty that matters — a fork is a rerun, and this is the check a rerun exists to make.</p>}
+  </section>;
 }
 
 /** Requests to hand an agent, written for the run on screen. Code blocks, not textareas: a prompt is text
@@ -128,9 +148,12 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const spreadSd = ens && ens.all.n > 1 ? ens.all.sd : null;
   const ladder = idx.length ? confidenceLadderFull(m, idx) : null;
   const explanation = idx.length ? explainResult(m, idx) as any : null;
+  const net = idx.length ? forkNetwork(idx, id) : null;
   return (
     <section className="run">
       <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
+        {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {m.parent}</a>}
+        {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</a>}
         <select value="" aria-label="compare this run with" onChange={e => e.target.value && navigate(`/compare/${id}/${e.target.value}`)}><option value="">compare with…</option>{others.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}</select></div>
       {/* Lineage is identity, not provenance trivia: a replicate has to say what it replicates before it shows
           a number, or a reader takes its ΔG for an independent measurement of a different thing. */}
@@ -168,6 +191,8 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
           {m.analyses.plip && <div className="dim small"><a href={`/runs/${m.id}/plip.png`} target="_blank" rel="noopener">PLIP interaction chart (plip.png)</a></div>}
         </div>}
       </div>
+
+      {net && net.n > 0 && <ForkNetworkCard net={net} compact />}
 
       <div className="card">
         <h2>Stages <span className={`badge ${overall.toLowerCase()}`}>input checks {overall}</span></h2>
@@ -369,7 +394,7 @@ function Sidebar() {
           onClick={() => setMode("manual")}>Manual</button>
         <span className="dim small">{mode === "auto"
           ? "investigate_run reads the ladder, chases whichever rung is holding this run back, and recommends one action. It creates nothing."
-          : "pick any of the 16 tools yourself."}</span>
+          : "pick any of the 17 tools yourself."}</span>
       </div>
       {mode === "manual" && <select value={tool} aria-label="tool" onChange={e => { setTouched(true); setTool(e.target.value); setInput(prefill(e.target.value)); }}>{TOOLS.map(t => <option key={t.name} value={t.name}>{t.name}{t.readOnly ? "" : " ✎"}</option>)}</select>}
       {(() => { const q = t.description.indexOf("? "); const head = q > 0 ? t.description.slice(0, q + 1) : t.description; const rest = q > 0 ? t.description.slice(q + 2) : ""; return <div className="dim small">{head}{rest && <details className="small"><summary className="dim">what it returns</summary><p className="dim">{rest}</p></details>}</div>; })()}

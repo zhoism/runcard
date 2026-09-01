@@ -140,6 +140,50 @@ export function cohorts(idx: IndexEntry[]): Cohort[] {
   return out;
 }
 
+// ---- fork network: a parent and the runs re-executed from its bundle ----------
+/** One node of the network: the fields a reader compares across a parent and its forks. */
+export interface ForkNode { id: string; title: string; engine: string; production_ps: number; delta_g: number; kind?: string; seed?: string; complete?: boolean }
+export interface ForkNetwork {
+  parent: ForkNode; forks: ForkNode[]; n: number;
+  fork_mean: number | null; fork_sd: number | null;
+  /** parent ΔG − fork mean, kcal/mol, and the same in units of the cohort's run-to-run SD */
+  parent_offset_kcal: number | null; parent_offset_sd: number | null; run_to_run_sd: number | null;
+  sign_agrees: boolean | null; engines: { parent: string; forks: string[] };
+  /** "agree" when the parent sits within 2 run-to-run SDs of the fork mean; "tension" when it does not; "sign" when only the sign can be compared (SD unknown) */
+  status: "none" | "agree" | "tension" | "sign";
+  verdict: string;
+}
+const node = (r: IndexEntry): ForkNode => ({ id: r.id, title: r.title, engine: r.engine, production_ps: r.production_ps, delta_g: r.delta_g, ...(r.fork ? { kind: r.fork.kind, seed: r.fork.seed, complete: r.fork.complete } : {}) });
+/** The runs whose `parent` is `id`, with the honest comparison: sign agreement, fork mean ± SD, and where the parent sits
+    relative to that mean in units of the cohort's run-to-run SD (the uncertainty that matters, from `ensemble`). A parent
+    more than 2 SDs from its forks is reported as tension, not smoothed over — that is what the network exists to surface. */
+export function forkNetwork(idx: IndexEntry[], id: string): ForkNetwork {
+  const me = idx.find(r => r.id === id); if (!me) throw new Error(`no run '${id}' in the run index. Call list_runs (or open #/) for valid run ids.`);
+  const forks = idx.filter(r => r.parent === id).sort((a, b) => a.id.localeCompare(b.id)).map(node);
+  const n = forks.length; const g = forks.map(f => f.delta_g).filter(x => x != null);
+  const fork_mean = g.length ? g.reduce((a, b) => a + b, 0) / g.length : null;
+  const fork_sd = g.length > 1 && fork_mean != null ? Math.sqrt(g.reduce((a, b) => a + (b - fork_mean) ** 2, 0) / (g.length - 1)) : null;
+  const run_to_run_sd = ensemble(idx, id).all.sd;
+  const parent_offset_kcal = fork_mean != null && me.delta_g != null ? me.delta_g - fork_mean : null;
+  const parent_offset_sd = parent_offset_kcal != null && run_to_run_sd ? parent_offset_kcal / run_to_run_sd : null;
+  const sign_agrees = g.length && me.delta_g != null ? g.every(x => Math.sign(x) === Math.sign(me.delta_g)) : null;
+  const engines = { parent: me.engine, forks: [...new Set(forks.map(f => f.engine))] };
+  const crossEngine = engines.forks.some(e => e !== engines.parent);
+  const status: ForkNetwork["status"] = n === 0 ? "none" : parent_offset_sd == null ? "sign" : Math.abs(parent_offset_sd) <= 2 ? "agree" : "tension";
+  const r1 = (x: number) => x.toFixed(1), r2 = (x: number) => x.toFixed(2);
+  const signText = sign_agrees == null ? "" : sign_agrees ? `All ${n} forks give the same sign as the parent (ΔG < 0).` : `The forks do not all share the parent's sign.`;
+  const verdict = n === 0 ? "No forks yet. fork_experiment prepares a bundle; an executed rerun extracted as a card joins this network."
+    : status === "sign" ? `${signText} Fork mean ${fork_mean != null ? r2(fork_mean) : "—"} kcal/mol; no run-to-run SD is available to judge the spread.`
+    : `${signText} Fork mean ${r2(fork_mean!)} ± ${fork_sd != null ? r2(fork_sd) : "—"} kcal/mol (n=${g.length}); the parent (${r2(me.delta_g)}) sits ${r1(Math.abs(parent_offset_kcal!))} kcal/mol ${parent_offset_kcal! < 0 ? "below" : "above"} it, ${r1(Math.abs(parent_offset_sd!))}× the run-to-run SD (±${r2(run_to_run_sd!)}). ` +
+      (status === "agree" ? "Within 2 SDs: the forks reproduce the parent to seed noise." : `Beyond 2 SDs: the forks disagree with the parent by more than seed noise.${crossEngine ? ` The engines differ (${engines.parent} vs ${engines.forks.join(", ")}), so this record cannot attribute the gap to engine or to seed; a same-engine fork would separate them.` : ""}`);
+  return { parent: node(me), forks, n, fork_mean, fork_sd, parent_offset_kcal, parent_offset_sd, run_to_run_sd, sign_agrees, engines, status, verdict };
+}
+/** Every parent that has at least one fork on the site, largest network first. */
+export function forkNetworks(idx: IndexEntry[]): ForkNetwork[] {
+  const parents = [...new Set(idx.map(r => r.parent).filter((p): p is string => !!p && idx.some(r => r.id === p)))];
+  return parents.map(p => forkNetwork(idx, p)).sort((a, b) => b.n - a.n || a.parent.id.localeCompare(b.parent.id));
+}
+
 // ---- explain --------------------------------------------------------
 /** Convergence thresholds, stated in the output so the verdict is checkable. */
 export const CONVERGENCE = { drift_sigma: 2, min_n_eff: 10 };

@@ -25,6 +25,8 @@ def entry(m):
         "id": m["id"], "title": m["title"], "ligand": sy["ligand"]["resname"], "protein_atoms": sy["protein"]["atoms"],
         "production_ps": prod["length_ps"] if prod else None, "delta_g": mm.get("delta_total_kcal_mol"),
         "plip": "plip" in m["results"], "engine": m["environment"].get("pmemd") or m["engine"],
+        # lineage, so the home page can draw the fork network without opening every manifest
+        "parent": m.get("parent"), "fork": ({k: m["fork"].get(k) for k in ("kind", "seed", "complete")} if m.get("fork") else None),
         "system": {
             "ligand": sy["ligand"]["resname"], "ligand_atoms": sy["ligand"]["atoms"], "atom_types": sorted(sy["ligand"]["atom_types"] or []),
             "charge_method": sy["ligand"]["charge_method"], "net_charge": sy["ligand"]["net_charge"],
