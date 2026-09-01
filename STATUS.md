@@ -58,21 +58,24 @@ partly-established branch, and all-or-nothing provenance on the new composition 
 ### The queue, in order. Everything here ships before Sep 3 1:00 pm PDT or is cut — judges test the
 ### live URL, so whatever is deployed at the deadline *is* the product. There is no "after".
 
-1. **Codex batch 07.** Request is written in `docs/coordination/claude.md` but still names an older
-   build; retarget it to `0c6fc66` / `index-Buc2vnBI.js` first, and **add automode to the acceptance
-   list**: 16 tools registered, `investigate_run` returns a different bottleneck for `1l2y-rep4`
-   (repeatable), `3htb-jz4` (independently replicated) and `1l2y-regression` (robust), and the
-   Proposals panel is still empty afterwards — that last one is the invariant automode rests on.
-   The user starts it in the Codex app — never Claude. This is the only real-WebMCP-client
-   verification of anything since `2f7ac29`.
-2. **`generate_rerun_bundle` ships no MMPBSA step.** A bundle reproduces the trajectory but not the
-   card's headline ΔG, so "fork this experiment" hands back something that cannot reproduce the one
-   number the site is built on. Decided: fix, don't document. The exact inputs are known — they were
-   hand-written for the ICE brief (`~/Desktop/1l2y-rep4-replicate/BRIEF-for-ICE.md`): strip to a dry
-   trajectory with cpptraj, then `startframe=1, endframe=500, interval=5`, `igb=5, saltcon=0.100`,
-   receptor `:1-20`, ligand `:21`, single-trajectory, `entropy=0`.
-3. **A new UI.** The user has one finished outside this repo and is migrating it in a fresh session.
-4. **Demo video + Devpost writeup.** Last, after 2 and 3, so it shows the finished thing.
+1. **`generate_rerun_bundle` ships no MMPBSA step.** A bundle reproduces the trajectory but not the
+   card's headline ΔG, so "fork this experiment" — the feature most likely to get clicked — hands back
+   something that cannot reproduce the one number the site is built on. Decided: fix, don't document.
+   The exact inputs are known, hand-written for the ICE brief (`~/Desktop/1l2y-rep4-replicate/BRIEF-for-ICE.md`):
+   strip to a dry trajectory with cpptraj, then `startframe=1, endframe=500, interval=5`, `igb=5,
+   saltcon=0.100`, receptor `:1-20`, ligand `:21`, single-trajectory, `entropy=0`.
+2. **A new UI.** The user has one finished outside this repo and is migrating it in.
+   `src/index.css` + `src/App.tsx` are what render. Do not touch `src/theme.css`, `index.html`,
+   `src/Viewer.tsx`, `preview.html` — another session owns them.
+3. **Demo video + Devpost writeup.** Last, after 1 and 2, so it shows the finished thing.
+
+**Batch 07 is done** (2026-09-01, stopped early). It verified automode's two critical invariants, the
+3-of-4 ladder with the engine-mix disclosure, the global proposal queue, both bundle paths, seed
+precedence, brief semantics and the console — and found two real bugs (RC-005 A and B), both fixed in
+`5aa3d80` and deployed. Two caveats: Codex never retested those fixes before the batch stopped, so they
+carry only Claude's verification; and 390 px was closed by Claude on the live asset rather than by a
+WebMCP client, because Codex's in-app browser cannot resize. A batch 08 to retest RC-005 is optional and
+would need the user to authorize it in the Codex app. The coordination loop was session-only and is gone.
 
 **Cut:** the cosmetic leftovers listed under "Not done (from the review)" — pre-existing, invisible in
 a five-minute judging pass, and each risks regressing code that is currently green.
