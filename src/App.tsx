@@ -434,6 +434,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   const [m, setM] = useState<Manifest | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [linkState, setLinkState] = useState<"idle" | "copied" | "error">("idle");
   const [open, setOpen] = useState<string | null>(null);
   const investigation = useStore(s => s.investigations[id]);
   const re = investigation?.reanalysis?.value;
@@ -464,12 +465,20 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   const ladder = idx.length ? confidenceLadderFull(m, idx) : null;
   const explanation = idx.length ? explainResult(m, idx) as any : null;
   const net = idx.length ? forkNetwork(idx, id) : null;
+  const copyRunLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setLinkState("copied");
+      setTimeout(() => setLinkState("idle"), 1600);
+    } catch { setLinkState("error"); }
+  };
   return (
     <section className="run">
       <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span>{(() => { const c = projectOf(idx, id); return c ? <><a href={`#/p/${c.slug}`}>{c.title}</a><span aria-hidden="true">/</span></> : null; })()}<span className="mono">{m.id}</span></nav>
       <div className="titlebar"><h1>{describeSystem(m.title, m.system.ligand.resname ?? "")?.name ?? m.title}</h1><span className="dim">{m.id}</span>
         {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {qualified(idx, m.parent)}</a>}
         <ForkMenu m={m} ens={ens} />
+        <button type="button" className="ghost" aria-live="polite" title="Copy a shareable link to this run" onClick={copyRunLink}>{linkState === "copied" ? "Link copied" : linkState === "error" ? "Copy unavailable" : "Copy link"}</button>
         {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks{(() => { const by = [...new Set(net.forks.map(f => f.owner).filter(o => o && o !== net.parent.owner))]; return by.length ? ` by ${by.join(", ")}` : ""; })()} · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</a>}
         <CompareSelect idx={idx} self={id} value="" onPick={other => navigate(`/compare/${id}/${other}`)} /></div>
       {/* Lineage is identity, not provenance trivia: a replicate has to say what it replicates before it shows
