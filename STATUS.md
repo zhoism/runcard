@@ -41,6 +41,13 @@ lineage line, and fork-network nodes carry their owner. `#/u/<handle>`; an unkno
 id only on `/run/` routes (it had taken `pace-ice` for a run id). Before this, the same evening: the home page was cut to lead with
 the tables (one-line lede, fork network compact and below) — superseded by the profile.
 
+**Experiment cards, not a run table (same evening).** The user: "this is just a load of runs… if they are really just run files
+and there's 9 of them, put them under a dropdown." The runs are the commits, not the repo. Each prepared system is now one card:
+title + what it is (`src/lib/systemCatalog.ts`, reference facts about the PDB entries and ligands, no numbers: Trp-cage · indole,
+T4 lysozyme L99A/M102Q · 2-propylphenol), a two-sentence description, ΔG mean ± run-to-run SD with the spread explained in a
+clause, one primary action ("Open …, the longest"), forks by whom, and the run table folded under a `details` (open only when
+≤ 3 rows). The table lost the columns identical across a cohort (ligand, protein atoms); "PLIP" is labelled "contacts".
+
 ## Investigation workspace build (live 2026-08-31 as 5a885d9)
 
 - Default build implemented: evidence-first home/run overview, typed outcomes keyed by run, invocation-source attribution, proposal/bundle snapshots, and a current-investigation panel. No fixed `investigate_everything` sequence was added; the agent still chooses tools in response to evidence.

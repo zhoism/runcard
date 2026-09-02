@@ -117,6 +117,17 @@ table.runs td .dim { font-family: var(--mono); font-size: 13px; }
 .cohort { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-top: 16px; }
 .cohort h2 { font-size: 17px; }
 .cohort h2 .dim { font-weight: 400; }
+.cohort-desc { color: var(--ink-2); margin: 2px 0 8px; max-width: 78ch; font-size: 15px; }
+.cohort-dg { margin: 0 0 10px; font-size: 15px; } .cohort-dg b { font-size: 17px; font-weight: 600; }
+.cohort-actions { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 0 0 12px; font-size: 14.5px; }
+a.btn { display: inline-block; background: var(--navy); color: #fff; padding: 7px 14px; border-radius: 8px; font-weight: 600; font-size: 14px; }
+a.btn:hover { text-decoration: none; background: var(--blue); } a.btn .dim { color: #c9d4e2; font-weight: 400; }
+a.btn.ghost { background: #fff; color: var(--navy); border: 1px solid var(--line); } a.btn.ghost .dim { color: var(--muted); } a.btn.ghost:hover { background: #f3f6fa; }
+details.runs-list > summary { cursor: pointer; font-weight: 600; font-size: 14.5px; padding: 10px 0 4px; border-top: 1px solid var(--line); list-style: none; }
+details.runs-list > summary::-webkit-details-marker { display: none; }
+details.runs-list > summary::before { content: "▸ "; color: var(--muted); } details.runs-list[open] > summary::before { content: "▾ "; }
+details.runs-list > summary .dim { font-weight: 400; }
+details.runs-list .tablewrap { margin-top: 4px; }
 
 /* fork network: the parent node, a rail, and the forks hanging off it (GitHub's network graph, one level deep) */
 .network .tree { margin: 4px 0 12px; }

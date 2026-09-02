@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { Manifest, IndexEntry, Owners } from "./lib/types";
-import { loadIndex, loadOwners, ownerStats, ownerHandles, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem } from "./lib/runs";
+import { loadIndex, loadOwners, ownerStats, ownerHandles, loadRun, validateStage, ensemble, cohorts, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
 import { analysisInfo, ANALYSIS_CATEGORIES, type AnalysisCategory } from "./lib/analysisCatalog";
+import { describeSystem } from "./lib/systemCatalog";
 import { TOOLS, callTool } from "./webmcp";
 import { Viewer, Boundary } from "./Viewer";
 import type { InvestigationState } from "./lib/investigation";
@@ -68,10 +69,7 @@ function Header() {
   );
 }
 
-/** The h2 line carries the cohort's mean ± run-to-run SD; rows do not repeat it. */
-const cohortLine = (c: Cohort) => c.n > 1
-  ? `${c.n} independent runs of one prepared system and protocol, ${c.lengths_ps[0]}–${c.lengths_ps[c.lengths_ps.length - 1]} ps · ΔG ${fmt(c.mean)} ± ${fmt(c.sd)} kcal/mol (run-to-run SD)`
-  : `1 run · ΔG ${fmt(c.mean)} kcal/mol (no run-to-run spread yet)`;
+
 /** A profile is the page a visitor lands on: whose runs these are, how they connect to other people's, then the runs.
     No accounts — every card is public and the owner is site metadata (public/runs/owners.json), never a login. */
 function Profile({ handle, idx, own }: { handle: string; idx: IndexEntry[]; own: Owners | null }) {
@@ -101,15 +99,31 @@ function Profile({ handle, idx, own }: { handle: string; idx: IndexEntry[]; own:
         </div>
       </div>
       {others.length > 0 && <p className="people">Also on runcard: {others.map((h, i) => { const o = ownerStats(idx, h); return <span key={h}>{i > 0 ? " · " : ""}{who(h)} <span className="dim">@{h} · {o.runs} {plural(o.runs, "run")}{o.forks_from_others > 0 && o.forked_from.includes(handle) ? `, forked from ${name}` : ""}</span></span>; })}</p>}
-      {cs.map(({ c, rows }) => (
-        <section key={c.key} className="cohort">
-          <h2>{c.title} <span className="dim">— {cohortLine(c)}{rows.length < c.n ? ` · ${rows.length} of ${c.n} here` : ""}</span></h2>
-          <div className="tablewrap"><table className="runs">
-            <thead><tr><th>run</th><th>ligand</th><th>protein atoms</th><th>production</th><th>ΔG MM-GBSA <span className="dim">kcal/mol</span></th><th>PLIP</th></tr></thead>
-            <tbody>{rows.map(r => <tr key={r.id} onClick={() => navigate(`/run/${r.id}`)}><td><a href={`#/run/${r.id}`}>{r.title}</a>{r.id === c.start_here && <span className="badge start">start here · longest run</span>}<div className="dim">{r.id}{r.parent ? <span className="forkmark"> ↳ fork of {qualified(idx, r.parent)}</span> : null}{(() => { const ks = idx.filter(x => x.parent === r.id); if (!ks.length) return null; const by = [...new Set(ks.map(k => k.owner).filter(o => o && o !== r.owner))]; return <span className="forkmark"> · {ks.length} forks{by.length ? ` by ${by.join(", ")}` : ""}</span>; })()}</div></td><td>{r.ligand}</td><td>{r.protein_atoms}</td><td>{r.production_ps} ps</td><td className="num">{fmt(r.delta_g)}</td><td>{r.plip ? "✓" : ""}</td></tr>)}</tbody>
-          </table></div>
-        </section>
-      ))}
+      {/* One card per prepared system: what it is, the number and its spread, one place to start. The runs are the
+          commits, not the repo — they fold under a disclosure, open only when there are a few. */}
+      {cs.map(({ c, rows }) => {
+        const sys = describeSystem(c.title, c.runs[0].ligand);
+        const start = rows.find(r => r.id === c.start_here) ?? rows[0];
+        const forks = idx.filter(r => r.parent && rows.some(p => p.id === r.parent));
+        const forkOwners = [...new Set(forks.map(r => r.owner).filter((o): o is string => !!o && o !== handle))];
+        const span = `${c.lengths_ps[0]}–${c.lengths_ps[c.lengths_ps.length - 1]} ps`;
+        return <section key={c.key} className="cohort">
+          <h2>{c.title}{sys && <span className="dim"> — {sys.name}</span>}</h2>
+          <p className="cohort-desc">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and protocol run ${c.n} times with fresh seeds, ${span}${rows.length < c.n ? `; ${rows.length} of the ${c.n} are ${name}'s` : ""}.` : "One run so far."}</p>
+          <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{c.sd != null ? ` · ± is the spread across the ${c.n} runs, the uncertainty that matters` : " · one run, so no run-to-run spread yet"}</span></p>
+          <div className="cohort-actions">
+            <a className={`btn${start.id === c.start_here ? "" : " ghost"}`} href={`#/run/${start.id}`}>Open {start.title} → <span className="dim">{start.production_ps} ps{start.id === c.start_here ? ", the longest" : ""}</span></a>
+            {forks.length > 0 && <span className="dim">{forks.length} {plural(forks.length, "fork")}{forkOwners.length ? <> by {list(forkOwners)}</> : ""}</span>}
+          </div>
+          <details className="runs-list" open={rows.length <= 3}>
+            <summary>{rows.length} {plural(rows.length, "run")}{rows.length > 1 && <span className="dim"> · the same experiment; seeds and lengths differ</span>}</summary>
+            <div className="tablewrap"><table className="runs">
+              <thead><tr><th>run</th><th>production</th><th>ΔG <span className="dim">kcal/mol</span></th><th>contacts <span className="dim">PLIP</span></th></tr></thead>
+              <tbody>{rows.map(r => <tr key={r.id} onClick={() => navigate(`/run/${r.id}`)}><td><a href={`#/run/${r.id}`}>{r.title}</a><div className="dim">{r.id}{r.parent ? <span className="forkmark"> ↳ fork of {qualified(idx, r.parent)}</span> : null}{(() => { const ks = idx.filter(x => x.parent === r.id); if (!ks.length) return null; const by = [...new Set(ks.map(k => k.owner).filter(o => o && o !== r.owner))]; return <span className="forkmark"> · {ks.length} forks{by.length ? ` by ${by.join(", ")}` : ""}</span>; })()}</div></td><td>{r.production_ps} ps</td><td className="num">{fmt(r.delta_g)}</td><td>{r.plip ? "✓" : ""}</td></tr>)}</tbody>
+            </table></div>
+          </details>
+        </section>;
+      })}
       {/* The fork network sits under the tables: the rows already mark forks; this is the check across them. */}
       {nets.map(net => <ForkNetworkCard key={net.parent.id} net={net} compact />)}
     </section>

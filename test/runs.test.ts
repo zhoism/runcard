@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
+import { describeSystem } from "../src/lib/systemCatalog";
 import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks, ownerStats, ownerHandles } from "../src/lib/runs";
 import { ANALYSIS_CATALOG, ANALYSIS_CATEGORIES, analysisInfo } from "../src/lib/analysisCatalog";
 import { mean, sd, round } from "../src/lib/stats";
@@ -639,6 +640,16 @@ describe("owners", () => {
     for (const id of Object.keys(own.runs)) expect(idx.some((r: any) => r.id === id), id).toBe(true);
     for (const h of Object.values(own.runs)) expect(own.profiles[h as string], String(h)).toBeTruthy();
     const net = forkNetwork(idx, "1l2y-rep4"); expect(net.parent.owner).toBe("kevin"); expect(net.forks.every(f => f.owner === "pace-ice")).toBe(true);
+  });
+});
+
+describe("system catalogue", () => {
+  it("names both prepared systems from their titles; unknown titles get nothing", () => {
+    expect(describeSystem("1L2Y + MOL", "MOL")).toEqual({ name: "Trp-cage · indole", sentence: "Trp-cage, a 20-residue designed miniprotein (PDB 1L2Y), with indole bound." });
+    expect(describeSystem("3HTB + JZ4", "JZ4")!.name).toBe("T4 lysozyme L99A/M102Q · 2-propylphenol");
+    expect(describeSystem("1L2Y + MOL", "XYZ")!.sentence).toMatch(/with XYZ bound/);
+    expect(describeSystem("something else", "MOL")).toBeNull();
+    for (const c of cohorts(idx)) expect(describeSystem(c.title, c.runs[0].ligand), c.title).not.toBeNull();
   });
 });
 
