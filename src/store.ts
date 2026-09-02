@@ -20,8 +20,19 @@ export function logCall(tool: string, input: unknown, ok: boolean, summary: stri
 export function updateInvestigation(runId: string, update: (current: InvestigationState) => InvestigationState) {
   set(s => ({ investigations: { ...s.investigations, [runId]: update(s.investigations[runId] ?? emptyInvestigation(runId)) } }));
 }
+/** How long after Approve or Reject the page offers Undo. */
+export const UNDO_WINDOW_MS = 15_000;
 /** An edit that fails validation can never be approved — the Approve button is disabled, and this makes
-    that a property of the store rather than of the markup. Rejecting a failing edit stays allowed. */
-export function setProposalStatus(id: string, status: Proposal["status"]) {
-  set(s => ({ proposals: s.proposals.map(p => p.id === id ? (status === "approved" && p.after.hasFail ? p : { ...p, status }) : p) }));
+    that a property of the store rather than of the markup. Rejecting a failing edit stays allowed.
+    "pending" is Undo: it returns an approved or rejected proposal to pending and clears the decision stamp;
+    a proposal that is already pending has nothing to undo. Returns whether anything changed. Only the page
+    calls this — no tool can approve, reject or undo. */
+export function setProposalStatus(id: string, status: Proposal["status"]): boolean {
+  let changed = false;
+  set(s => ({ proposals: s.proposals.map(p => {
+    if (p.id !== id || p.status === status || (status === "approved" && p.after.hasFail)) return p;
+    changed = true;
+    return status === "pending" ? { ...p, status, decided_t: undefined } : { ...p, status, decided_t: Date.now() };
+  }) }));
+  return changed;
 }

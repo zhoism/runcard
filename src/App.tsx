@@ -4,7 +4,7 @@ import type { Manifest, IndexEntry, Owners } from "./lib/types";
 import { loadIndex, loadOwners, ownerStats, ownerHandles, loadRun, validateStage, ensemble, cohorts, type Cohort, projectSummary, protocolPairs, type ForkNetwork, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
-import { useStore, navigate, setProposalStatus, set } from "./store";
+import { useStore, navigate, setProposalStatus, set, UNDO_WINDOW_MS } from "./store";
 import { analysisInfo, ANALYSIS_CATEGORIES, type AnalysisCategory } from "./lib/analysisCatalog";
 import { describeSystem } from "./lib/systemCatalog";
 import { TOOLS, callTool } from "./webmcp";
@@ -287,15 +287,40 @@ function ProposalPin({ stage, proposals, expanded, onToggle }: { stage: string; 
   // A toggle, like the stage boxes: the first click opens the thread, the second closes it.
   return <button type="button" id={`pin-${stage}`} className={`pin ${cls}`} aria-label={label} title={label} aria-expanded={expanded} aria-controls={expanded ? `threads-${stage}` : undefined} onClick={onToggle}><span className="pin-glyph" aria-hidden="true">{proposals.length > 1 ? proposals.length : "✦"}</span></button>;
 }
+const fmtTime = (t: number | string) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+/** True while a decision is still inside the Undo window: open from the moment of the decision, closed by a timer
+    (at once, if the stamp is already old); a fresh decision opens it again. */
+function useUndoWindow(decided?: number) {
+  const [expired, setExpired] = useState<number | null>(null);
+  useEffect(() => { if (!decided) return; const id = setTimeout(() => setExpired(decided), Math.max(0, decided + UNDO_WINDOW_MS - Date.now()) + 50); return () => clearTimeout(id); }, [decided]);
+  return decided != null && expired !== decided;
+}
+/** The rerun bundle prepared for this run, if it captured this proposal's edit: a bundle takes the approved edits at generation
+    and is not rewritten afterwards, so Undo cannot take the edit back out of it, and the page says so. */
+const useBundleCapturing = (p: Proposal) => useStore(s => s.investigations[p.run]?.bundle)?.value ?? null;
+const capturedBy = (p: Proposal, bundle: { appliedProposalIds: string[]; generatedAt: string } | null) => bundle && bundle.appliedProposalIds.includes(p.id) ? bundle : null;
+/** For 15 s after Approve or Reject: one Undo that returns the proposal to pending. Compact form for the sidebar summary. */
+function UndoLine({ p, compact }: { p: Proposal; compact?: boolean }) {
+  const captured = capturedBy(p, useBundleCapturing(p));
+  const open = useUndoWindow(p.decided_t);
+  if (p.status === "pending" || !open) return null;
+  const note = captured && <span className="dim"> · the bundle prepared at {fmtTime(captured.generatedAt)} still contains this edit</span>;
+  return compact
+    ? <p className="undo small"><span className="mono">{p.stage}</span> {p.status} just now · <button type="button" className="linklike" onClick={() => setProposalStatus(p.id, "pending")}>Undo</button>{note}</p>
+    : <div className="row undo"><button type="button" className="ghost" onClick={() => setProposalStatus(p.id, "pending")}>Undo</button><span className="dim small">{p.status} just now · back to pending for 15 s{note}</span></div>;
+}
 /** One proposal as a comment thread: who and when, the ask, the diff, validation after, and the only two verbs a person has. */
 function ProposalThread({ p, compact }: { p: Proposal; compact?: boolean }) {
-  const when = p.t ? new Date(p.t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
+  const when = p.t ? fmtTime(p.t) : null;
+  const captured = capturedBy(p, useBundleCapturing(p));
   return <div className={`thread ${p.status}`}>
     <div className="thread-who"><span className={`chip ${p.source === "webmcp" ? "agent" : ""}`}>{p.source === "webmcp" ? "agent proposal" : "proposal"}</span> {p.source && <Source source={p.source} />}{when && <span className="dim"> · {when}</span>}{compact && <span className="dim"> · <b>{p.run}</b> / {p.stage}</span>}{p.fork && <span className="dim"> · fork: {p.fork.kind}</span>}<span className={`badge ${p.status}`}>{p.status}</span></div>
     <p className="thread-ask">{p.reason}</p>
     <div className="thread-diff mono">{(p.changes ?? []).length ? p.changes.map(c => <div key={c.key}><span className="k">{c.key}</span> <s className="old">{c.before ?? "(unset)"}</s> <span className="new">{c.after}</span>{c.meaning && <span className="dim sans"> — {c.meaning}{c.material ? "" : " · not material"}</span>}</div>) : Object.entries(p.edits).map(([k, v]) => <div key={k}><span className="k">{k}</span> <span className="new">{v}</span></div>)}</div>
     <div className="thread-check">{p.material_classes?.length ? <span className="badge warn">material · {p.material_classes.map(c => c.replace("_", " ")).join(", ")}</span> : null} validation after <Verdict r={p.after} />{p.after.findings.filter(f => f.level !== "PASS").map((f, i) => <div key={i} className="dim small">{f.level}: {f.rule} — {f.detail}</div>)}</div>
     {p.status === "pending" && <div className="row"><button className="primary" onClick={() => setProposalStatus(p.id, "approved")} disabled={p.after.hasFail}>Approve</button><button className="ghost" onClick={() => setProposalStatus(p.id, "rejected")}>Reject</button>{p.after.hasFail && <span className="dim small" style={{ alignSelf: "center" }}>cannot approve: the edit fails validation</span>}</div>}
+    <UndoLine p={p} />
+    {p.status === "pending" && captured && <p className="dim small undo-note">The bundle prepared at {fmtTime(captured.generatedAt)} still contains this edit: it captured the approval that was undone.</p>}
   </div>;
 }
 const SHEET = "(max-width: 700px)";
@@ -307,6 +332,8 @@ function ThreadPopover({ stage, proposals, onClose }: { stage: string; proposals
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; tail: number } | null>(null);
   // Placed in document coordinates so it rides with the page; a resize or the pipeline's own scroll re-places it.
+  // It hangs below the pinned stage's box (name and label stay readable) with the tail on the pin, and stays inside
+  // the pipeline's width where that fits, so it does not lie over the sidebar.
   useLayoutEffect(() => {
     const sheet = window.matchMedia(SHEET);
     const place = () => {
@@ -334,8 +361,6 @@ function ThreadPopover({ stage, proposals, onClose }: { stage: string; proposals
     const down = (e: PointerEvent) => { const t = e.target as Node; if (ref.current?.contains(t) || pinOf(stage)?.contains(t)) return; onClose(); };
     document.addEventListener("keydown", key); document.addEventListener("pointerdown", down);
     return () => { document.removeEventListener("keydown", key); document.removeEventListener("pointerdown", down); };
-  // It hangs below the pinned stage's box (name and label stay readable) with the tail on the pin, and stays inside
-  // the pipeline's width where that fits, so it does not lie over the sidebar.
   }, [stage, onClose]);
   return createPortal(<>
     <div className="thread-scrim" aria-hidden="true" />
@@ -800,7 +825,7 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
       {proposals.length === 0 && context !== "run" && <button className="ghost" onClick={draftProposal}>Try it: draft a proposal, then press Call</button>}
       {/* This run's proposals live on the page as pinned comments; the panel only points at them. Other runs' proposals are listed in full so nothing waits unseen. */}
       {(() => { const here = proposals.filter(p => p.run === currentRun); const pend = here.filter(p => p.status === "pending"); const stages = [...new Set(here.map(p => p.stage))];
-        return here.length ? <p className="pinned-summary">{pend.length ? <b>{pend.length} awaiting your approval</b> : <span>{here.length} reviewed</span>} on this run — pinned at {stages.map((st, i) => <span key={st}>{i > 0 ? ", " : ""}<button className="linklike" onClick={() => set({ openStage: st })}>{st}</button></span>)}.</p> : null; })()}
+        return here.length ? <><p className="pinned-summary">{pend.length ? <b>{pend.length} awaiting your approval</b> : <span>{here.length} reviewed</span>} on this run — pinned at {stages.map((st, i) => <span key={st}>{i > 0 ? ", " : ""}<button className="linklike" onClick={() => set({ openStage: st })}>{st}</button></span>)}.</p>{here.map(p => <UndoLine key={p.id} p={p} compact />)}</> : null; })()}
       {proposals.filter(p => p.run !== currentRun).map(p => <ProposalThread key={p.id} p={p} compact />)}
     </details>
     {/* What the agent just did, announced to screen readers; the visible log is below. */}

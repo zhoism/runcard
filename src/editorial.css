@@ -247,6 +247,8 @@ button.stagebox:focus-visible { outline: 2px solid var(--blue); outline-offset: 
 .thread-diff .sans { font-family: var(--sans); }
 .thread-check { font-size: 13.5px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .thread .row { margin-top: 8px; gap: 4px; }
+.thread .row.undo { align-items: center; } .thread .undo-note { margin: 8px 0 0; }
+p.undo { margin: 0 0 8px; }
 .pinned-summary { font-size: 14.5px; margin: 0 0 8px; }
 /* the thread rides under its pin as a popover, above the sticky header; on phones it is a bottom sheet behind a scrim */
 .thread-popover { position: absolute; z-index: calc(var(--z-header) + 1); width: min(520px, calc(100vw - 24px)); background: var(--card); border-radius: 12px; box-shadow: 0 0 0 1px var(--line), 0 14px 40px rgba(20, 30, 45, .18); padding: 12px 14px 14px; }
