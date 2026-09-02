@@ -1,6 +1,6 @@
 # STATUS — runcard
 
-Updated 2026-09-01. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
+Updated 2026-09-02. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
 
 ## GitHub-for-MD-runs reframe (2026-09-01)
 

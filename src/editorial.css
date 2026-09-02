@@ -382,3 +382,4 @@ aside .agent button.ghost { border-color: rgba(30, 58, 95, .35); background: #ff
 button.chip { font-family: var(--mono); font-size: 13px; font-weight: 500; padding: 2px 9px; margin: 0; background: #fff; color: var(--ink-2); border: 1px solid var(--line); border-radius: 999px; line-height: 1.6; }
 button.chip:hover { border-color: var(--navy); color: var(--navy); background: #fff; }
 button.chip.on, button.chip.on:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+pre.out.fail { color: var(--fail); }

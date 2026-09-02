@@ -125,20 +125,9 @@ function Home({ idx, own }: { idx: IndexEntry[]; own: Owners | null }) {
   useEffect(() => { document.title = "runcard"; }, []);
   const cs = cohorts(idx); const handles = ownerHandles(idx);
   const nameOf = (h: string) => own?.profiles[h]?.name ?? h;
-  const startRun = cs[0]?.runs[0]?.id ?? "1l2y-rep4";
   return <section>
     <h1>Validated records of <em>molecular simulations</em></h1>
     <p className="lede">A project is one prepared system. Its runs are the commits, a fork is a rerun with lineage, and every number on the page traces to a file in the run directory. An agent reads the same page through WebMCP; a person approves every change.</p>
-    {/* Quick demo: one click shows WebMCP working */}
-    <details className="card" style={{ marginBottom: 20 }} open>
-      <summary className="kicker">Quick demo (WebMCP)</summary>
-      <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
-        <button onClick={async () => { try { const r = await callTool("list_runs", {}, "page"); alert("list_runs: " + JSON.parse(r).length + " runs across " + cohorts(idx).length + " projects"); } catch (e: any) { alert(e); } }}>What's on this site? (list_runs)</button>
-        <button onClick={async () => { try { const r = await callTool("explain_result", { run_id: startRun }, "page"); const v = JSON.parse(r); alert(v.brief ?? "explained"); } catch (e: any) { alert(e); } }}>Explain {startRun} (explain_result)</button>
-        <button onClick={async () => { try { const r = await callTool("investigate_run", { run_id: startRun }, "page"); const v = JSON.parse(r); alert(v.summary ?? "investigated"); } catch (e: any) { alert(e); } }}>Investigate {startRun} (investigate_run)</button>
-      </div>
-      <p className="dim small" style={{ marginTop: 8 }}>These call the same 17 tools an agent sees. Open a project or run page for the full console.</p>
-    </details>
     {!idx.length && <p className="dim" role="status">loading runs…</p>}
     {cs.map(c => <ProjectCard key={c.key} c={c} idx={idx} own={own} />)}
     {handles.length > 0 && <p className="people">People on runcard: {handles.map((h, i) => { const o = ownerStats(idx, h); return <span key={h}>{i ? " · " : ""}<a href={`#/u/${h}`}>{nameOf(h)}</a> <span className="dim">@{h} · {o.runs} {plural(o.runs, "run")}{o.forks_from_others > 0 ? `, forks of ${o.forked_from.map(nameOf).join(", ")}'s` : ""}</span></span>; })}</p>}
@@ -727,7 +716,7 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
         {context === "run" && !allProposals.some(p => p.run === currentRun) && <button className="ghost" onClick={draftProposal} title="Prefills propose_change below; you press Call, then Approve or Reject on the thread pinned to the stage">Draft a proposal</button>}
       </div>
       <div role="status" aria-live="polite">{out && (outIsError
-        ? <pre className="small out" style={{color: 'var(--fail)'}}>{pretty(out)}</pre>
+        ? <pre className="small out fail">{pretty(out)}</pre>
         : <div className="dim small">{(() => { let v: any = null; try { v = JSON.parse(out); } catch { return null; }
             if (Array.isArray(v)) return <p>{v.length} runs across {cohorts(idx).length} {plural(cohorts(idx).length, "project")}; each row names its owner. Open a project to see them grouped.</p>;
             if (v?.trace) return <p>Trace rendered under <a href="#investigation-title" onClick={e => { e.preventDefault(); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Current investigation ↓</a>.</p>;
