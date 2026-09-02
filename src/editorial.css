@@ -238,7 +238,7 @@ button.stagebox:focus-visible { outline: 2px solid var(--blue); outline-offset: 
 .stagename { font-family: var(--mono); font-weight: 600; font-size: 14px; color: var(--ink); }
 
 /* the proposal thread: the ask, the diff, Approve / Reject */
-.threads { grid-column: 1 / -1; display: grid; gap: 10px; }
+.threads { display: grid; gap: 10px; }
 .thread { border-left: 3px solid var(--warn); border-radius: 0 10px 10px 0; padding: 12px 16px; background: var(--warn-bg); font-size: 14.5px; }
 .thread.approved { border-left-color: var(--pass); background: var(--pass-bg); } .thread.rejected { border-left-color: var(--muted); background: var(--chip-bg); opacity: .7; }
 .thread-who { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink-2); }
@@ -249,7 +249,23 @@ button.stagebox:focus-visible { outline: 2px solid var(--blue); outline-offset: 
 .thread-diff .sans { font-family: var(--sans); }
 .thread-check { font-size: 13.5px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .thread .row { margin-top: 8px; gap: 4px; }
+.thread .row.undo { align-items: center; } .thread .undo-note { margin: 8px 0 0; }
+p.undo { margin: 0 0 8px; }
 .pinned-summary { font-size: 14.5px; margin: 0 0 8px; }
+/* the thread rides under its pin as a popover, above the sticky header; on phones it is a bottom sheet behind a scrim */
+.thread-popover { position: absolute; z-index: calc(var(--z-header) + 1); width: min(520px, calc(100vw - 24px)); background: var(--card); border-radius: 12px; box-shadow: 0 0 0 1px var(--line), 0 14px 40px rgba(20, 30, 45, .18); padding: 12px 14px 14px; }
+.thread-popover::before { content: ""; position: absolute; top: -6px; left: var(--tail-x, 18px); width: 12px; height: 12px; background: var(--card); border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
+.thread-popover:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.thread-popover-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.thread-popover-head .kicker { margin: 0; }
+.thread-popover .thread-close { font-family: var(--sans); font-size: 22px; line-height: 1; color: var(--muted); padding: 0 4px; }
+.thread-popover .thread-close:hover { color: var(--ink); text-decoration: none; }
+.thread-scrim { display: none; }
+@media (max-width: 700px) {
+  .thread-scrim { display: block; position: fixed; inset: 0; z-index: var(--z-header); background: rgba(28, 36, 48, .35); }
+  .thread-popover { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; border-radius: 14px 14px 0 0; max-height: 82vh; overflow-y: auto; padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .thread-popover::before { display: none; }
+}
 .stagedetail { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .stagedetail > div { min-width: 0; } .stagedetail pre { overflow-x: auto; max-width: 100%; }
 @media (max-width: 1300px) { .stagedetail { grid-template-columns: 1fr; } }
@@ -379,6 +395,7 @@ aside textarea[aria-invalid="true"], aside textarea[aria-invalid="true"]:focus {
 /* pins and link-buttons override the global navy button; they sit last so order, not specificity tricks, decides */
 button.pin { position: absolute; top: -8px; left: 24px; width: 30px; height: 30px; padding: 0; margin: 0; border: 2px solid var(--card); border-radius: 50% 50% 50% 3px; background: var(--warn); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 3px rgba(20, 30, 45, .25); z-index: 1; transition: transform .12s; }
 button.pin:hover { transform: scale(1.12); background: var(--warn); border-color: var(--card); }
+button.pin[aria-expanded="true"] { box-shadow: 0 0 0 2px var(--navy), 0 1px 3px rgba(20, 30, 45, .25); }
 button.pin.approved { background: var(--pass); } button.pin.rejected { background: var(--muted); }
 button.pin.approved:hover { background: var(--pass); } button.pin.rejected:hover { background: var(--muted); }
 .pin-glyph { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #fff; color: var(--warn); font: 600 13px/1 var(--sans); }

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import type { Manifest, IndexEntry, Owners } from "./lib/types";
 import { loadIndex, loadOwners, ownerStats, ownerHandles, loadRun, validateStage, ensemble, cohorts, type Cohort, projectSummary, protocolPairs, type ForkNetwork, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
-import { useStore, navigate, setProposalStatus, set } from "./store";
+import { useStore, navigate, setProposalStatus, set, UNDO_WINDOW_MS } from "./store";
 import { analysisInfo, ANALYSIS_CATEGORIES, type AnalysisCategory } from "./lib/analysisCatalog";
 import { describeSystem } from "./lib/systemCatalog";
 import { TOOLS, callTool } from "./webmcp";
@@ -279,23 +280,96 @@ function Profile({ handle, idx, own }: { handle: string; idx: IndexEntry[]; own:
 
 /** A Figma-style comment marker on a stage: a bubble, not a numbered label. Amber = pending (needs you), green = approved, grey = rejected.
     WebMCP does not expose the client's name, so the glyph is a generic agent mark; the thread names the source. */
-function ProposalPin({ proposals, onOpen }: { proposals: Proposal[]; onOpen: () => void }) {
+function ProposalPin({ stage, proposals, expanded, onToggle }: { stage: string; proposals: Proposal[]; expanded: boolean; onToggle: () => void }) {
   if (!proposals.length) return null;
   const pending = proposals.filter(p => p.status === "pending").length;
   const cls = pending ? "pending" : proposals.every(p => p.status === "rejected") ? "rejected" : "approved";
   const label = `${proposals.length} proposal${proposals.length === 1 ? "" : "s"} on this stage${pending ? `, ${pending} awaiting your approval` : ""}`;
-  return <button type="button" className={`pin ${cls}`} aria-label={label} title={label} onClick={onOpen}><span className="pin-glyph" aria-hidden="true">{proposals.length > 1 ? proposals.length : "✦"}</span></button>;
+  // A toggle, like the stage boxes: the first click opens the thread, the second closes it.
+  return <button type="button" id={`pin-${stage}`} className={`pin ${cls}`} aria-label={label} title={label} aria-expanded={expanded} aria-controls={expanded ? `threads-${stage}` : undefined} onClick={onToggle}><span className="pin-glyph" aria-hidden="true">{proposals.length > 1 ? proposals.length : "✦"}</span></button>;
+}
+const fmtTime = (t: number | string) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+/** True while a decision is still inside the Undo window: open from the moment of the decision, closed by a timer
+    (at once, if the stamp is already old); a fresh decision opens it again. */
+function useUndoWindow(decided?: number) {
+  const [expired, setExpired] = useState<number | null>(null);
+  useEffect(() => { if (!decided) return; const id = setTimeout(() => setExpired(decided), Math.max(0, decided + UNDO_WINDOW_MS - Date.now()) + 50); return () => clearTimeout(id); }, [decided]);
+  return decided != null && expired !== decided;
+}
+/** The rerun bundle prepared for this run, if it captured this proposal's edit: a bundle takes the approved edits at generation
+    and is not rewritten afterwards, so Undo cannot take the edit back out of it, and the page says so. */
+const useBundleCapturing = (p: Proposal) => useStore(s => s.investigations[p.run]?.bundle)?.value ?? null;
+const capturedBy = (p: Proposal, bundle: { appliedProposalIds: string[]; generatedAt: string } | null) => bundle && bundle.appliedProposalIds.includes(p.id) ? bundle : null;
+/** For 15 s after Approve or Reject: one Undo that returns the proposal to pending. Compact form for the sidebar summary. */
+function UndoLine({ p, compact }: { p: Proposal; compact?: boolean }) {
+  const captured = capturedBy(p, useBundleCapturing(p));
+  const open = useUndoWindow(p.decided_t);
+  if (p.status === "pending" || !open) return null;
+  const note = captured && <span className="dim"> · the bundle prepared at {fmtTime(captured.generatedAt)} still contains this edit</span>;
+  return compact
+    ? <p className="undo small"><span className="mono">{p.stage}</span> {p.status} just now · <button type="button" className="linklike" onClick={() => setProposalStatus(p.id, "pending")}>Undo</button>{note}</p>
+    : <div className="row undo"><button type="button" className="ghost" onClick={() => setProposalStatus(p.id, "pending")}>Undo</button><span className="dim small">{p.status} just now · back to pending for 15 s{note}</span></div>;
 }
 /** One proposal as a comment thread: who and when, the ask, the diff, validation after, and the only two verbs a person has. */
 function ProposalThread({ p, compact }: { p: Proposal; compact?: boolean }) {
-  const when = p.t ? new Date(p.t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
+  const when = p.t ? fmtTime(p.t) : null;
+  const captured = capturedBy(p, useBundleCapturing(p));
   return <div className={`thread ${p.status}`}>
     <div className="thread-who"><span className={`chip ${p.source === "webmcp" ? "agent" : ""}`}>{p.source === "webmcp" ? "agent proposal" : "proposal"}</span> {p.source && <Source source={p.source} />}{when && <span className="dim"> · {when}</span>}{compact && <span className="dim"> · <b>{p.run}</b> / {p.stage}</span>}{p.fork && <span className="dim"> · fork: {p.fork.kind}</span>}<span className={`badge ${p.status}`}>{p.status}</span></div>
     <p className="thread-ask">{p.reason}</p>
     <div className="thread-diff mono">{(p.changes ?? []).length ? p.changes.map(c => <div key={c.key}><span className="k">{c.key}</span> <s className="old">{c.before ?? "(unset)"}</s> <span className="new">{c.after}</span>{c.meaning && <span className="dim sans"> — {c.meaning}{c.material ? "" : " · not material"}</span>}</div>) : Object.entries(p.edits).map(([k, v]) => <div key={k}><span className="k">{k}</span> <span className="new">{v}</span></div>)}</div>
     <div className="thread-check">{p.material_classes?.length ? <span className="badge warn">material · {p.material_classes.map(c => c.replace("_", " ")).join(", ")}</span> : null} validation after <Verdict r={p.after} />{p.after.findings.filter(f => f.level !== "PASS").map((f, i) => <div key={i} className="dim small">{f.level}: {f.rule} — {f.detail}</div>)}</div>
     {p.status === "pending" && <div className="row"><button className="primary" onClick={() => setProposalStatus(p.id, "approved")} disabled={p.after.hasFail}>Approve</button><button className="ghost" onClick={() => setProposalStatus(p.id, "rejected")}>Reject</button>{p.after.hasFail && <span className="dim small" style={{ alignSelf: "center" }}>cannot approve: the edit fails validation</span>}</div>}
+    <UndoLine p={p} />
+    {p.status === "pending" && captured && <p className="dim small undo-note">The bundle prepared at {fmtTime(captured.generatedAt)} still contains this edit: it captured the approval that was undone.</p>}
   </div>;
+}
+const SHEET = "(max-width: 700px)";
+const pinOf = (stage: string) => document.getElementById(`pin-${stage}`);
+/** The threads of one stage as a popover anchored to its pin — a bottom sheet on phones — rendered into body so the pipeline's
+    horizontal scroll cannot clip it and it sits above the sticky header. Escape and a click outside close it; focus moves
+    in on open and returns to the pin on close. The stage's own .in file and checks stay inline where they were. */
+function ThreadPopover({ stage, proposals, onClose }: { stage: string; proposals: Proposal[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; tail: number } | null>(null);
+  // Placed in document coordinates so it rides with the page; a resize or the pipeline's own scroll re-places it.
+  // It hangs below the pinned stage's box (name and label stay readable) with the tail on the pin, and stays inside
+  // the pipeline's width where that fits, so it does not lie over the sidebar.
+  useLayoutEffect(() => {
+    const sheet = window.matchMedia(SHEET);
+    const place = () => {
+      const el = pinOf(stage); if (!el) return; if (sheet.matches) { setPos(null); return; }
+      const r = el.getBoundingClientRect(), box = (el.parentElement ?? el).getBoundingClientRect(), rail = el.closest(".stages")?.getBoundingClientRect();
+      const w = Math.min(520, window.innerWidth - 24); const rightEdge = rail && rail.width >= w ? Math.min(rail.right, window.innerWidth - 12) : window.innerWidth - 12;
+      const left = Math.max(12, Math.min(r.left - 10, rightEdge - w));
+      const next = { top: Math.round(box.bottom + 10 + window.scrollY), left: Math.round(left + window.scrollX), tail: Math.round(r.left + r.width / 2 - left - 6) };
+      setPos(p => p && p.top === next.top && p.left === next.left && p.tail === next.tail ? p : next);
+    };
+    place(); window.addEventListener("resize", place); document.addEventListener("scroll", place, true); sheet.addEventListener("change", place);
+    return () => { window.removeEventListener("resize", place); document.removeEventListener("scroll", place, true); sheet.removeEventListener("change", place); };
+  }, [stage]);
+  useEffect(() => {
+    const node = ref.current; if (!node) return;
+    node.focus({ preventScroll: true });
+    // Bring the pin and the whole popover into view without recentring a page the reader is already looking at.
+    const el = pinOf(stage);
+    if (el && !window.matchMedia(SHEET).matches) requestAnimationFrame(() => { const top = 72; const pr = el.getBoundingClientRect(), nr = node.getBoundingClientRect(); let dy = 0; if (pr.top < top) dy = pr.top - top; else if (nr.bottom > window.innerHeight - 12) dy = Math.min(nr.bottom - window.innerHeight + 12, pr.top - top); if (dy) window.scrollBy({ top: dy, behavior: "smooth" }); });
+    // On close, focus goes back to the pin unless the reader already put it somewhere else (a click on another control).
+    return () => { if (!document.activeElement || document.activeElement === document.body) pinOf(stage)?.focus({ preventScroll: true }); };
+  }, [stage]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    const down = (e: PointerEvent) => { const t = e.target as Node; if (ref.current?.contains(t) || pinOf(stage)?.contains(t)) return; onClose(); };
+    document.addEventListener("keydown", key); document.addEventListener("pointerdown", down);
+    return () => { document.removeEventListener("keydown", key); document.removeEventListener("pointerdown", down); };
+  }, [stage, onClose]);
+  return createPortal(<>
+    <div className="thread-scrim" aria-hidden="true" />
+    <div ref={ref} className="thread-popover" id={`threads-${stage}`} role="dialog" aria-label={`proposals pinned at ${stage}`} tabIndex={-1} style={pos ? { top: pos.top, left: pos.left, "--tail-x": `${pos.tail}px` } as CSSProperties : undefined}>
+      <div className="thread-popover-head"><span className="kicker">pinned at <span className="mono">{stage}</span>{proposals.length > 1 ? ` · ${proposals.length} proposals` : ""}</span><button type="button" className="linklike thread-close" aria-label="Close the thread" onClick={onClose}>×</button></div>
+      <div className="threads">{proposals.map(p => <ProposalThread key={p.id} p={p} />)}</div>
+    </div>
+  </>, document.body);
 }
 
 /** The compare picker: same-system runs first (those are the comparisons that mean something), then the rest; each option carries its id and length. */
@@ -433,12 +507,14 @@ function LoadError({ message, onRetry }: { message: string; onRetry: () => void 
   </section>;
 }
 /** The Approve button is the point of a proposal: scroll the thread into view, not just the stage's dot. */
-const scrollToThread = (stage: string) => (document.getElementById(`threads-${stage}`) ?? document.getElementById(`stage-${stage}`))?.scrollIntoView({ behavior: "smooth", block: "center" });
 function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners | null }) {
   const [m, setM] = useState<Manifest | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
+  // Which stage's proposal thread is open as a popover under its pin; independent of the inline stage detail.
+  const [thread, setThread] = useState<string | null>(null);
+  const closeThread = useCallback(() => setThread(null), []);
   const investigation = useStore(s => s.investigations[id]);
   const re = investigation?.reanalysis?.value;
   // Proposals are comments pinned to the stage they target. Filter outside the selector (React #185).
@@ -446,8 +522,8 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   const openStage = useStore(s => s.openStage);
   const seenProposal = useRef<string | null>(null);
   // A new pending proposal on this run opens its thread, so the reader sees what the agent asked for without hunting.
-  useEffect(() => { const p = runProposals[0]; if (p && p.status === "pending" && seenProposal.current !== p.id) { seenProposal.current = p.id; setOpen(p.stage); setTimeout(() => scrollToThread(p.stage), 30); } }, [runProposals]);
-  useEffect(() => { if (openStage) { setOpen(openStage); set({ openStage: null }); setTimeout(() => scrollToThread(openStage), 30); } }, [openStage]);
+  useEffect(() => { const p = runProposals[0]; if (p && p.status === "pending" && seenProposal.current !== p.id) { seenProposal.current = p.id; setThread(p.stage); } }, [runProposals]);
+  useEffect(() => { if (openStage) { setThread(openStage); set({ openStage: null }); } }, [openStage]);
   useEffect(() => {
     let live = true; setM(null); setErr(null);
     loadRun(id).then(x => { if (live) setM(x); }, e => { if (live) setErr(String(e?.message ?? e)); });
@@ -550,9 +626,9 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
             <span className="stagename">{s.name}</span><span className="dim">{s.role}{s.length_ps != null ? ` · ${s.length_ps} ps` : ""}</span>
             <span className="dim">{s.cntrl.temp0 ? `${s.cntrl.temp0} K` : ""}{s.role === "minimization" ? "" : s.cntrl.ntp === "1" ? " NPT" : s.cntrl.ntb === "1" ? " NVT" : ""}{s.cntrl.ntr === "1" ? " restrained" : ""}</span>
             {verdictOf(reports[s.name]) !== overall || overall !== "PASS" ? <Verdict r={reports[s.name]} /> : null}</button>
-          <ProposalPin proposals={runProposals.filter(p => p.stage === s.name)} onOpen={() => setOpen(s.name)} /></div>)}</div>
+          <ProposalPin stage={s.name} proposals={runProposals.filter(p => p.stage === s.name)} expanded={thread === s.name} onToggle={() => setThread(t => t === s.name ? null : s.name)} /></div>)}</div>
+        {thread && runProposals.some(p => p.stage === thread) && <ThreadPopover stage={thread} proposals={runProposals.filter(p => p.stage === thread)} onClose={closeThread} />}
         {open && (() => { const s = m.stages.find(x => x.name === open)!; const r = reports[open]; return <div className="stagedetail" id="stagedetail" role="region" aria-labelledby={`stage-${open}`}>
-          {runProposals.some(p => p.stage === open) && <div className="threads" id={`threads-${open}`}>{runProposals.filter(p => p.stage === open).map(p => <ProposalThread key={p.id} p={p} />)}</div>}
           <div><h3>{s.name}.in</h3><pre>{s.mdin}</pre>
             <div className="dim">restarts from {s.restart_from || "initial coordinates"} · {s.role === "minimization" ? `seed ${s.realized_seed ?? "n/a"} (unused by minimization)` : `requested ig=${s.requested_seed ?? "unset (pmemd default -1)"} → realized seed ${s.realized_seed ?? "n/a"}`} · wall {s.wall_s ?? "?"} s · {s.finished ? "finished" : "not finished"}{s.envelope?.crashes?.length ? ` · crashes: ${s.envelope.crashes.join(", ")}` : ""}</div></div>
           <div><h3>Validation</h3><ul className="findings">{r.findings.map((f, i) => <li key={i}><span className={`badge ${f.level.toLowerCase()}`}>{f.level}</span> <b>{f.rule}</b> — {f.detail}</li>)}</ul></div>
@@ -765,7 +841,7 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
       {proposals.length === 0 && context !== "run" && <button className="ghost" onClick={draftProposal}>Try it: draft a proposal, then press Call</button>}
       {/* This run's proposals live on the page as pinned comments; the panel only points at them. Other runs' proposals are listed in full so nothing waits unseen. */}
       {(() => { const here = proposals.filter(p => p.run === currentRun); const pend = here.filter(p => p.status === "pending"); const stages = [...new Set(here.map(p => p.stage))];
-        return here.length ? <p className="pinned-summary">{pend.length ? <b>{pend.length} awaiting your approval</b> : <span>{here.length} reviewed</span>} on this run — pinned at {stages.map((st, i) => <span key={st}>{i > 0 ? ", " : ""}<button className="linklike" onClick={() => set({ openStage: st })}>{st}</button></span>)}.</p> : null; })()}
+        return here.length ? <><p className="pinned-summary">{pend.length ? <b>{pend.length} awaiting your approval</b> : <span>{here.length} reviewed</span>} on this run — pinned at {stages.map((st, i) => <span key={st}>{i > 0 ? ", " : ""}<button className="linklike" onClick={() => set({ openStage: st })}>{st}</button></span>)}.</p>{here.map(p => <UndoLine key={p.id} p={p} compact />)}</> : null; })()}
       {proposals.filter(p => p.run !== currentRun).map(p => <ProposalThread key={p.id} p={p} compact />)}
     </details>
     {/* What the agent just did, announced to screen readers; the visible log is below. */}
