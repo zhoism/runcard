@@ -89,7 +89,8 @@ the top of each page instead of a paragraph.
 previous look, like `theme.css` and `amber.css` before it. Markup changes in `src/App.tsx` and the new
 `src/Spread.tsx`:
 
-- Instrument Serif (400, italic) for h1, project headlines, section labels and the headline ΔG; Inter for
+- Newsreader (400/500, italic; Instrument Serif until 2026-09-02, dropped because its condensed proportions read as
+  vertically stretched at headline size) for h1, project headlines, section labels and the headline ΔG; Inter for
   the rest; JetBrains Mono for machine text. Three faces, which overrides the designer's two-font ruling;
   the user asked for the reference look and this is what it is made of.
 - Kickers are sentence case at 13.5 px, never uppercase tracking — the user's own rule stands.

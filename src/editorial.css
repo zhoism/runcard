@@ -11,7 +11,7 @@
   --line: #e4e6ea; --navy: #1e3a5f; --navy-2: #162c49; --blue: #2b62a3; --tint: #edf1f7;
   --pass: #2a734a; --warn: #8f5f12; --fail: #c0392b;
   --pass-bg: #e7f3ec; --warn-bg: #fdf3dd; --fail-bg: #fae9e6; --chip-bg: #eceef1;
-  --serif: "Instrument Serif", "Iowan Old Style", "Times New Roman", serif;
+  --serif: "Newsreader", "Iowan Old Style", "Times New Roman", serif;
   --sans: "Inter", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   --z-header: 100; --viewer-bg: #eef1f4; --header-h: 60px; --radius: 14px;
@@ -34,7 +34,7 @@ aside { grid-area: s; padding: 32px 36px 72px 8px; min-width: 0; position: stick
 
 /* top bar: white, a hairline, the brand and one pill that says what an agent gets here */
 header { grid-area: h; position: sticky; top: 0; z-index: var(--z-header); background: rgba(255, 255, 255, .92); backdrop-filter: blur(8px); color: var(--ink); display: flex; align-items: center; gap: 16px; padding: 0 44px; min-height: var(--header-h); border-bottom: 1px solid var(--line); }
-.brand { display: inline-flex; align-items: center; gap: 9px; font-family: var(--serif); font-weight: 400; font-size: 25px; letter-spacing: -0.01em; color: var(--ink); line-height: 1; }
+.brand { display: inline-flex; align-items: center; gap: 9px; font-family: var(--serif); font-optical-sizing: auto; font-weight: 500; font-size: 24px; letter-spacing: -0.01em; color: var(--ink); line-height: 1; }
 .brand .mark { width: 19px; height: 19px; flex: none; color: var(--navy); } .brand:hover { text-decoration: none; color: var(--navy); }
 .top-nav { display: flex; align-items: center; gap: 20px; margin-left: 12px; font-size: 14.5px; }
 .top-nav a { color: var(--ink-2); }
@@ -50,7 +50,7 @@ a.webmcp:hover { text-decoration: none; border-color: var(--navy); color: var(--
 @media (max-width: 560px) { .top-nav { display: none; } }
 
 /* type: a serif display face for what a person reads first, Inter for the rest, mono for machine text */
-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(34px, 4.2vw, 48px); line-height: 1.05; letter-spacing: -0.012em; margin: 0 0 12px; color: var(--ink); }
+h1 { font-family: var(--serif); font-optical-sizing: auto; font-weight: 400; font-size: clamp(32px, 3.8vw, 44px); line-height: 1.08; letter-spacing: -0.015em; margin: 0 0 12px; color: var(--ink); }
 h1 em, h2.headline em, .section-label em, aside .agent h2 em { font-style: italic; color: var(--navy); }
 h1 a { color: var(--ink); } h1 a:hover { color: var(--navy); text-decoration: none; }
 h1 .dim, h1 .handle { font-family: var(--mono); font-size: 15px; letter-spacing: 0; vertical-align: middle; color: var(--muted); }
@@ -59,10 +59,10 @@ h1 .dim, h1 .handle { font-family: var(--mono); font-size: 15px; letter-spacing:
 h2 { font-size: 13.5px; font-weight: 600; color: var(--muted); margin: 0 0 12px; letter-spacing: .01em; line-height: 1.5; }
 h2 .dim { display: block; font-weight: 400; font-size: 14px; color: var(--muted); margin-top: 2px; letter-spacing: 0; }
 h2 .badge { margin-left: 8px; margin-right: 8px; vertical-align: 1px; }
-h2.headline { font-family: var(--serif); font-weight: 400; font-size: clamp(26px, 2.6vw, 32px); line-height: 1.1; color: var(--ink); letter-spacing: -0.01em; margin: 0 0 8px; }
+h2.headline { font-family: var(--serif); font-optical-sizing: auto; font-weight: 400; font-size: clamp(25px, 2.4vw, 30px); line-height: 1.12; color: var(--ink); letter-spacing: -0.01em; margin: 0 0 8px; }
 h2.headline a { color: var(--ink); } h2.headline a:hover { color: var(--navy); text-decoration: none; }
 h3 { font-weight: 600; font-size: 15.5px; margin: 12px 0 6px; color: var(--ink); }
-.section-label { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 28px; color: var(--ink); margin: 44px 0 14px; letter-spacing: -0.005em; line-height: 1.1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.section-label { font-family: var(--serif); font-optical-sizing: auto; font-style: italic; font-weight: 400; font-size: 26px; color: var(--ink); margin: 44px 0 14px; letter-spacing: -0.005em; line-height: 1.1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .section-label:first-of-type { margin-top: 34px; }
 .section-label .badge { font-family: var(--sans); font-style: normal; margin-left: 0; }
 .lede { color: var(--ink-2); font-size: 17px; max-width: 62ch; margin: 0 0 26px; line-height: 1.5; }
@@ -290,7 +290,7 @@ pre.out { max-height: 280px; } pre.small { font-size: 13px; }
 .findings b { font-weight: 600; }
 
 /* the headline number: set in the display face, at a size the layout can hold */
-.big { font-family: var(--serif); font-size: 36px; font-weight: 400; letter-spacing: -0.01em; margin: 2px 0 6px; font-variant-numeric: tabular-nums; color: var(--navy); line-height: 1.15; }
+.big { font-family: var(--serif); font-optical-sizing: auto; font-size: 34px; font-weight: 500; letter-spacing: -0.01em; margin: 2px 0 6px; font-variant-numeric: tabular-nums; color: var(--navy); line-height: 1.15; }
 .unit { font-family: var(--sans); font-size: 15px; color: var(--muted); font-weight: 400; letter-spacing: 0; }
 .big .badge { vertical-align: 8px; font-family: var(--sans); }
 
@@ -364,7 +364,7 @@ aside .card { margin-bottom: 16px; }
 aside .card h2 { margin-bottom: 8px; }
 aside p { margin: 6px 0 10px; }
 aside .agent { background: var(--tint); box-shadow: none; }
-aside .agent > h2 { font-family: var(--serif); font-weight: 400; font-size: 27px; line-height: 1.1; color: var(--ink); letter-spacing: -0.01em; margin: 0 0 8px; }
+aside .agent > h2 { font-family: var(--serif); font-optical-sizing: auto; font-weight: 400; font-size: 25px; line-height: 1.1; color: var(--ink); letter-spacing: -0.01em; margin: 0 0 8px; }
 aside .agent > h2 .dim { display: block; font-family: var(--sans); font-size: 13.5px; margin-top: 6px; }
 aside .agent .kicker { margin-bottom: 8px; }
 aside .agent .row.wrap { margin: 4px 0 2px; }
