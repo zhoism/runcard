@@ -497,6 +497,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   const mm = m.results.mmgbsa; const prod = m.stages.find(s => s.role === "production");
   const reports = Object.fromEntries(m.stages.map(s => [s.name, validateStage(m, s.name)]));
   const overall = verdictOf({ hasFail: Object.values(reports).some(r => r.hasFail), hasWarn: Object.values(reports).some(r => r.hasWarn) });
+  const stageLegend = "Dots show input-check status: pass, needs attention, fail.";
   const others = idx.filter(r => r.id !== id);
   const netCharge = m.system.ligand.net_charge;
   const u = mm?.per_frame ? uncertaintyFromFrames(mm.per_frame, prod?.length_ps ?? null) : null;
@@ -586,16 +587,16 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
 
       <h2 className="section-label">how it was produced</h2>
       <div className="card">
-        <h2>Stages <span className={`badge ${overall.toLowerCase()}`}>input checks {overall}</span></h2>
+        <h2>Stages <span className={`badge ${overall.toLowerCase()}`} title={stageLegend}>input checks {overall}</span></h2>
         <p className="dim small">11 rules on each .in file (timestep vs SHAKE, cutoff, thermostat, barostat, restarts, seeds, output cadence): a sanity check of the input files, not evidence of convergence or physical accuracy and not a rung of the confidence ladder — select a stage for its input and findings.</p>
         {/* Each stage is a native disclosure button: Tab reaches it, Enter/Space toggle it, aria-expanded carries the state. The arrow is decoration. */}
-        <div className="stages">{m.stages.map((s, i) => <div key={s.name} className={`stage ${open === s.name ? "open" : ""}`}>
+        <div className="stages">{m.stages.map((s, i) => { const stageVerdict = verdictOf(reports[s.name]); const stageStatus = stageVerdict === "WARN" ? "needs attention" : stageVerdict.toLowerCase(); return <div key={s.name} className={`stage ${open === s.name ? "open" : ""}`}>
           {i > 0 && <span className="arrow" aria-hidden="true">→</span>}
-          <button type="button" className="stagebox" id={`stage-${s.name}`} aria-expanded={open === s.name} aria-controls={open === s.name ? "stagedetail" : undefined} onClick={() => setOpen(open === s.name ? null : s.name)}>
+          <button type="button" className="stagebox" id={`stage-${s.name}`} title={`${s.name} input checks: ${stageStatus}. ${stageLegend}`} aria-expanded={open === s.name} aria-controls={open === s.name ? "stagedetail" : undefined} onClick={() => setOpen(open === s.name ? null : s.name)}>
             <span className="stagename">{s.name}</span><span className="dim">{s.role}{s.length_ps != null ? ` · ${s.length_ps} ps` : ""}</span>
             <span className="dim">{s.cntrl.temp0 ? `${s.cntrl.temp0} K` : ""}{s.role === "minimization" ? "" : s.cntrl.ntp === "1" ? " NPT" : s.cntrl.ntb === "1" ? " NVT" : ""}{s.cntrl.ntr === "1" ? " restrained" : ""}</span>
-            {verdictOf(reports[s.name]) !== overall || overall !== "PASS" ? <Verdict r={reports[s.name]} /> : null}</button>
-          <ProposalPin proposals={runProposals.filter(p => p.stage === s.name)} onOpen={() => setOpen(s.name)} /></div>)}</div>
+            {stageVerdict !== overall || overall !== "PASS" ? <Verdict r={reports[s.name]} /> : null}</button>
+          <ProposalPin proposals={runProposals.filter(p => p.stage === s.name)} onOpen={() => setOpen(s.name)} /></div>; })}</div>
         {open && (() => { const s = m.stages.find(x => x.name === open)!; const r = reports[open]; return <div className="stagedetail" id="stagedetail" role="region" aria-labelledby={`stage-${open}`}>
           {runProposals.some(p => p.stage === open) && <div className="threads" id={`threads-${open}`}>{runProposals.filter(p => p.stage === open).map(p => <ProposalThread key={p.id} p={p} />)}</div>}
           <div><h3>{s.name}.in</h3><pre>{s.mdin}</pre>
