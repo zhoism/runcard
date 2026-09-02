@@ -170,6 +170,15 @@ details.card.proposals[open] > summary { margin-bottom: 10px; }
 .compare-pair { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-top: 12px; font-size: 14.5px; }
 .compare-pair select { width: auto; max-width: min(320px, 100%); background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-family: var(--sans); font-size: 14px; }
 .compare-pair button { font-size: 14px; padding: 6px 14px; }
+.compare-start-page { max-width: 980px; }
+.compare-start { max-width: 900px; padding: 28px; }
+.compare-fields { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px 16px; align-items: end; }
+.compare-fields label { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: var(--ink-2); font-size: 14.5px; font-weight: 600; }
+.compare-fields select { width: 100%; min-width: 0; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-family: var(--sans); font-size: 14px; }
+.compare-fields select:focus { outline: none; border-color: var(--blue); }
+.compare-with { color: var(--muted); font-size: 14px; padding-bottom: 10px; }
+.compare-start > button { margin-top: 20px; }
+@media (max-width: 600px) { .compare-start { padding: 20px 18px; } .compare-fields { grid-template-columns: 1fr; gap: 12px; } .compare-with { display: none; } .compare-start > button { width: 100%; } }
 
 /* fork network: the parent, a rail, the forks hanging off it */
 .network .tree { margin: 4px 0 14px; }

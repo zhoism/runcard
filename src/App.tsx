@@ -41,6 +41,7 @@ export default function App() {
         {idxErr && <div className="interp warn" role="alert">{idxErr} — reload the page to try again.</div>}
         <Boundary label="Page">{parts[0] === "run" && parts[1] ? <RunPage key={parts[1]} id={parts[1]} idx={idx} own={own} /> :
          parts[0] === "compare" && parts[2] ? <ComparePage a={parts[1]} b={parts[2]} idx={idx} /> :
+         parts[0] === "compare" ? <CompareStart idx={idx} /> :
          parts[0] === "p" && parts[1] ? <ProjectPage key={parts[1]} slug={decodeURIComponent(parts[1])} idx={idx} own={own} /> :
          parts[0] === "u" && parts[1] ? <Profile key={parts[1]} handle={decodeURIComponent(parts[1])} idx={idx} own={own} /> :
          <Home idx={idx} own={own} />}</Boundary>
@@ -165,6 +166,40 @@ function ComparePair({ runs }: { runs: IndexEntry[] }) {
     <select value={b} aria-label="second run" onChange={e => setB(e.target.value)}><option value="">select second run…</option>{runs.filter(r => r.id !== a).map(r => <option key={r.id} value={r.id}>{label(r)}</option>)}</select>
     <button type="button" disabled={!a || !b} onClick={() => navigate(`/compare/${a}/${b}`)}>Compare</button>
   </div>;
+}
+
+/** A neutral compare entry point for the header: pick any two run records, grouped by their prepared-system project. */
+function CompareStart({ idx }: { idx: IndexEntry[] }) {
+  const [a, setA] = useState("");
+  const [b, setB] = useState("");
+  useEffect(() => {
+    if (!idx.length || a) return;
+    const primary = [...cohorts(idx)].sort((x, y) => y.n - x.n)[0];
+    const first = primary?.start_here ?? idx[0].id;
+    const second = primary?.runs.find(r => r.id !== first)?.id ?? idx.find(r => r.id !== first)?.id ?? "";
+    setA(first); setB(second);
+  }, [idx, a]);
+  useEffect(() => { document.title = "compare runs · runcard"; }, []);
+  const pickA = (next: string) => {
+    setA(next);
+    if (!b || b === next) setB(idx.find(r => r.id !== next)?.id ?? "");
+  };
+  const label = (r: IndexEntry) => `${r.id} · ${r.owner ?? "—"} · ${r.engine} · ${r.production_ps} ps`;
+  const options = (exclude: string) => cohorts(idx).map(c => <optgroup key={c.key} label={c.title}>{c.runs.filter(r => r.id !== exclude).map(r => <option key={r.id} value={r.id}>{label(r)}</option>)}</optgroup>);
+  return <section className="compare-start-page">
+    <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span><span>compare</span></nav>
+    <p className="kicker">Run comparison</p>
+    <h1>Compare two <em>runs</em></h1>
+    <p className="lede">Choose two run records. runcard first checks whether they share a prepared system, then separates material protocol changes from sampling and output differences.</p>
+    {!idx.length ? <p className="dim" role="status">loading runs…</p> : <div className="card compare-start" role="group" aria-label="choose two runs to compare">
+      <div className="compare-fields">
+        <label><span>First run</span><select aria-label="first run" value={a} onChange={e => pickA(e.target.value)}>{options("")}</select></label>
+        <span className="compare-with" aria-hidden="true">with</span>
+        <label><span>Second run</span><select aria-label="second run" value={b} onChange={e => setB(e.target.value)}>{options(a)}</select></label>
+      </div>
+      <button type="button" className="primary" disabled={!a || !b || a === b} onClick={() => navigate(`/compare/${a}/${b}`)}>Compare</button>
+    </div>}
+  </section>;
 }
 
 /** The project page: a prepared system is the repository and its runs are the commits. Everything here is read from the
@@ -726,7 +761,7 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
           the console is you picking. Both go through callTool, so the activity log below records them identically. */}
       <div className="row wrap">
         {context === "site"
-          ? <button className="primary" onClick={async () => { try { setOut(await callTool("list_runs", {}, "console")); } catch (e: any) { setOut(String(e)); } }}>What is on this site?</button>
+          ? <button className={route === "/compare" ? undefined : "primary"} onClick={async () => { try { setOut(await callTool("list_runs", {}, "console")); } catch (e: any) { setOut(String(e)); } }}>What is on this site?</button>
           : <button className="primary" disabled={!target} onClick={async () => { try { setOut(await callTool("investigate_run", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Investigate {target}</button>}
         {context === "project" && projectNet && <button className="ghost" onClick={async () => { try { setOut(await callTool("fork_network", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Check the forks</button>}
         {context === "run" && !allProposals.some(p => p.run === currentRun) && <button className="ghost" onClick={draftProposal} title="Prefills propose_change below; you press Call, then Approve or Reject on the thread pinned to the stage">Draft a proposal</button>}
