@@ -8,6 +8,7 @@ import { analysisInfo, ANALYSIS_CATEGORIES, type AnalysisCategory } from "./lib/
 import { describeSystem } from "./lib/systemCatalog";
 import { TOOLS, callTool } from "./webmcp";
 import { Viewer, Boundary } from "./Viewer";
+import { Spread } from "./Spread";
 import type { InvestigationState } from "./lib/investigation";
 
 /** "run_id=1l2y-regression stage=product" — the call's arguments, readable at a glance. */
@@ -64,10 +65,10 @@ function Header() {
   return (
     <header>
       <a href="#/" className="brand"><Mark />runcard</a>
-      <span className="tag">validated simulation records</span>
-      {st === "registered" ? <span className="webmcp registered" title="Tools registered with navigator.modelContext">WebMCP: registered · {TOOLS.length} tools</span>
-       : st === "error" ? <span className="webmcp error" title="registerTool threw; see console">WebMCP: registration failed</span>
-       : <a className="webmcp" href="#tool-console" onClick={e => { e.preventDefault(); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} title="This browser does not expose WebMCP. Chrome: chrome://flags/#enable-webmcp-testing. The Tool Console calls the same tools by hand.">no WebMCP here — use the Tool Console ↓</a>}
+      {/* One pill says what an agent gets here. Green: registered with navigator.modelContext. Amber: this browser does not expose WebMCP; the pill leads to the console, which calls the same table by hand. */}
+      {st === "registered" ? <span className="webmcp registered" title="Registered with navigator.modelContext — an agent in this browser can call every tool on this page">WebMCP · {TOOLS.length} tools</span>
+       : st === "error" ? <span className="webmcp error" title="registerTool threw; see the browser console">WebMCP · registration failed</span>
+       : <a className="webmcp" href="#tool-console" onClick={e => { e.preventDefault(); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} title="This browser does not expose WebMCP. Chrome 149+: chrome://flags/#enable-webmcp-testing, then reload. The console on this page calls the same tools by hand.">WebMCP · {TOOLS.length} tools <span className="dim">· not exposed here</span></a>}
     </header>
   );
 }
@@ -94,11 +95,17 @@ function ProjectCard({ c, idx, own, rows, handle }: { c: Cohort; idx: IndexEntry
   const span = `${c.lengths_ps[0]}–${c.lengths_ps[c.lengths_ps.length - 1]} ps`;
   const nameOf = (h: string) => own?.profiles[h]?.name ?? h;
   const st = p.network?.status;
+  const ringId = p.network?.parent.id ?? c.start_here;
   return <section className="cohort">
-    <h2><a href={`#/p/${c.slug}`}>{c.title}</a>{sys && <span className="dim"> — {sys.name}</span>}{st && st !== "none" && <span className={`badge ${st === "agree" ? "pass" : st === "tension" ? "warn" : ""}`}>{st === "agree" ? "forks agree" : st === "tension" ? "forks in tension" : "forks: sign only"}</span>}</h2>
+    {/* Kicker: the system's code name and the fork status. Headline: what it is, in words. Then the spread, the object a reader can see at once. */}
+    <p className="kicker">{sys ? <span className="mono">{c.title}</span> : <span>project</span>}{st && st !== "none" && <span className={`badge ${st === "agree" ? "pass" : st === "tension" ? "warn" : ""}`}>{st === "agree" ? "forks agree" : st === "tension" ? "forks in tension" : "forks: sign only"}</span>}</p>
+    <h2 className="headline"><a href={`#/p/${c.slug}`}>{sys?.name ?? c.title}</a></h2>
     <p className="cohort-desc">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and protocol run ${c.n} times with fresh seeds, ${span}.` : "One run so far."}</p>
-    <CountsLine c={c} p={p} own={own} />
-    <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{c.sd != null ? ` · ± is the observed run-to-run spread across the ${c.n} runs` : " · one run, so no run-to-run spread yet"}</span></p>
+    <Spread runs={c.runs} mean={c.mean} sd={c.sd} own={own} ringId={ringId} ringWhy={p.network ? "the parent of the forks" : "the longest run"} />
+    <div className="meta-row">
+      <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{c.sd != null ? "" : " · one run, so no run-to-run spread yet"}</span></p>
+      <CountsLine c={c} p={p} own={own} />
+    </div>
     <div className="cohort-actions">
       <a className="btn" href={`#/p/${c.slug}`}>Open project →</a>
       <a className="btn ghost" href={`#/run/${p.start.id}`}>Longest run <span className="dim">{p.start.id} · {p.start.production_ps} ps</span></a>
@@ -119,8 +126,8 @@ function Home({ idx, own }: { idx: IndexEntry[]; own: Owners | null }) {
   const cs = cohorts(idx); const handles = ownerHandles(idx);
   const nameOf = (h: string) => own?.profiles[h]?.name ?? h;
   return <section>
-    <h1>Projects</h1>
-    <p className="lede">Prepared molecular systems on runcard. Each holds its runs, their spread, its forks, and the evidence behind the number.</p>
+    <h1>Validated records of <em>molecular simulations</em></h1>
+    <p className="lede">A project is one prepared system. Its runs are the commits, a fork is a rerun with lineage, and every number on the page traces to a file in the run directory. An agent reads the same page through WebMCP; a person approves every change.</p>
     {!idx.length && <p className="dim" role="status">loading runs…</p>}
     {cs.map(c => <ProjectCard key={c.key} c={c} idx={idx} own={own} />)}
     {handles.length > 0 && <p className="people">People on runcard: {handles.map((h, i) => { const o = ownerStats(idx, h); return <span key={h}>{i ? " · " : ""}<a href={`#/u/${h}`}>{nameOf(h)}</a> <span className="dim">@{h} · {o.runs} {plural(o.runs, "run")}{o.forks_from_others > 0 ? `, forks of ${o.forked_from.map(nameOf).join(", ")}'s` : ""}</span></span>; })}</p>}
@@ -177,10 +184,24 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
   const netCls = p.network ? (p.network.status === "agree" ? "pass" : p.network.status === "tension" ? "warn" : "") : "";
   return <section className="project">
     <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span><span>{c.title}</span></nav>
-    <div className="titlebar"><h1>{c.title}</h1>{sys && <span className="dim sans">{sys.name}</span>}
+    <div className="titlebar"><h1>{sys?.name ?? c.title}</h1>{sys && <span className="dim">{c.title}</span>}
       {p.network && <a className={`badge fork ${netCls}`} href={`#network-${p.network.parent.id}`}>{p.network.n} forks · {p.network.status === "agree" ? "agree" : p.network.status === "tension" ? "in tension" : "sign only"}</a>}</div>
     <p className="lede">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and protocol run ${c.n} times with fresh seeds, ${span}.` : "One run so far."}</p>
     <CountsLine c={c} p={p} own={own} />
+
+    <div className="card">
+        <h2>Ensemble result <span className="dim">MM-GBSA ΔG across the runs</span></h2>
+        <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">{c.sd != null ? `run-to-run SD, n=${c.n}` : "one run, no spread yet"}</span></p>
+        <Spread runs={c.runs} mean={c.mean} sd={c.sd} own={own} ringId={p.network?.parent.id ?? c.start_here} ringWhy={p.network ? "the parent of the forks" : "the longest run"} />
+        {ens.all.n > 1 && <dl className="facts">
+          <dt>all runs</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}</dd>
+          {ens.long.n > 0 && ens.long.n < ens.all.n && <><dt>≥ {ens.long.min_ps} ps</dt><dd><b>n={ens.long.n}</b>: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</dd></>}
+        </dl>}
+        {c.sd != null && <p className="dim small">The ± is the observed run-to-run spread across {c.n} comparable runs with different seeds and lengths{p.engines.length > 1 ? ` and ${p.engines.length} disclosed engines` : ""}: an empirical spread, not pure seed noise{p.external_forks ? ` — the ${p.external_forks} external forks changed engine and seed together` : ""}.</p>}
+        <p className="dim small">{signClaim(ens.all)}</p>
+    </div>
+
+    {p.network && <ForkCallout net={p.network} detailHref={`#network-${p.network.parent.id}`} onReplicate={m ? () => forkKinds(m, ens).find(k => k.id === "replicate")?.run() : undefined} />}
 
     <div className="grid2">
       <div className="card">
@@ -193,25 +214,12 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
         <p className="dim small">Every run here shares all of the above; seeds, lengths{p.engines.length > 1 ? " and engines" : ""} differ.</p>
       </div>
       <div className="card">
-        <h2>Ensemble result <span className="dim">MM-GBSA ΔG across the runs</span></h2>
-        <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">{c.sd != null ? `run-to-run SD, n=${c.n}` : "one run, no spread yet"}</span></p>
-        {ens.all.n > 1 && <dl className="facts">
-          <dt>all runs</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}</dd>
-          {ens.long.n > 0 && ens.long.n < ens.all.n && <><dt>≥ {ens.long.min_ps} ps</dt><dd><b>n={ens.long.n}</b>: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</dd></>}
-        </dl>}
-        {c.sd != null && <p className="dim small">The ± is the observed run-to-run spread across {c.n} comparable runs with different seeds and lengths{p.engines.length > 1 ? ` and ${p.engines.length} disclosed engines` : ""}: an empirical spread, not pure seed noise{p.external_forks ? ` — the ${p.external_forks} external forks changed engine and seed together` : ""}.</p>}
-        <p className="dim small">{signClaim(ens.all)}</p>
+        <h2>Confidence <span className="dim">for the longest run, {start.id} — the ladder is computed per run</span></h2>
+        {ladder ? <>
+          <p><b>{ladder.verified_of_assessable} assessed rungs verified.</b> <a href={`#/run/${start.id}`}>Open its ladder and evidence →</a></p>
+          <ol className="ladder compact">{ladder.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><span className="dim mono">{i + 1}.</span> <span className={`badge ${rungCls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span></li>)}</ol>
+        </> : err ? <p className="dim">{err}</p> : <p className="dim" role="status">loading {start.id}…</p>}
       </div>
-    </div>
-
-    {p.network && <ForkCallout net={p.network} detailHref={`#network-${p.network.parent.id}`} onReplicate={m ? () => forkKinds(m, ens).find(k => k.id === "replicate")?.run() : undefined} />}
-
-    <div className="card">
-      <h2>Confidence <span className="dim">for the longest run, {start.id} — the ladder is computed per run</span></h2>
-      {ladder ? <>
-        <p><b>{ladder.verified_of_assessable} assessed rungs verified.</b> <a href={`#/run/${start.id}`}>Open its ladder and evidence →</a></p>
-        <ol className="ladder compact">{ladder.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><span className="dim mono">{i + 1}.</span> <span className={`badge ${rungCls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span></li>)}</ol>
-      </> : err ? <p className="dim">{err}</p> : <p className="dim" role="status">loading {start.id}…</p>}
     </div>
 
     <div className="card">
@@ -280,7 +288,7 @@ function ProposalPin({ proposals, onOpen }: { proposals: Proposal[]; onOpen: () 
 function ProposalThread({ p, compact }: { p: Proposal; compact?: boolean }) {
   const when = p.t ? new Date(p.t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
   return <div className={`thread ${p.status}`}>
-    <div className="thread-who"><span className="pin-glyph inline" aria-hidden="true">✦</span> <b>{p.source === "webmcp" ? "agent proposal" : "proposal"}</b> {p.source && <Source source={p.source} />}{when && <span className="dim"> · {when}</span>}{compact && <span className="dim"> · <b>{p.run}</b> / {p.stage}</span>}{p.fork && <span className="dim"> · fork: {p.fork.kind}</span>}<span className={`badge ${p.status}`}>{p.status}</span></div>
+    <div className="thread-who"><span className={`chip ${p.source === "webmcp" ? "agent" : ""}`}>{p.source === "webmcp" ? "agent proposal" : "proposal"}</span> {p.source && <Source source={p.source} />}{when && <span className="dim"> · {when}</span>}{compact && <span className="dim"> · <b>{p.run}</b> / {p.stage}</span>}{p.fork && <span className="dim"> · fork: {p.fork.kind}</span>}<span className={`badge ${p.status}`}>{p.status}</span></div>
     <p className="thread-ask">{p.reason}</p>
     <div className="thread-diff mono">{(p.changes ?? []).length ? p.changes.map(c => <div key={c.key}><span className="k">{c.key}</span> <s className="old">{c.before ?? "(unset)"}</s> <span className="new">{c.after}</span>{c.meaning && <span className="dim sans"> — {c.meaning}{c.material ? "" : " · not material"}</span>}</div>) : Object.entries(p.edits).map(([k, v]) => <div key={k}><span className="k">{k}</span> <span className="new">{v}</span></div>)}</div>
     <div className="thread-check">{p.material_classes?.length ? <span className="badge warn">material · {p.material_classes.map(c => c.replace("_", " ")).join(", ")}</span> : null} validation after <Verdict r={p.after} />{p.after.findings.filter(f => f.level !== "PASS").map((f, i) => <div key={i} className="dim small">{f.level}: {f.rule} — {f.detail}</div>)}</div>
@@ -458,7 +466,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   return (
     <section className="run">
       <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span>{(() => { const c = projectOf(idx, id); return c ? <><a href={`#/p/${c.slug}`}>{c.title}</a><span aria-hidden="true">/</span></> : null; })()}<span className="mono">{m.id}</span></nav>
-      <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
+      <div className="titlebar"><h1>{describeSystem(m.title, m.system.ligand.resname ?? "")?.name ?? m.title}</h1><span className="dim">{m.id}</span>
         {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {qualified(idx, m.parent)}</a>}
         <ForkMenu m={m} ens={ens} />
         {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks{(() => { const by = [...new Set(net.forks.map(f => f.owner).filter(o => o && o !== net.parent.owner))]; return by.length ? ` by ${by.join(", ")}` : ""; })()} · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</a>}
@@ -479,6 +487,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
           {mm ? <>
             {/* Headline: this run's ΔG with the uncertainty the page argues for (run-to-run SD), then the rows in order of what matters; the mechanics are one disclosure away. */}
             <div className="big">{fmt(mm.delta_total_kcal_mol)}{spreadSd != null && <> ± {fmt(spreadSd)}</>} <span className="unit">kcal/mol</span>{u && u.verdict !== "no drift detected" && <> <span className="badge warn" title="halves test within the archived window">{u.verdict}</span></>}</div>
+            {mm.per_frame && <Sparkline x={mm.per_frame.delta_total} lengthPs={prod?.length_ps ?? null} window={re ? { start: re.window.start_frame, end: re.window.end_frame } : undefined} />}
             <p className="dim small">{spreadSd != null
               ? <>± is the run-to-run SD over n={ens!.all.n} independent runs at {[...new Set(ens!.all.runs.map(r => r.production_ps))].sort((x, y) => x - y).join(", ")} ps — the uncertainty to quote; the within-run SEM is not.</>
               : u ? <>single run of this system: the within-run corrected SEM below does not estimate run-to-run uncertainty — no spread can be quoted until three independent runs exist.</> : null}</p>
@@ -489,7 +498,6 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
               {u && <><dt>within run</dt><dd>corrected SEM <b>{fmt(u.corrected_sem, 3)}</b> (g = {u.statistical_inefficiency_g}, N<sub>eff</sub> ≈ {u.n_eff}) · halves {fmt(u.halves.first)} → {fmt(u.halves.second)} · <b>{u.verdict}</b> <span className="dim">(halves test over {prod?.length_ps ?? "?"} ps)</span></dd></>}
               {re && <><dt>current reanalysis</dt><dd>frames {re.window.start_frame}–{re.window.end_frame}{re.window.interval > 1 ? ` every ${re.window.interval}th` : ""} ({re.window.frames_used} frames{re.window.start_ps != null ? `, ${re.window.start_ps}–${re.window.end_ps} ps` : ""}) → <b>{fmt(re.delta_g.mean)} ± {fmt(re.delta_g.corrected_sem)}</b>, {re.delta_g.verdict} <span className="dim">(recomputed in the browser from the archived per-frame energies; ± is the corrected SEM; the archived value above is unchanged)</span></dd></>}
               <dt>method</dt><dd>MM-GBSA igb={mm.igb}, saltcon={mm.saltcon} · computed {mm.run_on}</dd></dl>
-            {mm.per_frame && <Sparkline x={mm.per_frame.delta_total} lengthPs={prod?.length_ps ?? null} window={re ? { start: re.window.start_frame, end: re.window.end_frame } : undefined} />}
             <details className="small"><summary className="dim">how these numbers were computed</summary>
               <p className="dim">Per-frame: population SD {fmt(mm.frame_std)}, naive SEM {fmt(mm.frame_sem, 3)} over {mm.frames} frames (every {mm.params?.interval ?? "?"}th of {mm.params?.endframe ?? "?"}); frames are correlated, so the naive SEM understates the within-run uncertainty.{mm.frames_header_text && mm.frames_header_text !== String(mm.frames) ? ` The mmgbsa.dat header prints "${mm.frames_header_text}" — (endframe−startframe)/interval+1 un-floored; the count here is from the per-frame blocks.` : ""}</p>
               {u && <p className="dim">Corrected SEM = SD·√(g/N) with g = 1 + 2Σ(1−t/N)C(t) (τ = {u.integrated_autocorrelation_time_frames} frames); drift verdict: {u.thresholds.drifting_if}; too short if {u.thresholds.too_short_if}. Reconstructed from the per-frame mdout files; the full window reproduces mmgbsa.dat exactly.</p>}
@@ -661,16 +669,13 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
 function Sidebar({ idx }: { idx: IndexEntry[] }) {
   const allProposals = useStore(s => s.proposals); const calls = useStore(s => s.calls);
   const route = useStore(s => s.route); const webmcp = useStore(s => s.webmcp); const pre = useStore(s => s.console);
-  const [tool, setTool] = useState(TOOLS[0].name); const [input, setInput] = useState("{}"); const [out, setOut] = useState(""); const [touched, setTouched] = useState(false);
-  // Agent-first on run pages: the console opens on Investigate; the 17-tool console is one click away under Developer tools.
-  // Elsewhere there is no run to investigate, so it opens on the tools. The visitor's own choice sticks for the visit.
-  // Agent-first everywhere: the console opens on what an agent would do for the page on screen; the 17-tool console is one click
-  // away under Developer tools. The visitor's own choice sticks for the visit.
+  const [tool, setTool] = useState(TOOLS[0].name); const [input, setInput] = useState("{}"); const [out, setOut] = useState(""); const [dout, setDout] = useState(""); const [touched, setTouched] = useState(false);
+  // One card invites the agent: the action an agent would take for the page on screen, run from the page. The 17-tool
+  // developer console is folded under it (mode "manual" = unfolded); a page button that drafts a call unfolds it.
   const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [pOpen, setPOpen] = useState(false);
-  // A page button can hand the console a drafted call (the human edits and presses Call — the console is the only path).
   const callRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setOut(""); setTouched(true); setMode("manual"); set({ console: null }); setTimeout(() => callRef.current?.focus(), 50); } }, [pre]);
+  useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setDout(""); setTouched(true); setMode("manual"); set({ console: null }); setTimeout(() => callRef.current?.focus(), 50); } }, [pre]);
   // Prefill run_id with the run on screen, so "pick explain_result, press Call" works on a run page.
   // The run on screen: a run page's run, or the first run of a compare page (so Investigate stays scoped there too).
   const currentRun = route.startsWith("/run/") || route.startsWith("/compare/") ? route.split("/")[2] || "" : "";
@@ -684,50 +689,46 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
   const proposals = [...allProposals].sort((a, b) => Number(b.run === currentRun) - Number(a.run === currentRun));
   const prefill = (name: string) => { const props: any = (TOOLS.find(x => x.name === name)!.inputSchema as any).properties ?? {}; return JSON.stringify(currentRun && props.run_id ? { run_id: currentRun } : currentRun && props.run_a ? { run_a: currentRun, run_b: "" } : {}); };
   // On a run page the most useful first call is explain_result for that run — until the human picks a tool themselves.
-  useEffect(() => { if (!touched) { if (target) { setTool(mode === "auto" ? "investigate_run" : "explain_result"); setInput(JSON.stringify({ run_id: target })); } else { setTool("list_runs"); setInput("{}"); } setOut(""); } }, [target, touched, mode]);
+  useEffect(() => { if (!touched) { if (target) { setTool("explain_result"); setInput(JSON.stringify({ run_id: target })); } else { setTool("list_runs"); setInput("{}"); } setDout(""); } }, [target, touched]);
+  useEffect(() => { setOut(""); }, [target]);
   const t = TOOLS.find(x => x.name === tool)!;
   const outIsError = out.startsWith("SyntaxError") || out.startsWith("{\"error\"");
+  const doutIsError = dout.startsWith("SyntaxError") || dout.startsWith("{\"error\"");
+  const pretty = (o: string) => { try { return JSON.stringify(JSON.parse(o), null, 1); } catch { return o; } };
   return <aside>
-    <div className="card" id="tool-console" data-mode={mode} data-run={target} data-context={context}>
-      {mode === "auto"
-        ? (context === "run" ? <h2>Ask runcard about this run <span className="dim">investigate_run on {currentRun} · the same tool an agent would call</span></h2>
-          : context === "project" ? <h2>Investigate this project <span className="dim">investigate_run on its longest run, {target}{projectNet ? "; fork_network for the reruns" : ""}</span></h2>
-          : <h2>Ask what is here <span className="dim">list_runs · the same tool an agent would call</span></h2>)
-        : <h2>Developer tools <span className="dim">the 17 tools an agent sees, called by hand · ✎ = changes page state</span></h2>}
-      {webmcp !== "registered" && <p className="dim small">No agent is connected to this page. In Chrome, enable <code>chrome://flags/#enable-webmcp-testing</code> and reload to let an agent call these tools itself{mode === "auto" ? "; the button below runs the same investigation from the page." : "; or call them by hand here."}</p>}
+    <div className="card agent" id="tool-console" data-mode={mode} data-run={target} data-context={context}>
+      <p className="kicker">your agent is invited</p>
+      {context === "run" ? <h2>Ask about <em>{currentRun}</em> <span className="dim">investigate_run · the same tool an agent would call</span></h2>
+        : context === "project" ? <h2>Investigate this <em>project</em> <span className="dim">investigate_run on its longest run, {target}{projectNet ? "; fork_network for the reruns" : ""}</span></h2>
+        : <h2>What is <em>here</em>? <span className="dim">list_runs · the same tool an agent would call</span></h2>}
+      {webmcp !== "registered" && <p className="dim small">No agent is connected. Chrome 149+ with <code>chrome://flags/#enable-webmcp-testing</code> lets one call these tools itself; the button makes the same call from the page.</p>}
+      {context === "run" && <p className="dim small">Reads the confidence ladder, chases whichever rung is holding this run back with the read-only tools, and recommends one action. It creates nothing: no proposal, no bundle, no changed input.</p>}
+      {context === "project" && <p className="dim small">Investigates the longest run, {target}: its ladder, the rung holding it back, one next action; the page moves to that run to show the trace.{projectNet ? " Check the forks asks whether the reruns from its bundle agree with it." : ""} Neither creates anything.</p>}
+      {context === "site" && <p className="dim small">Choose a project, or ask what is on this site: every run with its owner, project, length and ΔG.</p>}
       {/* Investigate and the developer console call the same table: Investigate is investigate_run, which picks the tools;
           the console is you picking. Both go through callTool, so the activity log below records them identically. */}
-      <div className="mode" role="group" aria-label="console mode">
-        <button className={mode === "auto" ? "" : "ghost"} aria-pressed={mode === "auto"}
-          onClick={() => { setMode("auto"); setTool("investigate_run"); setInput(prefill("investigate_run")); setOut(""); }}>Investigate</button>
-        <button className={mode === "manual" ? "" : "ghost"} aria-pressed={mode === "manual"}
-          onClick={() => { setMode("manual"); setOut(""); }}>Developer tools</button>
+      <div className="row wrap">
+        {context === "site"
+          ? <button onClick={async () => { try { setOut(await callTool("list_runs", {}, "console")); } catch (e: any) { setOut(String(e)); } }}>What is on this site?</button>
+          : <button disabled={!target} onClick={async () => { try { setOut(await callTool("investigate_run", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Investigate {target}</button>}
+        {context === "project" && projectNet && <button className="ghost" onClick={async () => { try { setOut(await callTool("fork_network", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Check the forks</button>}
       </div>
-      {mode === "auto" ? <>
-        {context === "run" && <p className="dim small">Reads the confidence ladder, chases whichever rung is holding this run back with the read-only tools, and recommends one action. It creates nothing: no proposal, no bundle, no changed input.</p>}
-        {context === "project" && <p className="dim small">Investigates the longest run, {target}: its ladder, the rung holding it back, one next action; the page moves to that run to show the trace.{projectNet ? " Check the forks asks whether the reruns from its bundle agree with it." : ""} Neither creates anything.</p>}
-        {context === "site" && <p className="dim small">Choose a project above, or ask what is on this site: every run with its owner, project, length and ΔG.</p>}
-        <div className="row wrap">
-          {context === "site"
-            ? <button ref={callRef} onClick={async () => { try { setOut(await callTool("list_runs", {}, "console")); } catch (e: any) { setOut(String(e)); } }}>What is on this site?</button>
-            : <button ref={callRef} disabled={!target} onClick={async () => { try { setOut(await callTool("investigate_run", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Investigate {target}</button>}
-          {context === "project" && projectNet && <button className="ghost" onClick={async () => { try { setOut(await callTool("fork_network", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Check the forks</button>}
-        </div>
-        <div role="status" aria-live="polite">{out && (outIsError
-          ? <pre className="small out">{out}</pre>
-          : <div className="dim small">{(() => { let v: any = null; try { v = JSON.parse(out); } catch { return null; }
-              if (Array.isArray(v)) return <p>{v.length} runs across {cohorts(idx).length} {plural(cohorts(idx).length, "project")}; each row names its owner. Open a project above to see them grouped.</p>;
-              if (v?.trace) return <p>Trace rendered under <a href="#investigation-title" onClick={e => { e.preventDefault(); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Current investigation ↓</a>.</p>;
-              if (typeof v?.verdict === "string") return <p><b>{v.status === "tension" ? "Forks in tension." : v.status === "agree" ? "Forks agree." : "Forks: sign only."}</b> {v.verdict}</p>;
-              return null; })()}<details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre></details></div>)}</div>
-      </> : <>
+      <div role="status" aria-live="polite">{out && (outIsError
+        ? <pre className="small out">{out}</pre>
+        : <div className="dim small">{(() => { let v: any = null; try { v = JSON.parse(out); } catch { return null; }
+            if (Array.isArray(v)) return <p>{v.length} runs across {cohorts(idx).length} {plural(cohorts(idx).length, "project")}; each row names its owner. Open a project to see them grouped.</p>;
+            if (v?.trace) return <p>Trace rendered under <a href="#investigation-title" onClick={e => { e.preventDefault(); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Current investigation ↓</a>.</p>;
+            if (typeof v?.verdict === "string") return <p><b>{v.status === "tension" ? "Forks in tension." : v.status === "agree" ? "Forks agree." : "Forks: sign only."}</b> {v.verdict}</p>;
+            return null; })()}<details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{pretty(out)}</pre></details></div>)}</div>
+      <details className="devtools" open={mode === "manual"} onToggle={e => setMode((e.target as HTMLDetailsElement).open ? "manual" : "auto")}>
+        <summary>Developer tools <span className="dim">· the {TOOLS.length} tools an agent sees, called by hand · ✎ changes page state</span></summary>
         <select value={tool} aria-label="tool" onChange={e => { setTouched(true); setTool(e.target.value); setInput(prefill(e.target.value)); }}>{TOOLS.map(t => <option key={t.name} value={t.name}>{t.name}{t.readOnly ? "" : " ✎"}</option>)}</select>
         {(() => { const q = t.description.indexOf("? "); const head = q > 0 ? t.description.slice(0, q + 1) : t.description; const rest = q > 0 ? t.description.slice(q + 2) : ""; return <div className="dim small">{head}{rest && <details className="small"><summary className="dim">what it returns</summary><p className="dim">{rest}</p></details>}</div>; })()}
         <div className="dim small mono" id="tool-schema">{JSON.stringify((t.inputSchema as any).properties && Object.fromEntries(Object.entries((t.inputSchema as any).properties).map(([k, v]: any) => [k, v.enum ? v.enum.join("|") : v.type])))}</div>
-        <textarea value={input} onChange={e => { setTouched(true); setInput(e.target.value); }} rows={3} spellCheck={false} aria-label="tool input (JSON)" aria-describedby="tool-schema" aria-invalid={outIsError || undefined} />
-        <button ref={callRef} onClick={async () => { try { setOut(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setOut(String(e)); } }}>Call</button>
-        <div role="status" aria-live="polite">{out && <pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre>}</div>
-      </>}
+        <textarea value={input} onChange={e => { setTouched(true); setInput(e.target.value); }} rows={3} spellCheck={false} aria-label="tool input (JSON)" aria-describedby="tool-schema" aria-invalid={doutIsError || undefined} />
+        <button ref={callRef} onClick={async () => { try { setDout(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setDout(String(e)); } }}>Call</button>
+        <div role="status" aria-live="polite">{dout && <pre className="small out">{pretty(dout)}</pre>}</div>
+      </details>
     </div>
     {/* Collapsed to a count until something needs approval, an agent adds one, or the reader opens it: an empty queue is not news. */}
     <details className="card proposals" open={allProposals.some(p => p.status === "pending") || pOpen} onToggle={e => setPOpen((e.target as HTMLDetailsElement).open)}>

@@ -25,6 +25,16 @@ same evening on the owner's instruction**; the app is back on the navy/bento rep
 interval: the Fork dropdown, the grouped compare picker, the header logo mark, the fixed approved-pin colour.
 Next if time: an activity feed (the call log as a timeline) and an agent-review card on pending proposals.
 
+### The editorial theme (2026-09-01, late — branch `design/editorial`, preview only)
+
+The user judged the report theme against the WebMCP reference sites on Devpost's resources page ("looks like
+hot ass") and asked for their look, built on a branch. `src/editorial.css` replaces `src/report.css` in the
+entry; the markup gains a serif display face with one italic accent, sentence-case kickers, borderless cards,
+a `WebMCP · 17 tools` pill, a tinted "your agent is invited" rail card with the developer console folded
+under it, and `src/Spread.tsx` — one dot per run on the ΔG axis, band = mean ± run-to-run SD — as the object
+home cards and the project page lead with. Rulings in `docs/design/DECISION.md` (late addendum). Master still
+renders the report theme until the user compares the preview and says so.
+
 ### Profiles: the home page has an owner (2026-09-01, evening)
 
 The user, walking the site as a new visitor: "is this really what I'm opening runcard to? Don't we need a home? A profile?"

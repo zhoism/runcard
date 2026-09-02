@@ -76,3 +76,33 @@ semantic colour code and the 13 px text floor carry over; its bento cards and na
 ## 2026-09-01 (later) — reverted
 The redesign adoption (007890a) was reverted on the owner's instruction; the report theme of e365aa6 stands. The
 mockup stays archived for reference. The Fork dropdown, grouped compare picker and logo mark are kept.
+
+## Addendum — 2026-09-01, late: the "editorial" theme (branch `design/editorial`)
+
+The user compared the site against the WebMCP reference sites Devpost points at (captured in
+`docs/design/references-2026-09-01/`) and asked for their look. What those sites share and the report theme
+lacked: one display face with an italic accent word, kicker labels above each block, whitespace instead of
+borders, one accent colour, a `WebMCP · N tools` pill, agent presence on the objects, and a real object at
+the top of each page instead of a paragraph.
+
+`src/editorial.css` is the result, imported by `src/main.tsx`; `src/report.css` stays as the reference for the
+previous look, like `theme.css` and `amber.css` before it. Markup changes in `src/App.tsx` and the new
+`src/Spread.tsx`:
+
+- Instrument Serif (400, italic) for h1, project headlines, section labels and the headline ΔG; Inter for
+  the rest; JetBrains Mono for machine text. Three faces, which overrides the designer's two-font ruling;
+  the user asked for the reference look and this is what it is made of.
+- Kickers are sentence case at 13.5 px, never uppercase tracking — the user's own rule stands.
+- Cards lose their borders; a white surface on an off-white ground with a barely-there ring separates them.
+- The header is white with a hairline; the WebMCP badge is one pill, green when registered, amber when the
+  browser does not expose WebMCP (it still leads to the console).
+- **The spread is an object.** `Spread` draws one dot per run on the ΔG axis, the band is mean ± run-to-run
+  SD, the ring marks the run the page starts from, colours are per owner. Every dot is an index entry; the
+  mean and SD are the cohort's. Home cards and the project page lead with it. The run page puts the
+  per-frame trace directly under the number.
+- The agent rail is one tinted card — "your agent is invited", the Investigate button — with the 17-tool
+  developer console folded beneath it (`details.devtools`; a page button that drafts a call unfolds it).
+- Proposal threads carry an `agent proposal` chip instead of a glyph.
+
+Rules that still bind: one primary per page, no repeated facts, no oversized numbers, nothing under 13 px,
+sentence case.
