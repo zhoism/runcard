@@ -275,7 +275,12 @@ figure { margin: 0; } figure img { width: 100%; border: 1px solid var(--line); b
 figcaption { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-top: 4px; }
 .analysis figcaption { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; font-family: var(--sans); font-size: 14.5px; margin: 0 0 6px; color: var(--ink); }
 .analysis figcaption .dim { font-size: 13px; }
-.analysis p { margin: 6px 0 0; line-height: 1.45; }
+/* the key under the gallery reuses the site's two-column dl; only the tone and spacing differ */
+.plots-key { margin-top: 12px; } .plots-key > summary { color: var(--muted); }
+.plots-key dl { margin-top: 8px; font-size: 14.5px; } .plots-key dt, .plots-key dd { padding-top: 5px; padding-bottom: 5px; line-height: 1.45; }
+.plots-key dt { color: var(--ink); font-weight: 600; padding-right: 20px; } .plots-key dd { color: var(--muted); }
+.plots-key dl > div:last-child dt, .plots-key dl > div:last-child dd { border-bottom: 0; }
+@media (max-width: 600px) { .plots-key dl { grid-template-columns: 1fr; } .plots-key dt { border-bottom: 0; padding-bottom: 0; } }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
 .pill .count { margin-left: 6px; opacity: .7; font-weight: 500; }
 img { max-width: 100%; }
