@@ -122,7 +122,7 @@ export function ensemble(idx: IndexEntry[], id: string) {
 /** "all 9 runs give ΔG < 0" / "7 of 9" / "none" — computed, never assumed. `label` names the stratum when it is empty ("no runs ≥ 10 ps of this system"). */
 export function signClaim(st: Stratum, label = ""): string {
   if (st.n === 0) return `no runs${label ? ` ${label}` : ""} of this system`;
-  const range = st.n === 1 ? `ΔG = ${st.min} kcal/mol` : `range ${st.min} to ${st.max} kcal/mol`;
+  const range = st.n === 1 ? `ΔG = ${st.min!.toFixed(2)} kcal/mol` : `range ${st.min!.toFixed(2)} to ${st.max!.toFixed(2)} kcal/mol`;
   const ps = st.runs.map(r => r.production_ps).filter(x => x != null); const psRange = ps.length ? `${Math.min(...ps)}–${Math.max(...ps)} ps` : "";
   const pinned = st.sd != null ? `; the observed run-to-run SD is ±${st.sd.toFixed(1)} kcal/mol in this short, mixed-length ensemble (${psRange}; range width ${(st.max! - st.min!).toFixed(1)}; seeds and lengths differ, and engines where disclosed) — a spread, not a converged uncertainty` : "";
   if (st.negative === st.n) return `${st.n === 1 ? "The single run gives" : `All ${st.n} independent runs give`} ΔG < 0 (${range}); ${st.n >= 3 ? `the sign is robust to seed variation${pinned}` : "the sign is not yet established (n < 3)"}.`;
@@ -577,7 +577,7 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
     : material.length === 0
       ? `Same prepared system and protocol; only ${[...classes].join(" and ") || "seeds"}${engineNote} differ, so the two ΔG values are ${engines.differ ? "independent samples of the same protocol on different engines: the difference combines the engine change with sampling, and this record cannot separate them" : "independent samples of the same protocol"}.`
       : material.every(c => c === "sampling_length")
-        ? `Same prepared system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}), so they are different-length samples of the same protocol. Whether either run is converged is reported per run (drift verdict in explain_result).`
+        ? `Same prepared system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}), so they are different-length samples of the same protocol${engines.differ ? ` run on different engines (${engines.a} vs ${engines.b}); length, engine and sampling all contribute to the ΔG difference and this record cannot separate them` : ""}. Whether either run is converged is reported per run (drift verdict in explain_result).`
         : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes)${engineNote ? `,${engineNote}` : ""}. The ΔG difference combines that change with run-to-run sampling; the run-to-run spread is the scale to judge it against.`;
   return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, stages_compared: stages.length, differing_classes: [...classes], material_classes: material,
     realized_seeds: seeds, delta_g: dg, delta_g_vs_noise: noise, run_to_run_spread: spread, engines, verdict, interpretation, scale: vsSpread };

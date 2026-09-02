@@ -593,6 +593,9 @@ describe("the rerun bundle reproduces the number, not just the trajectory", () =
     expect(d.interpretation).toMatch(/cannot separate them/);
     const e = diffRuns(load("1l2y-rep4"), load("1l2y-rep6"), idx);
     expect(e.engines.differ).toBe(false); expect(e.interpretation).not.toMatch(/engine/);
+    // different length and different engine: the sampling_length branch must name the engine too
+    const f = diffRuns(load("1l2y-rep4-ice1"), load("1l2y-rep7"), idx);
+    expect(f.material_classes).toEqual(["sampling_length"]); expect(f.interpretation).toMatch(/Amber 24 SANDER \(2024\) vs Amber 26 PMEMD \(2026\)/); expect(f.interpretation).toMatch(/cannot separate them/);
   });
   it("adds SLURM directives to the analysis job too, not just the MD job", () => {
     const f = rerunBundle(B, { seed: "pinned", target: "slurm", approved: [] });

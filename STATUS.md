@@ -30,10 +30,26 @@ Next if time: an activity feed (the call log as a timeline) and an agent-review 
 The user judged the report theme against the WebMCP reference sites on Devpost's resources page ("looks like
 hot ass") and asked for their look, built on a branch. `src/editorial.css` replaces `src/report.css` in the
 entry; the markup gains a serif display face with one italic accent, sentence-case kickers, borderless cards,
-a `WebMCP · 17 tools` pill, a tinted "your agent is invited" rail card with the developer console folded
-under it, and `src/Spread.tsx` — one dot per run on the ΔG axis, band = mean ± run-to-run SD — as the object
-home cards and the project page lead with. Rulings in `docs/design/DECISION.md` (late addendum). Master still
-renders the report theme until the user compares the preview and says so.
+a `WebMCP · 17 tools` pill (green registered · grey registering · amber off in this browser), a tinted "your
+agent is invited" rail card with the developer console (17 tool chips) folded under it, and `src/Spread.tsx` —
+one dot per run on the ΔG axis, band = mean ± run-to-run SD, hollow ring = the run the page starts from — as the
+object home cards and the project page lead with. Rulings in `docs/design/DECISION.md` (late addendum).
+
+Two review workflows ran on the branch (judge's first minute; then design · claims · phone/a11y · judge, each
+finding adversarially verified). All 8 + 22 findings were applied: one navy primary per view (buttons default
+to outlined; `.primary` marks the rail's Investigate and Approve), ids never set in the serif, each fact once
+per page (fork status, rungs verified, ensemble numbers), AA contrast for amber/green/muted text, the runs table
+scrolls on phones, spread dots get 24 px hit areas and pixel-based lanes, `role="group"` so the dot links are
+announced, a new proposal scrolls to its Approve button, `diffRuns` names a differing engine in every branch,
+`signClaim` rounds to 2 dp, a registering state so a WebMCP browser is never told it is off. 668 tests.
+
+Preview: `vercel deploy --yes` from the branch (URL in the session; not production). Master still renders the
+report theme until the user compares the preview and says so. **Codex worked in parallel**: its branch
+`codex/new-user` (4 commits: first-visit banner, top nav, run filters, compare start page, run-page jump nav,
+"Page tools" rail) is based on e112424 — before profiles, project pages and this theme — and uses the old
+"run = repo" metaphor; it does not merge onto this branch. Some Codex working-tree edits (spread overflow
+guards, fork-action stacking at ≤480 px, `pre.out.fail`) were swept into the branch commits and kept; its
+`alert()` demo card and 11 px phone text were removed.
 
 ### Profiles: the home page has an owner (2026-09-01, evening)
 
@@ -115,9 +131,9 @@ clause, one primary action ("Open …, the longest"), forks by whom, and the run
 | Page renders | verified (headless Chrome): home, run, compare. WebGL-less browsers get a fallback instead of a crash |
 | Deploy | `https://runcard.vercel.app` public since 2026-08-28 (Deployment Protection off). **Live = 502cd50** (deployed 2026-09-01, bundle `index-XXvRWZIK.js` — RC-006B: automode reads `build_inputs.present` instead of calling bundleGaps bare, so it no longer contradicts the bundle tool's `self_contained:true`; verified on live by Codex over real WebMCP at batch 08 close. Previous: 7aa4eb5 / `index-CzZf_syG.js` — the MM-GBSA bundle step, 15 files, client-verified by batch 08. Previous: 5aa3d80 / `index-BKr9BWEa.js` — RC-005 fixes: run lineage rendered under the title and in Provenance, and the evidence brief no longer backslash-escapes artifact and tool names. **390 px closed on this asset by Claude** (Codex's in-app browser cannot resize): doc scrollWidth = clientWidth = 390 on `1l2y-rep4` and `1l2y-rep4-ice1`, nothing past 391 px, fork `dd` 324×68, lineage wraps, and automode's trace renders at phone width with the proposals queue still empty. Previous: 0c6fc66 / `index-Buc2vnBI.js` — automode; verified on live by headless CDP on `#/run/3htb-jz4`: the Auto/Manual switch renders, Auto → Investigate runs the investigation, the 4-step trace renders in the investigation panel, the panel states it created nothing, and the Proposals queue stayed empty. Previous: f8aedc7 / `index-ImjCbwKG.js` — same bundle hash as b1ee36a because nothing in `src/` changed after it; the manifests did, and live serves the per-field `composition_source`. The b1ee36a verification below still describes this build: verified live by headless CDP on `#/run/1l2y-rep4`: `index.json` serves 14 runs with all four `1l2y-rep4-ice*` at 30 ps under `Amber 24 SANDER (2024)`, and the ladder renders **3 of 4** with rung 3 *verified* — "6 of 3 needed ✓" — including the engine-mix sentence (4 SANDER, 2 PMEMD) and the wider matched-length SD ±0.80. No page errors. Previous: 2fabdc3 / `index-rt0eVFZ8.js`, 1dac802 / `index-CHGgfGiH.js`, 5a885d9 / `index-D3GpiLiC.js`, 2f7ac29 / `index-DwFbZHdi.js`, 7d77378 / `index-B7PiDcQK.js`, 6f317dc / `index-DEIhYtI0.js`, 3ef2cb5 / `index-BTW4-AZd.js`, fd8620c / `index-DsyBgKpr.js`, 662e98d / `index-CZfZNhsT.js`, b4491c3 / `index-Y31UbNAm.js`, ff85e2f / `index-USiMctXW.js`, f64789f / `index-CqSj8sfl.js`, 097a01a / `index-D8epXSVf.js`, 46ca5ba / `index-D_Ku5S9V.js`, d604351 / `index-DoMhorJt.js`). Deploy from a worktree whenever another session has uncommitted edits in the working tree; missing manifest → 404, which the loader handles. Project is not git-connected: every deploy is a CLI deploy |
 | Demo video, Devpost text | not started |
-| UI polish | first pass done 2026-08-28 (f39c348): sentence-case headings, ≥13 px text, ΔG at heading size, no horizontal overflow at 390 px (measured via CDP), header badge explains itself without WebMCP, Tool Calls panel readable, tool descriptions question-led, `explain_result.brief`. PASS is neutral and scoped as an input sanity check (2bd3127). **Correction 2026-08-31:** the "no horizontal overflow at 390 px" claim below stopped being true once the Fork card landed — its action column is `max-content` and its longest button is ~366 px, which starved the description column to 0 px wide and 2176 px tall and scrolled the page 103 px sideways at ≤ 480 px. Measured on live at 390/414/480 px, fixed in `dl.fork` with a stacking media query, re-measured clean (390/390, description 324×68). Codex review batch 1 (`docs/coordination/`): RC-001, RC-002 fixed (a44bb7f). Not done: PLIP png/residue repeat, 12-thumbnail gallery hierarchy, MMPBSA warning styling, preprint theme (separate chat) |
+| UI polish | first pass done 2026-08-28 (f39c348): sentence-case headings, ≥13 px text, ΔG at heading size, no horizontal overflow at 390 px (measured via CDP), header badge explains itself without WebMCP, Tool Calls panel readable, tool descriptions question-led, `explain_result.brief`. PASS is neutral and scoped as an input sanity check (2bd3127). **Correction 2026-08-31:** the "no horizontal overflow at 390 px" claim below stopped being true once the Fork card landed — its action column is `max-content` and its longest button is ~366 px, which starved the description column to 0 px wide and 2176 px tall and scrolled the page 103 px sideways at ≤ 480 px. Measured on live at 390/414/480 px, fixed in `dl.fork` with a stacking media query, re-measured clean (390/390, description 324×68). Codex review batch 1 (`docs/coordination/`): RC-001, RC-002 fixed (a44bb7f). **2026-09-02 editorial branch:** fork card buttons stack at ≤480px; spread SVG constrained with responsive text; home adds one-click WebMCP demo card (`list_runs`, `explain_result`, `investigate_run`); console errors pretty-print. Verified clean at 390/1440. Not done: PLIP png/residue repeat, 12-thumbnail gallery hierarchy, MMPBSA warning styling, preprint theme (separate chat) |
 
-`bun --bun x vitest run` (648 tests) and `bun --bun run build` pass in the current checkout. **Environment note (2026-08-29):** with the system Node 20.12 at `/usr/local/bin/node`, `bun run test`/`vite build` fail at startup inside rolldown (`util.styleText` array form needs Node ≥ 22). Run them under bun's runtime instead: `bun --bun x vitest run` and `bun --bun run build`.
+`bun --bun x vitest run` (667 tests) and `bun --bun run build` pass in the current checkout. **Environment note (2026-08-29):** with the system Node 20.12 at `/usr/local/bin/node`, `bun run test`/`vite build` fail at startup inside rolldown (`util.styleText` array form needs Node ≥ 22). Run them under bun's runtime instead: `bun --bun x vitest run` and `bun --bun run build`.
 
 ## Review 2026-08-29 (five-dimension workflow on live d604351)
 
@@ -181,6 +197,13 @@ partly-established branch, and all-or-nothing provenance on the new composition 
 precedence, brief semantics and the console — and found two real bugs (RC-005 A and B), both fixed in
 `5aa3d80` and deployed. 390 px was closed by Claude on the live asset rather than by a WebMCP client,
 because Codex's in-app browser cannot resize.
+
+**Editorial theme polish (2026-09-02).** Quick 5-min fixes on the `design/editorial` branch before demo:
+- Fork cards: action buttons stack at ≤480px (`.fork-actions { flex-direction: column }`), no horizontal overflow at 390px
+- Spread: `min-width: 0; overflow: hidden` on figure; `max-width: 100%` on SVG; figcaption wraps; text/font sizes scale down at ≤420px
+- Tool Console: JSON errors now pretty-print with `.fail` class (red) instead of inline style
+- Removed blocking `alert()`-based Quick demo card from Home (redundant with sidebar's one-click buttons)
+- Verified: 668 tests pass, `bun --bun run build` clean, headless Chrome confirms `document.documentElement.scrollWidth === clientWidth` on home, run, and project pages
 
 **Batch 08 is done** (2026-09-01, complete after 1 of 3 rounds). Over real WebMCP on live it verified
 the entire MM-GBSA bundle step (both systems' ZIPs downloaded and inspected: 15 CRC-clean files, masks

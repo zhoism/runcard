@@ -7,15 +7,15 @@
    (src/report.css) stays as the reference for the previous look. */
 
 :root {
-  --page: #f5f5f2; --card: #ffffff; --ink: #1c2430; --ink-2: #3b4757; --muted: #66707c;
+  --page: #f5f5f2; --card: #ffffff; --ink: #1c2430; --ink-2: #3b4757; --muted: #5d6773;
   --line: #e4e6ea; --navy: #1e3a5f; --navy-2: #162c49; --blue: #2b62a3; --tint: #edf1f7;
-  --pass: #2e7d4f; --warn: #b7791f; --fail: #c0392b;
+  --pass: #2a734a; --warn: #8f5f12; --fail: #c0392b;
   --pass-bg: #e7f3ec; --warn-bg: #fdf3dd; --fail-bg: #fae9e6; --chip-bg: #eceef1;
   --serif: "Instrument Serif", "Iowan Old Style", "Times New Roman", serif;
   --sans: "Inter", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   --z-header: 100; --viewer-bg: #eef1f4; --header-h: 60px; --radius: 14px;
-  --dim: #66707c; --acc: #2b62a3; --plot: #2b62a3;
+  --dim: var(--muted); --acc: #2b62a3; --plot: #2b62a3;
   color-scheme: light;
   font-family: var(--sans); font-size: 16px; line-height: 1.55;
 }
@@ -41,6 +41,7 @@ header { grid-area: h; position: sticky; top: 0; z-index: var(--z-header); backg
 a.webmcp:hover { text-decoration: none; border-color: var(--navy); color: var(--navy); }
 .webmcp::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 3px var(--warn-bg); flex: none; }
 .webmcp.registered { color: var(--pass); border-color: #bcd9c8; } .webmcp.registered::before { background: var(--pass); box-shadow: 0 0 0 3px var(--pass-bg); }
+.webmcp.registering::before { background: var(--muted); box-shadow: 0 0 0 3px var(--chip-bg); }
 .webmcp.error { color: var(--fail); } .webmcp.error::before { background: var(--fail); box-shadow: 0 0 0 3px var(--fail-bg); }
 @media (max-width: 700px) { header { padding: 0 18px; } .brand { font-size: 22px; } .webmcp .dim { display: none; } }
 
@@ -111,7 +112,7 @@ table.runs { width: auto; min-width: min(100%, 760px); } table.runs td:first-chi
 table.runs tbody tr { cursor: pointer; } table.runs tbody tr:hover { background: var(--page); }
 table.runs td .dim { font-family: var(--mono); font-size: 13px; }
 .tablewrap { overflow-x: auto; max-width: 100%; }
-@media (max-width: 600px) { table.runs td:first-child { min-width: 150px; } }
+@media (max-width: 600px) { table.runs { min-width: 640px; } }
 
 /* project cards: the kicker names the system, the headline says what it is, the spread is the object */
 .cohort { margin-top: 0; }
@@ -139,7 +140,6 @@ details.runs-list .tablewrap { margin-top: 4px; }
 .spread a circle { transition: transform .12s; transform-box: fill-box; transform-origin: center; } .spread a:hover circle { transform: scale(1.25); }
 .spread figcaption { font-family: var(--sans); font-size: 13.5px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; word-break: break-word; }
 .spread .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: -1px; margin-right: 3px; }
-@media (max-width: 420px) { .spread text { font-size: 11px; } .spread figcaption { font-size: 12px; } }
 
 /* callout: one finding, one next step */
 .callout { border-left: 3px solid var(--navy); border-radius: 0 var(--radius) var(--radius) 0; background: var(--card); padding: 14px 20px; margin: 0 0 20px; box-shadow: 0 1px 2px rgba(20, 30, 45, .04), 0 0 0 1px rgba(20, 30, 45, .035); }
@@ -313,10 +313,10 @@ ol.trace li { padding: 3px 0; }
 ol.trace li > div { color: var(--ink-2); }
 
 /* buttons: navy pills; ghost outlined */
-button:not(.stagebox) { background: var(--navy); color: #fff; border: 1px solid var(--navy); border-radius: 999px; padding: 8px 16px; font-family: var(--sans); font-size: 14px; font-weight: 600; cursor: pointer; margin: 4px 6px 4px 0; line-height: 1.4; }
-button:not(.stagebox):hover { background: var(--navy-2); border-color: var(--navy-2); }
+button:not(.stagebox) { background: transparent; color: var(--ink-2); border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; font-family: var(--sans); font-size: 14px; font-weight: 600; cursor: pointer; margin: 4px 6px 4px 0; line-height: 1.4; }
+button:not(.stagebox):hover { border-color: var(--navy); color: var(--navy); background: transparent; }
 button:disabled { opacity: .45; cursor: not-allowed; }
-button.ghost { background: transparent; color: var(--ink-2); border-color: var(--line); } button.ghost:hover { border-color: var(--navy); color: var(--navy); background: transparent; }
+button.primary { background: var(--navy); color: #fff; border-color: var(--navy); } button.primary:hover { background: var(--navy-2); border-color: var(--navy-2); color: #fff; }
 
 /* the agent rail: one tinted card that invites the agent, developer tools folded beneath it */
 aside .card { margin-bottom: 16px; }
@@ -361,11 +361,11 @@ aside select:focus, aside textarea:focus { outline: none; border-color: var(--bl
 @media (max-width: 700px) { .big { font-size: 28px; } .section-label { font-size: 24px; margin-top: 32px; } }
 
 /* pins and link-buttons override the global navy button; they sit last so order, not specificity tricks, decides */
-button.pin { position: absolute; top: -6px; left: 24px; width: 26px; height: 26px; padding: 0; margin: 0; border: 2px solid var(--card); border-radius: 50% 50% 50% 3px; background: var(--warn); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 3px rgba(20, 30, 45, .25); z-index: 1; transition: transform .12s; }
+button.pin { position: absolute; top: -8px; left: 24px; width: 30px; height: 30px; padding: 0; margin: 0; border: 2px solid var(--card); border-radius: 50% 50% 50% 3px; background: var(--warn); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 3px rgba(20, 30, 45, .25); z-index: 1; transition: transform .12s; }
 button.pin:hover { transform: scale(1.12); background: var(--warn); border-color: var(--card); }
 button.pin.approved { background: var(--pass); } button.pin.rejected { background: var(--muted); }
 button.pin.approved:hover { background: var(--pass); } button.pin.rejected:hover { background: var(--muted); }
-.pin-glyph { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: #fff; color: var(--warn); font: 600 10px/1 var(--sans); }
+.pin-glyph { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #fff; color: var(--warn); font: 600 13px/1 var(--sans); }
 button.pin.approved .pin-glyph { color: var(--pass); } .pin.rejected .pin-glyph { color: var(--muted); }
 button.linklike { background: none; border: 0; padding: 0; margin: 0; font: inherit; font-family: var(--mono); font-size: 13.5px; color: var(--blue); cursor: pointer; }
 button.linklike:hover { text-decoration: underline; background: none; }

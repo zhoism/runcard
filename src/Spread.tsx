@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import type { IndexEntry, Owners } from "./lib/types";
 
 const fmt = (n: number) => n.toFixed(2);
@@ -7,6 +8,9 @@ const PALETTE = [{ fill: "var(--navy)", word: "navy" }, { fill: "var(--warn)", w
     the page starts from. Every dot is an index entry (a number read from that run's mmgbsa.dat); mean and SD are the
     cohort's, computed from the same entries. Nothing is drawn that is not one of those numbers. */
 export function Spread({ runs, mean, sd, own, ringId, ringWhy }: { runs: IndexEntry[]; mean: number | null; sd: number | null; own?: Owners | null; ringId?: string | null; ringWhy?: string }) {
+  // The drawn width decides how close two dots may sit: measured, so a phone gets more lanes rather than overlapping dots.
+  const ref = useRef<SVGSVGElement>(null); const [width, setWidth] = useState(600);
+  useLayoutEffect(() => { const el = ref.current; if (!el) return; const read = () => setWidth(el.clientWidth || 600); read(); const ro = new ResizeObserver(read); ro.observe(el); return () => ro.disconnect(); }, []);
   const xs = runs.filter(r => r.delta_g != null);
   if (xs.length < 2 || mean == null) return null;
   const vals = xs.map(r => r.delta_g as number);
@@ -21,22 +25,24 @@ export function Spread({ runs, mean, sd, own, ringId, ringWhy }: { runs: IndexEn
   // Lanes: sorted by ΔG, a dot drops a lane when it would touch the previous dot in its lane.
   const sorted = [...xs].sort((a, b) => (a.delta_g as number) - (b.delta_g as number));
   const laneX: number[] = []; const lane = new Map<string, number>();
-  for (const r of sorted) { const x = X(r.delta_g as number); let l = 0; while (l < laneX.length && x - laneX[l] < 3.6) l++; laneX[l] = x; lane.set(r.id, l); }
+  const gap = Math.max(3.6, (16 / width) * 100); // ≥ 16 px between dot centres in any lane
+  for (const r of sorted) { const x = X(r.delta_g as number); let l = 0; while (l < laneX.length && x - laneX[l] < gap) l++; laneX[l] = x; lane.set(r.id, l); }
   const lanes = laneX.length; const top = 14, step = 17, axis = top + lanes * step + 4, H = axis + 22;
   const cy = (l: number) => top + l * step;
   const ring = ringId && xs.some(r => r.id === ringId) ? ringId : null;
-  return <figure className="spread" style={{ minWidth: 0, overflow: 'hidden' }}>
-    <svg width="100%" height={H} role="img" aria-label={`ΔG of ${xs.length} runs: ${fmt(min)} to ${fmt(max)} kcal/mol, mean ${fmt(mean)}`}>
+  return <figure className="spread">
+    <svg ref={ref} width="100%" height={H} role="group" aria-label={`ΔG of ${xs.length} runs: ${fmt(min)} to ${fmt(max)} kcal/mol, mean ${fmt(mean)}`}>
       {sd != null && <rect x={`${X(mean - sd)}%`} y={2} width={`${X(mean + sd) - X(mean - sd)}%`} height={axis - 2} rx={5} fill="var(--navy)" opacity={0.08} />}
       <line x1={`${X(mean)}%`} x2={`${X(mean)}%`} y1={2} y2={axis} stroke="var(--navy)" strokeWidth={1.5} strokeDasharray="3 3" />
       <line x1="3%" x2="97%" y1={axis} y2={axis} stroke="var(--line)" strokeWidth={1.5} />
       {sorted.map(r => { const dg = r.delta_g as number; const isRing = r.id === ring; return <a key={r.id} href={`#/run/${r.id}`}>
         <title>{`${r.id} · ${fmt(dg)} kcal/mol · ${r.production_ps} ps · ${r.engine}${r.owner ? ` · ${nameOf(r.owner)}` : ""}`}</title>
+        <circle cx={`${X(dg)}%`} cy={cy(lane.get(r.id) as number)} r={12} fill="transparent" />
         {isRing && <circle cx={`${X(dg)}%`} cy={cy(lane.get(r.id) as number)} r={10.5} fill="none" stroke="var(--navy)" strokeWidth={1.5} />}
         <circle cx={`${X(dg)}%`} cy={cy(lane.get(r.id) as number)} r={6} fill={swatch(r.owner ?? "").fill} stroke="#fff" strokeWidth={1.5} />
       </a>; })}
-      <text x="3%" y={H - 4}>{fmt(min)}</text>
-      <text x="97%" y={H - 4} textAnchor="end">{fmt(max)}</text>
+      <text x={`${X(min)}%`} y={H - 4} textAnchor="middle">{fmt(min)}</text>
+      <text x={`${X(max)}%`} y={H - 4} textAnchor="middle">{fmt(max)}</text>
     </svg>
     <figcaption>One dot per run, ΔG in kcal/mol: {owners.map((o, i) => <span key={o}>{i ? " · " : ""}<span className="sw" style={{ background: swatch(o).fill }} aria-hidden="true" />{nameOf(o)}</span>)}{sd != null ? " · dashed line: mean · band: ± run-to-run SD" : " · dashed line: mean"}{ring ? <> · ring: <span className="mono">{ring}</span>{ringWhy ? `, ${ringWhy}` : ""}</> : null}</figcaption>
   </figure>;

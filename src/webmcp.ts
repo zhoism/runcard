@@ -151,6 +151,8 @@ export async function callTool(name: string, input: unknown, source: InvocationS
 export async function registerWebMCP() {
   const mc: any = (navigator as any).modelContext ?? (window as any).modelContext ?? (document as any).modelContext;
   if (!mc?.registerTool) { set({ webmcp: "unsupported", tools: TOOLS.map(t => t.name) }); return; }
+  // The browser exposes WebMCP: say so at once, so the page never claims it is off while the 17 registrations resolve.
+  set({ webmcp: "registering", tools: TOOLS.map(t => t.name) });
   try {
     for (const t of TOOLS) {
       await mc.registerTool({ name: t.name, description: t.description, inputSchema: t.inputSchema, annotations: { readOnlyHint: t.readOnly },
