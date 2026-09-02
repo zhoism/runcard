@@ -13,11 +13,13 @@ card on Home (parent node, rail, forks with engine/length/ΔG, computed verdict)
 network on the site is in **tension** (parent −19.20 vs fork mean −17.51 ± 0.54, 2.6× the run-to-run SD, PMEMD vs SANDER named
 as the confound) — shown in amber, not hidden. Not built (need a backend): comments, stars, uploads; say so in the Devpost.
 **Designer round 2 (2026-09-01, spec in `docs/design/SPEC-2026-09-01-designer-round2.md`), built:** (1) proposals are
-Figma-style comments pinned to the stage they target — bubble beside the stage dot, thread opens inline in the stage
-detail with who/when (callTool stamps `source`/`t`), the diff, validation after, Approve / Reject; the sidebar only
-points at the pins for the run on screen. (2) Analyses: `src/lib/analysisCatalog.ts` names each cpptraj plot, files it
-under structure / dynamics / ensemble / energy and gives a one-line meaning (plot type, never a run's number); filter
-pills above the gallery. (3) Fork flow: three cards (Reproduce / Replicate / Extend, one navy verb each, Copy prompt,
+Figma-style comments pinned to the stage they target — bubble beside the stage dot; the pin toggles the thread, which
+opens as a popover under the bubble (a bottom sheet at ≤700 px; Escape / outside click close it, focus returns to the
+pin) with who/when (callTool stamps `source`/`t`), the diff, validation after, Approve / Reject, while the stage's
+.in file and checks stay inline; the sidebar only points at the pins for the run on screen. (2) Analyses: `src/lib/analysisCatalog.ts` names each cpptraj plot, files it
+under structure / dynamics / ensemble / energy and gives a one-clause technical description (plot type, never a run's
+number) — shown as the figure's tooltip and in a collapsed "What these plots show" key under the gallery, not under
+each plot, since the audience is computational chemists; filter pills above the gallery. (3) Fork flow: three cards (Reproduce / Replicate / Extend, one navy verb each, Copy prompt,
 amber "needs your approval" on Extend), moved up under the fork network, with a **Fork** button in the title bar; the
 general agent prompts moved into Current investigation. 390 px re-measured clean with a stage open.
 **Visual language:** the designer's mockup (`docs/design/redesign-2026-09-01/`) was adopted in 007890a and **reverted the
