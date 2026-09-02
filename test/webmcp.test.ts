@@ -157,3 +157,13 @@ describe("the two runcards do not drift", () => {
     expect(body(agents)).toMatch(/A number is a claim/);
   });
 });
+
+describe("callTool checks the schema's required fields before the tool runs", () => {
+  it("names the missing field instead of whatever the tool would have tripped over", async () => {
+    setupGlobals(); const web = await import("../src/webmcp"); const store = await import("../src/store");
+    expect(JSON.parse(await web.callTool("explain_result", {}, "console"))).toEqual({ error: "run_id is required" });
+    expect(JSON.parse(await web.callTool("diff_runs", { run_a: "1l2y-rep4", run_b: "" }, "console"))).toEqual({ error: "run_b is required" }); // the console prefills run_b: ""
+    expect(store.get().calls[0]).toMatchObject({ tool: "diff_runs", ok: false, summary: "run_b is required" });
+    expect(JSON.parse(await web.callTool("list_runs", undefined, "console"))).toHaveLength(14); // nothing required, nothing given
+  });
+});

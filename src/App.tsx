@@ -7,6 +7,7 @@ import { useStore, navigate, setProposalStatus, set } from "./store";
 import { analysisInfo, ANALYSIS_CATEGORIES, type AnalysisCategory } from "./lib/analysisCatalog";
 import { describeSystem } from "./lib/systemCatalog";
 import { TOOLS, callTool } from "./webmcp";
+import { parseToolError, type ToolError } from "./lib/toolError";
 import { Viewer, Boundary } from "./Viewer";
 import { Spread } from "./Spread";
 import type { InvestigationState } from "./lib/investigation";
@@ -670,10 +671,23 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
   </section>;
 }
 
+/** A failed call, in either output: the message as a sentence, one line saying what to add when a field is missing
+    or mistyped, and the raw JSON one disclosure away for the developer. */
+function ToolFail({ e, tool }: { e: ToolError; tool: string }) {
+  return <div className="callout fail">
+    <p className="callout-head">{tool ? <><code>{tool}</code> failed</> : "The call failed"}</p>
+    <p className="callout-body">{e.message}</p>
+    {e.hint && <p className="callout-hint">{e.hint}{e.example && <>, e.g. <code>{e.example}</code></>}</p>}
+    <details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{e.raw}</pre></details>
+  </div>;
+}
+
 function Sidebar({ idx }: { idx: IndexEntry[] }) {
   const allProposals = useStore(s => s.proposals); const calls = useStore(s => s.calls);
   const route = useStore(s => s.route); const webmcp = useStore(s => s.webmcp); const pre = useStore(s => s.console);
   const [tool, setTool] = useState(TOOLS[0].name); const [input, setInput] = useState("{}"); const [out, setOut] = useState(""); const [dout, setDout] = useState(""); const [touched, setTouched] = useState(false);
+  // Which tool produced each output (the chips can change after a call), and whether the input box changed since the last Call.
+  const [outTool, setOutTool] = useState(""); const [doutTool, setDoutTool] = useState(""); const [edited, setEdited] = useState(false);
   // One card invites the agent: the action an agent would take for the page on screen, run from the page. The 17-tool
   // developer console is folded under it (mode "manual" = unfolded); a page button that drafts a call unfolds it.
   const [mode, setMode] = useState<"auto" | "manual">("auto");
@@ -702,8 +716,10 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
   useEffect(() => { if (!touched) { if (target) { setTool("explain_result"); setInput(JSON.stringify({ run_id: target })); } else { setTool("list_runs"); setInput("{}"); } setDout(""); } }, [target, touched]);
   useEffect(() => { setOut(""); }, [target]);
   const t = TOOLS.find(x => x.name === tool)!;
-  const outIsError = out.startsWith("SyntaxError") || out.startsWith("{\"error\"");
-  const doutIsError = dout.startsWith("SyntaxError") || dout.startsWith("{\"error\"");
+  // The agent card's buttons and the console's Call go through callTool alike; a failure comes back as {"error"} and is shown as a red callout.
+  const ask = async (name: string, input: unknown) => { setOutTool(name); try { setOut(await callTool(name, input, "console")); } catch (e: any) { setOut(String(e)); } };
+  const outErr = out ? parseToolError(out, { run: target }) : null;
+  const doutErr = dout ? parseToolError(dout, { run: target, schema: t.inputSchema }) : null;
   const pretty = (o: string) => { try { return JSON.stringify(JSON.parse(o), null, 1); } catch { return o; } };
   return <aside>
     <div className="card agent" id="tool-console" data-mode={mode} data-run={target} data-context={context}>
@@ -720,13 +736,13 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
           the console is you picking. Both go through callTool, so the activity log below records them identically. */}
       <div className="row wrap">
         {context === "site"
-          ? <button className="primary" onClick={async () => { try { setOut(await callTool("list_runs", {}, "console")); } catch (e: any) { setOut(String(e)); } }}>What is on this site?</button>
-          : <button className="primary" disabled={!target} onClick={async () => { try { setOut(await callTool("investigate_run", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Investigate {target}</button>}
-        {context === "project" && projectNet && <button className="ghost" onClick={async () => { try { setOut(await callTool("fork_network", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Check the forks</button>}
+          ? <button className="primary" onClick={() => ask("list_runs", {})}>What is on this site?</button>
+          : <button className="primary" disabled={!target} onClick={() => ask("investigate_run", { run_id: target })}>Investigate {target}</button>}
+        {context === "project" && projectNet && <button className="ghost" onClick={() => ask("fork_network", { run_id: target })}>Check the forks</button>}
         {context === "run" && !allProposals.some(p => p.run === currentRun) && <button className="ghost" onClick={draftProposal} title="Prefills propose_change below; you press Call, then Approve or Reject on the thread pinned to the stage">Draft a proposal</button>}
       </div>
-      <div role="status" aria-live="polite">{out && (outIsError
-        ? <pre className="small out fail">{pretty(out)}</pre>
+      <div role="status" aria-live="polite">{out && (outErr
+        ? <ToolFail e={outErr} tool={outTool} />
         : <div className="dim small">{(() => { let v: any = null; try { v = JSON.parse(out); } catch { return null; }
             if (Array.isArray(v)) return <p>{v.length} runs across {cohorts(idx).length} {plural(cohorts(idx).length, "project")}; each row names its owner. Open a project to see them grouped.</p>;
             if (v?.trace) return <p>Trace rendered under <a href="#investigation-title" onClick={e => { e.preventDefault(); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Current investigation ↓</a>.</p>;
@@ -734,12 +750,12 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
             return null; })()}<details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{pretty(out)}</pre></details></div>)}</div>
       <details className="devtools" open={mode === "manual"} onToggle={e => setMode((e.target as HTMLDetailsElement).open ? "manual" : "auto")}>
         <summary>Developer tools <span className="dim">· the {TOOLS.length} tools an agent sees, called by hand · ✎ changes page state</span></summary>
-        <div className="tool-chips" role="group" aria-label="tool">{TOOLS.map(x => <button type="button" key={x.name} className={`chip ${tool === x.name ? "on" : ""}`} aria-pressed={tool === x.name} onClick={() => { setTouched(true); setTool(x.name); setInput(prefill(x.name)); }}>{x.name}{x.readOnly ? "" : " ✎"}</button>)}</div>
+        <div className="tool-chips" role="group" aria-label="tool">{TOOLS.map(x => <button type="button" key={x.name} className={`chip ${tool === x.name ? "on" : ""}`} aria-pressed={tool === x.name} onClick={() => { setTouched(true); setEdited(true); setTool(x.name); setInput(prefill(x.name)); }}>{x.name}{x.readOnly ? "" : " ✎"}</button>)}</div>
         {(() => { const q = t.description.indexOf("? "); const head = q > 0 ? t.description.slice(0, q + 1) : t.description; const rest = q > 0 ? t.description.slice(q + 2) : ""; return <div className="dim small">{head}{rest && <details className="small"><summary className="dim">what it returns</summary><p className="dim">{rest}</p></details>}</div>; })()}
         <div className="dim small mono" id="tool-schema">{JSON.stringify((t.inputSchema as any).properties && Object.fromEntries(Object.entries((t.inputSchema as any).properties).map(([k, v]: any) => [k, v.enum ? v.enum.join("|") : v.type])))}</div>
-        <textarea value={input} onChange={e => { setTouched(true); setInput(e.target.value); }} rows={Math.min(10, Math.max(3, input.split("\n").length))} spellCheck={false} aria-label="tool input (JSON)" aria-describedby="tool-schema" aria-invalid={doutIsError || undefined} />
-        <button ref={callRef} onClick={async () => { try { setDout(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setDout(String(e)); } }}>Call</button>
-        <div role="status" aria-live="polite">{dout && <pre className="small out">{pretty(dout)}</pre>}</div>
+        <textarea value={input} onChange={e => { setTouched(true); setEdited(true); setInput(e.target.value); }} rows={Math.min(10, Math.max(3, input.split("\n").length))} spellCheck={false} aria-label="tool input (JSON)" aria-describedby="tool-schema" aria-invalid={doutErr && !edited ? true : undefined} />
+        <button ref={callRef} onClick={async () => { setEdited(false); setDoutTool(tool); try { setDout(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setDout(String(e)); } }}>Call</button>
+        <div role="status" aria-live="polite">{dout && (doutErr ? <ToolFail e={doutErr} tool={doutTool} /> : <pre className="small out">{pretty(dout)}</pre>)}</div>
       </details>
     </div>
     {/* Collapsed to a count until something needs approval, an agent adds one, or the reader opens it: an empty queue is not news. */}
