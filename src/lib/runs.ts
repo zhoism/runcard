@@ -129,7 +129,7 @@ export function signClaim(st: Stratum, label = ""): string {
 
 // ---- cohorts: the home-page grouping --------------------------------------
 /** Runs of one prepared system and protocol. Their run-to-run spread is the uncertainty that matters; `start_here` is set only on the largest cohort and names its longest run. */
-export interface Cohort { key: string; title: string; runs: IndexEntry[]; n: number; mean: number | null; sd: number | null; lengths_ps: number[]; start_here: string | null }
+export interface Cohort { key: string; /** URL id: `#/p/<slug>` — the title lowercased, non-alphanumerics → "-" */ slug: string; title: string; runs: IndexEntry[]; n: number; mean: number | null; sd: number | null; lengths_ps: number[]; start_here: string | null }
 /** Longest common prefix of the titles, trimmed of trailing spaces, commas and "(" — "1L2Y + MOL (indole)" + "1L2Y + MOL, run 1" → "1L2Y + MOL". A single title is kept whole. */
 function commonTitle(titles: string[]): string {
   if (titles.length === 1) return titles[0];
@@ -144,10 +144,48 @@ export function cohorts(idx: IndexEntry[]): Cohort[] {
   const out: Cohort[] = [...groups].map(([key, rs]) => {
     const runs = [...rs].sort((a, b) => b.production_ps - a.production_ps || a.id.localeCompare(b.id));
     const st = stratum(runs);
-    return { key, title: commonTitle(runs.map(r => r.title)), runs, n: st.n, mean: st.mean, sd: st.sd, lengths_ps: [...new Set(runs.map(r => r.production_ps))].sort((a, b) => a - b), start_here: null };
+    const title = commonTitle(runs.map(r => r.title));
+    return { key, slug: slugify(title), title, runs, n: st.n, mean: st.mean, sd: st.sd, lengths_ps: [...new Set(runs.map(r => r.production_ps))].sort((a, b) => a - b), start_here: null };
   }).sort((a, b) => b.n - a.n || a.key.localeCompare(b.key));
+  // Slugs must be unique per site: a second cohort with the same title gets -2, -3, …
+  const seen = new Map<string, number>();
+  for (const c of out) { const n = (seen.get(c.slug) ?? 0) + 1; seen.set(c.slug, n); if (n > 1) c.slug = `${c.slug}-${n}`; }
   if (out.length) out[0].start_here = out[0].runs[0].id;
   return out;
+}
+const slugify = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "project";
+/** The cohort at `#/p/<slug>`; throws naming the home page when there is none. */
+export function cohortBySlug(idx: IndexEntry[], slug: string): Cohort {
+  const c = cohorts(idx).find(c => c.slug === slug);
+  if (!c) throw new Error(`no project '${slug}'. Open #/ for the projects on this site.`);
+  return c;
+}
+
+// ---- projects: a prepared system is the repository; its runs are the commits --------
+export interface ProjectSummary {
+  cohort: Cohort; start: IndexEntry;
+  /** runs per owner, most first */ by_owner: { handle: string; n: number }[];
+  /** forks inside this cohort whose owner differs from the parent's */ external_forks: number; fork_owners: string[];
+  engines: { engine: string; n: number }[];
+  network: ForkNetwork | null;
+}
+/** Who ran what in one project, which engines, and its fork network (the parent inside the cohort with forks, if any). Pure. */
+export function projectSummary(idx: IndexEntry[], slug: string): ProjectSummary {
+  const cohort = cohortBySlug(idx, slug);
+  const count = <T,>(xs: T[], key: (x: T) => string | undefined) => { const m = new Map<string, number>(); for (const x of xs) { const k = key(x); if (k) m.set(k, (m.get(k) ?? 0) + 1); } return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])); };
+  const byId = new Map(cohort.runs.map(r => [r.id, r]));
+  const ext = cohort.runs.filter(r => r.parent && byId.has(r.parent) && byId.get(r.parent)!.owner !== r.owner);
+  const network = forkNetworks(idx).find(n => byId.has(n.parent.id)) ?? null;
+  return { cohort, start: cohort.runs[0],
+    by_owner: count(cohort.runs, r => r.owner).map(([handle, n]) => ({ handle, n })),
+    external_forks: ext.length, fork_owners: [...new Set(ext.map(r => r.owner).filter((o): o is string => !!o))].sort(),
+    engines: count(cohort.runs, r => r.engine).map(([engine, n]) => ({ engine, n })),
+    network };
+}
+/** The index's protocol key ("dt=0.002|cut=9.0|…", from tools/build_index.py) as readable pairs. No new numbers: it re-reads the key. */
+export function protocolPairs(key: string | null | undefined): { key: string; value: string }[] {
+  if (!key) return [];
+  return key.split("|").map(kv => { const i = kv.indexOf("="); return i < 0 ? { key: kv, value: "" } : { key: kv.slice(0, i), value: kv.slice(i + 1) }; }).filter(p => p.value !== "None" && p.value !== "");
 }
 
 // ---- fork network: a parent and the runs re-executed from its bundle ----------

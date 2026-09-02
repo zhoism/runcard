@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { describeSystem } from "../src/lib/systemCatalog";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks, ownerStats, ownerHandles } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks, ownerStats, ownerHandles, cohortBySlug, projectSummary, protocolPairs } from "../src/lib/runs";
 import { ANALYSIS_CATALOG, ANALYSIS_CATEGORIES, analysisInfo } from "../src/lib/analysisCatalog";
 import { mean, sd, round } from "../src/lib/stats";
 // mmgbsa.dat prints DELTA TOTAL to 4 dp and the per-frame series is archived at the same precision, so a correct
@@ -640,6 +640,32 @@ describe("owners", () => {
     for (const id of Object.keys(own.runs)) expect(idx.some((r: any) => r.id === id), id).toBe(true);
     for (const h of Object.values(own.runs)) expect(own.profiles[h as string], String(h)).toBeTruthy();
     const net = forkNetwork(idx, "1l2y-rep4"); expect(net.parent.owner).toBe("kevin"); expect(net.forks.every(f => f.owner === "pace-ice")).toBe(true);
+  });
+});
+
+describe("projects", () => {
+  it("cohorts carry unique URL slugs derived from their titles", () => {
+    expect(cohorts(idx).map(c => c.slug)).toEqual(["1l2y-mol", "3htb-jz4"]);
+    expect(cohortBySlug(idx, "3htb-jz4").runs.map(r => r.id)).toEqual(["3htb-jz4"]);
+    expect(() => cohortBySlug(idx, "nope")).toThrow(/no project 'nope'.*#\//);
+    // two cohorts with the same title → -2 suffix, never a collision
+    const twin = idx.map(r => r.id === "3htb-jz4" ? { ...r, title: "1L2Y + MOL" } : r);
+    const slugs = cohorts(twin).map(c => c.slug); expect(new Set(slugs).size).toBe(slugs.length); expect(slugs).toContain("1l2y-mol-2");
+  });
+  it("projectSummary: 1l2y-mol is 13 runs, 9 kevin + 4 pace-ice, 4 external forks, two engines, a network in tension, longest run first", () => {
+    const p = projectSummary(idx, "1l2y-mol");
+    expect(p.cohort.n).toBe(13); expect(p.start.id).toBe("1l2y-rep4");
+    expect(p.by_owner).toEqual([{ handle: "kevin", n: 9 }, { handle: "pace-ice", n: 4 }]);
+    expect(p.external_forks).toBe(4); expect(p.fork_owners).toEqual(["pace-ice"]);
+    expect(p.engines).toEqual([{ engine: "Amber 26 PMEMD (2026)", n: 9 }, { engine: "Amber 24 SANDER (2024)", n: 4 }]);
+    expect(p.network?.status).toBe("tension"); expect(p.network?.parent.id).toBe("1l2y-rep4");
+    const q = projectSummary(idx, "3htb-jz4"); expect(q.cohort.n).toBe(1); expect(q.network).toBeNull(); expect(q.external_forks).toBe(0);
+  });
+  it("protocolPairs re-reads the index's protocol key and drops unset entries", () => {
+    const pairs = protocolPairs(idx[0].protocol);
+    expect(pairs.slice(0, 3)).toEqual([{ key: "dt", value: "0.002" }, { key: "cut", value: "9.0" }, { key: "ntc", value: "2" }]);
+    expect(pairs.find(p => p.key === "temp0")?.value).toBe("300.0"); expect(pairs.find(p => p.key === "igb")?.value).toBe("5");
+    expect(protocolPairs("a=1|b=None|c=")).toEqual([{ key: "a", value: "1" }]); expect(protocolPairs(null)).toEqual([]);
   });
 });
 
