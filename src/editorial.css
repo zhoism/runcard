@@ -144,6 +144,8 @@ details.runs-list .tablewrap { margin-top: 4px; }
 /* callout: one finding, one next step */
 .callout { border-left: 3px solid var(--navy); border-radius: 0 var(--radius) var(--radius) 0; background: var(--card); padding: 14px 20px; margin: 0 0 20px; box-shadow: 0 1px 2px rgba(20, 30, 45, .04), 0 0 0 1px rgba(20, 30, 45, .035); }
 .callout.warn { border-left-color: var(--warn); } .callout.pass { border-left-color: var(--pass); }
+.callout.fail { border-left-color: var(--fail); background: var(--fail-bg); box-shadow: none; } .callout.fail .callout-head { color: var(--fail); } .callout.fail code { background: rgba(255, 255, 255, .7); }
+.callout-hint { margin: 0 0 8px; font-size: 14.5px; color: var(--ink-2); max-width: 78ch; }
 .callout-head { margin: 0 0 4px; font-weight: 600; font-size: 15.5px; } .callout-head .dim { font-weight: 400; }
 .callout-body { margin: 0 0 8px; font-size: 14.5px; color: var(--ink-2); max-width: 78ch; }
 .callout-actions { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 14.5px; }
@@ -327,6 +329,8 @@ aside .agent > h2 { font-family: var(--serif); font-weight: 400; font-size: 27px
 aside .agent > h2 .dim { display: block; font-family: var(--sans); font-size: 13.5px; margin-top: 6px; }
 aside .agent .kicker { margin-bottom: 8px; }
 aside .agent .row.wrap { margin: 4px 0 2px; }
+/* a failed call in the rail: the callout sits under the buttons or the input box, its raw JSON folded */
+aside .callout { margin: 10px 0 0; padding: 10px 14px; } aside .callout p:last-of-type { margin-bottom: 4px; } aside .callout pre { margin-top: 6px; }
 details.devtools { margin-top: 14px; border-top: 1px solid rgba(30, 58, 95, .15); padding-top: 10px; }
 details.devtools > summary { cursor: pointer; list-style: none; font-size: 14px; font-weight: 600; color: var(--ink-2); }
 details.devtools > summary::-webkit-details-marker { display: none; }
@@ -335,6 +339,7 @@ details.devtools > summary .dim { font-weight: 400; }
 details.devtools[open] > summary { margin-bottom: 8px; }
 aside select, aside textarea { width: 100%; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-family: var(--mono); font-size: 13.5px; margin: 5px 0; }
 aside select:focus, aside textarea:focus { outline: none; border-color: var(--blue); }
+aside textarea[aria-invalid="true"], aside textarea[aria-invalid="true"]:focus { border-color: var(--fail); box-shadow: 0 0 0 3px var(--fail-bg); }
 .titlebar select { width: auto; max-width: min(240px, 100%); text-overflow: ellipsis; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-family: var(--sans); font-size: 14.5px; margin: 4px 0; }
 .titlebar select:focus { outline: none; border-color: var(--blue); }
 .proposal { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 10px; font-size: 14px; }
@@ -343,6 +348,7 @@ aside select:focus, aside textarea:focus { outline: none; border-color: var(--bl
 .call { font-size: 13.5px; padding: 6px 0; border-bottom: 1px solid var(--line); } .call:last-child { border-bottom: 0; }
 .call .args { color: var(--muted); }
 .call .what { margin-top: 2px; font-size: 14px; }
+.call .what.fail { color: var(--fail); font-weight: 500; }
 
 /* profile */
 .profile { display: flex; gap: 18px; align-items: flex-start; margin: 4px 0 6px; }
@@ -382,4 +388,3 @@ aside .agent button.ghost { border-color: rgba(30, 58, 95, .35); background: #ff
 button.chip { font-family: var(--mono); font-size: 13px; font-weight: 500; padding: 2px 9px; margin: 0; background: #fff; color: var(--ink-2); border: 1px solid var(--line); border-radius: 999px; line-height: 1.6; }
 button.chip:hover { border-color: var(--navy); color: var(--navy); background: #fff; }
 button.chip.on, button.chip.on:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
-pre.out.fail { color: var(--fail); }

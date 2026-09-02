@@ -142,9 +142,18 @@ const publicOutput = (out: any) => {
   return publicValue;
 };
 
+/** The schema's required fields, checked before the tool runs, so a missing run_id says "run_id is required" rather than
+ *  whatever the tool tripped over first (a fetch of /runs/undefined/manifest.json). An empty string counts as missing:
+ *  the console prefills run_b: "" on a compare page. */
+function requireFields(t: Tool, input: unknown) {
+  const required: string[] = (t.inputSchema as any).required ?? [];
+  const missing = required.find(k => { const v = (input as any)?.[k]; return v === undefined || v === null || v === ""; });
+  if (missing) throw new Error(`${missing} is required`);
+}
+
 export async function callTool(name: string, input: unknown, source: InvocationSource = "console"): Promise<string> {
   const t = TOOLS.find(t => t.name === name); if (!t) throw new Error(`unknown tool ${name}`);
-  try { const out = await t.run(input ?? {}); recordOutcome(name, input, out, source); const visible = publicOutput(out); logCall(name, input, true, summarize(name, visible), source); return JSON.stringify(visible); }
+  try { requireFields(t, input); const out = await t.run(input ?? {}); recordOutcome(name, input, out, source); const visible = publicOutput(out); logCall(name, input, true, summarize(name, visible), source); return JSON.stringify(visible); }
   catch (e: any) { logCall(name, input, false, String(e?.message ?? e), source); return JSON.stringify({ error: String(e?.message ?? e) }); }
 }
 
