@@ -278,12 +278,13 @@ function Profile({ handle, idx, own }: { handle: string; idx: IndexEntry[]; own:
 
 /** A Figma-style comment marker on a stage: a bubble, not a numbered label. Amber = pending (needs you), green = approved, grey = rejected.
     WebMCP does not expose the client's name, so the glyph is a generic agent mark; the thread names the source. */
-function ProposalPin({ proposals, onOpen }: { proposals: Proposal[]; onOpen: () => void }) {
+function ProposalPin({ stage, proposals, expanded, onToggle }: { stage: string; proposals: Proposal[]; expanded: boolean; onToggle: () => void }) {
   if (!proposals.length) return null;
   const pending = proposals.filter(p => p.status === "pending").length;
   const cls = pending ? "pending" : proposals.every(p => p.status === "rejected") ? "rejected" : "approved";
   const label = `${proposals.length} proposal${proposals.length === 1 ? "" : "s"} on this stage${pending ? `, ${pending} awaiting your approval` : ""}`;
-  return <button type="button" className={`pin ${cls}`} aria-label={label} title={label} onClick={onOpen}><span className="pin-glyph" aria-hidden="true">{proposals.length > 1 ? proposals.length : "✦"}</span></button>;
+  // A toggle, like the stage boxes: the first click opens the thread, the second closes it.
+  return <button type="button" id={`pin-${stage}`} className={`pin ${cls}`} aria-label={label} title={label} aria-expanded={expanded} aria-controls={expanded ? `threads-${stage}` : undefined} onClick={onToggle}><span className="pin-glyph" aria-hidden="true">{proposals.length > 1 ? proposals.length : "✦"}</span></button>;
 }
 /** One proposal as a comment thread: who and when, the ask, the diff, validation after, and the only two verbs a person has. */
 function ProposalThread({ p, compact }: { p: Proposal; compact?: boolean }) {
@@ -362,7 +363,8 @@ function ForkCards({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> |
   </div>;
 }
 
-/** The cpptraj plots as a filterable gallery: each has a name, a family and a one-line meaning from the catalogue. */
+/** The cpptraj plots as a filterable gallery. The caption is name + family, which is what a computational chemist
+    needs; the catalogue's one-clause description sits in the figure's tooltip and in one collapsed key under the gallery. */
 function AnalysesCard({ m }: { m: Manifest }) {
   const [filter, setFilter] = useState<AnalysisCategory | "all">("all");
   const [all, setAll] = useState(false);
@@ -375,12 +377,14 @@ function AnalysesCard({ m }: { m: Manifest }) {
     {all && present.length > 1 && <div className="pills" role="group" aria-label="filter analyses by family">
       {(["all", ...present] as const).map(c => <button key={c} type="button" className={`pill ${filter === c ? "on" : ""}`} aria-pressed={filter === c} onClick={() => setFilter(c)}>{c}{c !== "all" && <span className="count">{items.filter(i => i.category === c).length}</span>}</button>)}
     </div>}
-    <div className="gallery">{shown.map(i => <figure key={i.key} className="analysis">
+    <div className="gallery">{shown.map(i => <figure key={i.key} className="analysis" title={i.shows || undefined}>
       <figcaption><b>{i.name}</b><span className="dim">{i.category}</span></figcaption>
       <a href={`/runs/${m.id}/${i.png}`} target="_blank" rel="noopener" title={`open ${i.png} full size`}><img src={`/runs/${m.id}/${i.png}`} alt={`${i.name} plot`} loading="lazy" /></a>
-      {i.shows && <p className="dim small">{i.shows}</p>}
     </figure>)}</div>
     {items.length > featured.length && <button type="button" className="ghost" onClick={() => setAll(a => !a)} aria-expanded={all}>{all ? "Featured only" : `All ${items.length} analyses ▸`}</button>}
+    {shown.some(i => i.shows) && <details className="small plots-key"><summary>What these plots show</summary>
+      <dl>{shown.filter(i => i.shows).map(i => <div key={i.key}><dt>{i.name}</dt><dd>{i.shows}</dd></div>)}</dl>
+    </details>}
   </div>;
 }
 
@@ -546,7 +550,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
             <span className="stagename">{s.name}</span><span className="dim">{s.role}{s.length_ps != null ? ` · ${s.length_ps} ps` : ""}</span>
             <span className="dim">{s.cntrl.temp0 ? `${s.cntrl.temp0} K` : ""}{s.role === "minimization" ? "" : s.cntrl.ntp === "1" ? " NPT" : s.cntrl.ntb === "1" ? " NVT" : ""}{s.cntrl.ntr === "1" ? " restrained" : ""}</span>
             {verdictOf(reports[s.name]) !== overall || overall !== "PASS" ? <Verdict r={reports[s.name]} /> : null}</button>
-          <ProposalPin proposals={runProposals.filter(p => p.stage === s.name)} onOpen={() => setOpen(s.name)} /></div>)}</div>
+          <ProposalPin stage={s.name} proposals={runProposals.filter(p => p.stage === s.name)} expanded={open === s.name} onToggle={() => setOpen(open === s.name ? null : s.name)} /></div>)}</div>
         {open && (() => { const s = m.stages.find(x => x.name === open)!; const r = reports[open]; return <div className="stagedetail" id="stagedetail" role="region" aria-labelledby={`stage-${open}`}>
           {runProposals.some(p => p.stage === open) && <div className="threads" id={`threads-${open}`}>{runProposals.filter(p => p.stage === open).map(p => <ProposalThread key={p.id} p={p} />)}</div>}
           <div><h3>{s.name}.in</h3><pre>{s.mdin}</pre>

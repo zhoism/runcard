@@ -105,9 +105,14 @@ dd pre { margin-top: 4px; }
 dl > dt:last-of-type, dl > dt:last-of-type + dd { border-bottom: 0; }
 
 /* tables */
-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+/* header band: the thead sits in one grey strip flush with the table, top corners rounded. It is cell background, so inside
+   .tablewrap it scrolls with the table; border-radius on a cell needs border-collapse: separate (collapse ignores it).
+   The first column is inset 10px in head and body so the text stays aligned under the band. */
+table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 15px; }
 th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 600; font-size: 13px; }
+th:first-child, td:first-child { padding-left: 10px; }
+th { color: var(--muted); font-weight: 600; font-size: 13px; background: var(--chip-bg); padding-top: 10px; padding-bottom: 10px; }
+th:first-child { border-top-left-radius: 10px; } th:last-child { border-top-right-radius: 10px; }
 table.runs { width: auto; min-width: min(100%, 760px); } table.runs td:first-child { min-width: 230px; }
 table.runs tbody tr { cursor: pointer; } table.runs tbody tr:hover { background: var(--page); }
 table.runs td .dim { font-family: var(--mono); font-size: 13px; }
@@ -275,7 +280,10 @@ figure { margin: 0; } figure img { width: 100%; border: 1px solid var(--line); b
 figcaption { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-top: 4px; }
 .analysis figcaption { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; font-family: var(--sans); font-size: 14.5px; margin: 0 0 6px; color: var(--ink); }
 .analysis figcaption .dim { font-size: 13px; }
-.analysis p { margin: 6px 0 0; line-height: 1.45; }
+.plots-key { margin-top: 12px; } .plots-key > summary { color: var(--muted); }
+.plots-key dl { margin: 8px 0 0; display: grid; gap: 4px 0; } .plots-key dl > div { display: grid; grid-template-columns: 13em minmax(0, 1fr); gap: 0 12px; line-height: 1.45; }
+.plots-key dt { font-weight: 600; color: var(--ink); } .plots-key dd { margin: 0; color: var(--muted); }
+@media (max-width: 600px) { .plots-key dl > div { grid-template-columns: 1fr; } .plots-key dd { margin-bottom: 4px; } }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
 .pill .count { margin-left: 6px; opacity: .7; font-weight: 500; }
 img { max-width: 100%; }
@@ -363,6 +371,7 @@ aside select:focus, aside textarea:focus { outline: none; border-color: var(--bl
 /* pins and link-buttons override the global navy button; they sit last so order, not specificity tricks, decides */
 button.pin { position: absolute; top: -8px; left: 24px; width: 30px; height: 30px; padding: 0; margin: 0; border: 2px solid var(--card); border-radius: 50% 50% 50% 3px; background: var(--warn); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 3px rgba(20, 30, 45, .25); z-index: 1; transition: transform .12s; }
 button.pin:hover { transform: scale(1.12); background: var(--warn); border-color: var(--card); }
+button.pin[aria-expanded="true"] { box-shadow: 0 0 0 2px var(--navy), 0 1px 3px rgba(20, 30, 45, .25); }
 button.pin.approved { background: var(--pass); } button.pin.rejected { background: var(--muted); }
 button.pin.approved:hover { background: var(--pass); } button.pin.rejected:hover { background: var(--muted); }
 .pin-glyph { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #fff; color: var(--warn); font: 600 13px/1 var(--sans); }
