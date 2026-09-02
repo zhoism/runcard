@@ -362,7 +362,8 @@ function ForkCards({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> |
   </div>;
 }
 
-/** The cpptraj plots as a filterable gallery: each has a name, a family and a one-line meaning from the catalogue. */
+/** The cpptraj plots as a filterable gallery. The caption is name + family, which is what a computational chemist
+    needs; the catalogue's one-clause description sits in the figure's tooltip and in one collapsed key under the gallery. */
 function AnalysesCard({ m }: { m: Manifest }) {
   const [filter, setFilter] = useState<AnalysisCategory | "all">("all");
   const [all, setAll] = useState(false);
@@ -375,12 +376,14 @@ function AnalysesCard({ m }: { m: Manifest }) {
     {all && present.length > 1 && <div className="pills" role="group" aria-label="filter analyses by family">
       {(["all", ...present] as const).map(c => <button key={c} type="button" className={`pill ${filter === c ? "on" : ""}`} aria-pressed={filter === c} onClick={() => setFilter(c)}>{c}{c !== "all" && <span className="count">{items.filter(i => i.category === c).length}</span>}</button>)}
     </div>}
-    <div className="gallery">{shown.map(i => <figure key={i.key} className="analysis">
+    <div className="gallery">{shown.map(i => <figure key={i.key} className="analysis" title={i.shows || undefined}>
       <figcaption><b>{i.name}</b><span className="dim">{i.category}</span></figcaption>
       <a href={`/runs/${m.id}/${i.png}`} target="_blank" rel="noopener" title={`open ${i.png} full size`}><img src={`/runs/${m.id}/${i.png}`} alt={`${i.name} plot`} loading="lazy" /></a>
-      {i.shows && <p className="dim small">{i.shows}</p>}
     </figure>)}</div>
     {items.length > featured.length && <button type="button" className="ghost" onClick={() => setAll(a => !a)} aria-expanded={all}>{all ? "Featured only" : `All ${items.length} analyses ▸`}</button>}
+    {shown.some(i => i.shows) && <details className="small plots-key"><summary>What these plots show</summary>
+      <dl>{shown.filter(i => i.shows).map(i => <div key={i.key}><dt>{i.name}</dt><dd>{i.shows}</dd></div>)}</dl>
+    </details>}
   </div>;
 }
 

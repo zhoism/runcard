@@ -697,6 +697,7 @@ describe("analysis catalogue", () => {
     for (const d of dirs) for (const k of Object.keys(load(d).analyses)) { if (k === "plip") continue;
       const info = analysisInfo(k); expect(info.name, k).not.toBe(k); expect(ANALYSIS_CATEGORIES, k).toContain(info.category); expect(info.shows.length, k).toBeGreaterThan(20); }
     expect(analysisInfo("mystery")).toEqual({ name: "mystery", category: "other", shows: "" });
-    expect(Object.values(ANALYSIS_CATALOG).every(i => !/\d+\.\d+ ?kcal/.test(i.shows))).toBe(true); // meanings describe the plot type, never a run's number
+    for (const [k, i] of Object.entries(ANALYSIS_CATALOG)) { // one flat technical clause per plot: no digits, no second sentence, no reassurance
+      expect(i.shows, k).not.toMatch(/\d|;|\.\s|\.$/); expect(i.shows, k).not.toMatch(/\b(normal|fine|not a problem|is not|healthy|expected)\b/i); }
   });
 });
