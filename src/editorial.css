@@ -105,9 +105,14 @@ dd pre { margin-top: 4px; }
 dl > dt:last-of-type, dl > dt:last-of-type + dd { border-bottom: 0; }
 
 /* tables */
-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+/* header band: the thead sits in one grey strip flush with the table, top corners rounded. It is cell background, so inside
+   .tablewrap it scrolls with the table; border-radius on a cell needs border-collapse: separate (collapse ignores it).
+   The first column is inset 10px in head and body so the text stays aligned under the band. */
+table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 15px; }
 th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 600; font-size: 13px; }
+th:first-child, td:first-child { padding-left: 10px; }
+th { color: var(--muted); font-weight: 600; font-size: 13px; background: var(--chip-bg); padding-top: 10px; padding-bottom: 10px; }
+th:first-child { border-top-left-radius: 10px; } th:last-child { border-top-right-radius: 10px; }
 table.runs { width: auto; min-width: min(100%, 760px); } table.runs td:first-child { min-width: 230px; }
 table.runs tbody tr { cursor: pointer; } table.runs tbody tr:hover { background: var(--page); }
 table.runs td .dim { font-family: var(--mono); font-size: 13px; }
