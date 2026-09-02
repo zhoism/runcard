@@ -342,11 +342,14 @@ function ForkCards({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> |
 /** The cpptraj plots as a filterable gallery: each has a name, a family and a one-line meaning from the catalogue. */
 function AnalysesCard({ m }: { m: Manifest }) {
   const [filter, setFilter] = useState<AnalysisCategory | "all">("all");
+  const [all, setAll] = useState(false);
   const items = Object.entries(m.analyses).filter(([k]) => k !== "plip").map(([k, a]) => ({ key: k, png: a.png, ...analysisInfo(k) }));
   const present = ANALYSIS_CATEGORIES.filter(c => items.some(i => i.category === c));
-  const shown = items.filter(i => filter === "all" || i.category === filter);
-  return <div className="card"><h2>Analyses <span className="dim">cpptraj · {items.length} plots</span></h2>
-    {present.length > 1 && <div className="pills" role="group" aria-label="filter analyses by family">
+  // Three plots carry the story: stability, one interaction view, one ensemble view. The rest are one click away.
+  const featured = [["rmsd", "rg"], ["hbond", "rmsf", "dssp"], ["fel", "cluster", "pca"]].map(ks => ks.map(k => items.find(i => i.key === k)).find(Boolean)).filter((i): i is typeof items[number] => !!i);
+  const shown = all ? items.filter(i => filter === "all" || i.category === filter) : featured;
+  return <div className="card"><h2>Analyses <span className="dim">cpptraj · {all || featured.length >= items.length ? `${items.length} plots` : `${featured.length} featured of ${items.length}`}</span></h2>
+    {all && present.length > 1 && <div className="pills" role="group" aria-label="filter analyses by family">
       {(["all", ...present] as const).map(c => <button key={c} type="button" className={`pill ${filter === c ? "on" : ""}`} aria-pressed={filter === c} onClick={() => setFilter(c)}>{c}{c !== "all" && <span className="count">{items.filter(i => i.category === c).length}</span>}</button>)}
     </div>}
     <div className="gallery">{shown.map(i => <figure key={i.key} className="analysis">
@@ -354,6 +357,7 @@ function AnalysesCard({ m }: { m: Manifest }) {
       <a href={`/runs/${m.id}/${i.png}`} target="_blank" rel="noopener" title={`open ${i.png} full size`}><img src={`/runs/${m.id}/${i.png}`} alt={`${i.name} plot`} loading="lazy" /></a>
       {i.shows && <p className="dim small">{i.shows}</p>}
     </figure>)}</div>
+    {items.length > featured.length && <button type="button" className="ghost" onClick={() => setAll(a => !a)} aria-expanded={all}>{all ? "Featured only" : `All ${items.length} analyses ▸`}</button>}
   </div>;
 }
 
@@ -449,6 +453,14 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
           a number, or a reader takes its ΔG for an independent measurement of a different thing. */}
       {m.parent && <p className="lineage">{m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{qualified(idx, m.parent)}</a>{m.fork?.seed === "fresh" ? " — same prepared system and protocol, fresh seeds" : ""}{m.fork?.complete === false ? " — partially applied" : ""}.</p>}
 
+      {/* One line a reader can check before anything else: what ran, how long, which seed, how many rungs it has climbed; and the one agent action. */}
+      <div className="summary-strip">
+        <span><b>{prod?.engine ?? m.environment.pmemd}</b></span><span>{prod?.length_ps != null ? `${prod.length_ps} ps production` : "no production stage"}</span><span>seed <span className="mono">{prod?.realized_seed ?? "—"}</span></span>
+        {ladder && <span className="badge pass">{ladder.verified_of_assessable} assessed rungs verified</span>}
+        <button type="button" onClick={async () => { await callTool("investigate_run", { run_id: id }, "page"); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} title="Reads the ladder, chases the weakest rung with the read-only tools, recommends one action. Creates nothing.">Investigate this run</button>
+      </div>
+      {net && net.n > 0 && <ForkCallout net={net} detailHref={`#network-${m.id}`} onReplicate={() => forkKinds(m, ens).find(k => k.id === "replicate")?.run()} />}
+
       <div className={m.results.plip ? "grid2" : ""}>
         <div className="card">
           <h2>Binding free energy <span className="dim">MM-GBSA, single trajectory{mm?.params?.entropy === "0" ? ", no entropy term" : ""}</span></h2>
@@ -470,8 +482,10 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
               <p className="dim">Per-frame: population SD {fmt(mm.frame_std)}, naive SEM {fmt(mm.frame_sem, 3)} over {mm.frames} frames (every {mm.params?.interval ?? "?"}th of {mm.params?.endframe ?? "?"}); frames are correlated, so the naive SEM understates the within-run uncertainty.{mm.frames_header_text && mm.frames_header_text !== String(mm.frames) ? ` The mmgbsa.dat header prints "${mm.frames_header_text}" — (endframe−startframe)/interval+1 un-floored; the count here is from the per-frame blocks.` : ""}</p>
               {u && <p className="dim">Corrected SEM = SD·√(g/N) with g = 1 + 2Σ(1−t/N)C(t) (τ = {u.integrated_autocorrelation_time_frames} frames); drift verdict: {u.thresholds.drifting_if}; too short if {u.thresholds.too_short_if}. Reconstructed from the per-frame mdout files; the full window reproduces mmgbsa.dat exactly.</p>}
             </details>
-            {mm.warnings.map((w, i) => { const quiet = resid != null && resid.fraction_of_delta_g < 1e-3; return <div key={i} className={`warnbox ${quiet ? "quiet" : ""}`}>⚠ {w}
-              <div className="dim">Recorded from mmgbsa.dat — shown lowercased; the file prints it in capitals.{resid ? ` The internal-term residual it accompanies: ${resid.total.mean} ± ${resid.total.sd} kcal/mol per frame (${(resid.fraction_of_delta_g * 100).toFixed(3)} % of ΔG), from ${resid.dominant_term}; the exact trigger is not recorded, so this is consistent with the warning, not its proven cause${quiet ? " — below 0.1 % of ΔG, shown for the record" : ""}.` : " Ask the agent to explain_result for what it means."}</div></div>; })}
+            {mm.warnings.map((w, i) => { const quiet = resid != null && resid.fraction_of_delta_g < 1e-3; const pct = resid ? `${(resid.fraction_of_delta_g * 100).toFixed(3)} %` : null; return <details key={i} className={`warnstatus ${quiet ? "quiet" : ""}`}>
+              <summary><span className="badge warn">archived warning</span> <b>MMPBSA warned about its internal terms — investigated.</b> {resid ? <>Residual {pct} of ΔG · status: <b>{quiet ? "retained caveat, not outcome-determining" : "open caveat"}</b>.</> : <>Status: <b>open caveat</b>; no per-frame data to size it.</>} <span className="dim">verbatim ▾</span></summary>
+              <p className="warn-verbatim">⚠ {w}</p>
+              <p className="dim small">Recorded from mmgbsa.dat — shown lowercased; the file prints it in capitals.{resid ? ` The internal-term residual it accompanies: ${resid.total.mean} ± ${resid.total.sd} kcal/mol per frame (${(resid.fraction_of_delta_g * 100).toFixed(3)} % of ΔG), from ${resid.dominant_term}; the exact trigger is not recorded, so this is consistent with the warning, not its proven cause${quiet ? " — below 0.1 % of ΔG, shown for the record" : ""}.` : " Ask the agent to explain_result for what it means."}</p></details>; })}
           </> : <p className="dim">no MM-GBSA result</p>}
         </div>
         {m.results.plip && <div className="card">
@@ -482,10 +496,24 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
         </div>}
       </div>
 
-      {net && net.n > 0 && <ForkNetworkCard net={net} compact />}
+      <h2 className="section-label">can I trust it?</h2>
+      {ladder && <EvidenceOverview ladder={ladder} explanation={explanation} investigation={investigation} validationVerdict={overall} />}
+      {ladder && (() => { const L = ladder; const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
+        <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} assessed rungs verified{L.rungs.some(r => r.status === "partly established") ? ` · ${L.rungs.filter(r => r.status === "partly established").length} partly established` : ""} · 1 not assessed · computed from the archived data</span></h2>
+        <ol className="ladder">{L.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><span className="dim mono">{i + 1}.</span> <span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span>
+          <details className="small"><summary className="dim">evidence</summary><p className="dim">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</p></details></li>)}</ol>
+      </div>; })()}
 
+      <h2 className="section-label">what happened</h2>
+        {m.structure && <Boundary label="Structure"><div className="card"><h2>Structure <span className="dim">cluster medoid, dry</span></h2><Viewer url={`/runs/${m.id}/${m.structure}`} ligand={m.system.ligand.resname} /></div></Boundary>}
+      <AnalysesCard m={m} />
+
+      <h2 className="section-label">build on it</h2>
       <ForkCards m={m} ens={ens} />
+      {net && net.n > 0 && <ForkNetworkCard net={net} compact />}
+      <CurrentInvestigation runId={id} investigation={investigation} partnerId={ens?.all.runs.find(r => r.id !== m.id)?.id ?? others[0]?.id} />
 
+      <h2 className="section-label">how it was produced</h2>
       <div className="card">
         <h2>Stages <span className={`badge ${overall.toLowerCase()}`}>input checks {overall}</span></h2>
         <p className="dim small">11 rules on each .in file (timestep vs SHAKE, cutoff, thermostat, barostat, restarts, seeds, output cadence): a sanity check of the input files, not evidence of convergence or physical accuracy and not a rung of the confidence ladder — select a stage for its input and findings.</p>
@@ -504,8 +532,6 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
           <div><h3>Validation</h3><ul className="findings">{r.findings.map((f, i) => <li key={i}><span className={`badge ${f.level.toLowerCase()}`}>{f.level}</span> <b>{f.rule}</b> — {f.detail}</li>)}</ul></div>
         </div>; })()}
       </div>
-
-      <div className="grid2">
         <div className="card">
           <h2>System</h2>
           <dl>
@@ -517,21 +543,6 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
             <dt>engine</dt><dd>{prod?.engine} · AmberTools {m.environment.conda_lock.ambertools} · MMPBSA.py {mm?.mmpbsa_version}</dd>
           </dl>
         </div>
-        {m.structure && <Boundary label="Structure"><div className="card"><h2>Structure <span className="dim">cluster medoid, dry</span></h2><Viewer url={`/runs/${m.id}/${m.structure}`} ligand={m.system.ligand.resname} /></div></Boundary>}
-      </div>
-
-      {ladder && <EvidenceOverview ladder={ladder} explanation={explanation} investigation={investigation} validationVerdict={overall} />}
-      <CurrentInvestigation runId={id} investigation={investigation} partnerId={ens?.all.runs.find(r => r.id !== m.id)?.id ?? others[0]?.id} />
-
-      {ladder && (() => { const L = ladder; const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
-        <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} assessed rungs verified{L.rungs.some(r => r.status === "partly established") ? ` · ${L.rungs.filter(r => r.status === "partly established").length} partly established` : ""} · 1 not assessed · computed from the archived data</span></h2>
-        <ol className="ladder">{L.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><span className="dim mono">{i + 1}.</span> <span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span>
-          <details className="small"><summary className="dim">evidence</summary><p className="dim">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</p></details></li>)}</ol>
-      </div>; })()}
-
-
-      <AnalysesCard m={m} />
-
       <div className="card"><h2>Provenance</h2>
         <dl>{m.parent && <><dt>derived from</dt><dd><a href={`#/run/${m.parent}`}>{m.parent}</a>{m.fork ? <span className="dim"> · {m.fork.kind}{m.fork.seed ? `, ${m.fork.seed} seed` : ""}{m.fork.complete === false ? ", partially applied" : ""}</span> : null}</dd></>}
           <dt>pipeline stages</dt><dd className="mono">{Object.entries(m.pipeline.stage_envelopes).map(([k, ok]) => `${k}:${ok ? "ok" : "FAILED"}`).join("  ")} <span className="dim">({m.pipeline.skills.join(" → ")})</span></dd>

@@ -144,6 +144,16 @@ details.runs-list .tablewrap { margin-top: 4px; }
 .ladder.compact { font-size: 14.5px; } .ladder.compact li { padding: 4px 0; }
 .project .titlebar .sans { font-family: var(--sans); font-size: 15px; }
 @media (max-width: 600px) { .facts { grid-template-columns: 1fr; gap: 2px 0; } .facts dt { margin-top: 6px; } }
+/* run page: summary strip, section labels, interpreted warning */
+.summary-strip { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 0 0 14px; font-size: 14.5px; color: var(--ink-2); }
+.summary-strip b { color: var(--ink); font-weight: 600; } .summary-strip .mono { font-size: 13.5px; }
+.summary-strip button { margin-left: auto; font-size: 14px; padding: 6px 14px; }
+.section-label { margin: 22px 0 8px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.section-label:first-of-type { margin-top: 18px; }
+.warnstatus { margin-top: 12px; padding: 8px 12px; border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: 8px; font-size: 14px; }
+.warnstatus.quiet { border-left-color: var(--muted); } .warnstatus summary { cursor: pointer; line-height: 1.5; } .warnstatus summary b { font-weight: 600; }
+.warnstatus .warn-verbatim { margin: 8px 0 4px; font-family: var(--mono); font-size: 13px; }
+@media (max-width: 600px) { .summary-strip button { margin-left: 0; } }
 
 /* fork network: the parent node, a rail, and the forks hanging off it (GitHub's network graph, one level deep) */
 .network .tree { margin: 4px 0 12px; }
