@@ -34,7 +34,7 @@ lineage, a proposal is a pull request only a person can merge.
   composition is read from their own files (no `s*.json`), never copied from the
   parent.
 - `public/runs/owners.json` — who published each card. Two profiles: `kevin` (default;
-  the home page `#/` is his profile) and `pace-ice` (the four PACE-ICE reruns, executed under
+  his profile is `#/u/kevin`; the home page `#/` is the landing page, with `1l2y-rep4` as the demo run) and `pace-ice` (the four PACE-ICE reruns, executed under
   Kevin's cluster account — say that; it is not a second person). Site metadata typed by hand,
   the one field not read from a run directory, because no artifact records who ran it.
   `tools/build_index.py` stamps `owner` into `index.json`; profiles live at `#/u/<handle>`.

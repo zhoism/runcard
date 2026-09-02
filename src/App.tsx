@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { Manifest, IndexEntry, Owners } from "./lib/types";
-import { loadIndex, loadOwners, ownerStats, ownerHandles, loadRun, validateStage, ensemble, cohorts, type Cohort, projectSummary, protocolPairs, type ForkNetwork, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem } from "./lib/runs";
+import { loadIndex, loadOwners, ownerStats, ownerHandles, loadRun, validateStage, ensemble, cohorts, type Cohort, projectSummary, protocolPairs, type ForkNetwork, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem, objectiveOf, nextStep } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set, UNDO_WINDOW_MS } from "./store";
@@ -12,6 +12,7 @@ import { parseToolError, type ToolError } from "./lib/toolError";
 import { Viewer, Boundary } from "./Viewer";
 import { Spread } from "./Spread";
 import type { InvestigationState } from "./lib/investigation";
+import { AGENT_ACTIONS, type AgentAction } from "./agentActions";
 
 /** "run_id=1l2y-regression stage=product" — the call's arguments, readable at a glance. */
 const fmtArgs = (input: unknown) => input && typeof input === "object" && !Array.isArray(input) ? Object.entries(input as Record<string, unknown>).map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`).join(" ") : input == null ? "" : JSON.stringify(input);
@@ -21,6 +22,8 @@ const fmt = (n: number | null | undefined, d = 2) => n == null ? "—" : n.toFix
 const ownerOf = (idx: IndexEntry[], id: string) => idx.find(r => r.id === id)?.owner;
 const qualified = (idx: IndexEntry[], id: string) => { const o = ownerOf(idx, id); return o ? `${o}/${id}` : id; };
 const plural = (n: number, w: string) => (n === 1 ? w : w + "s");
+/** The run a first visitor is sent to: the parent of the site's one executed fork network, so the fork story on its page is true. */
+const DEMO_RUN = "1l2y-rep4";
 /** The project (cohort) a run belongs to, for breadcrumbs. */
 const projectOf = (idx: IndexEntry[], id: string) => cohorts(idx).find(c => c.runs.some(r => r.id === id));
 const rungCls = (st: string) => st === "verified" ? "pass" : st === "not established" ? "warn" : st === "partly established" ? "partly" : "";
@@ -129,18 +132,84 @@ function ProjectCard({ c, idx, own, rows, handle }: { c: Cohort; idx: IndexEntry
   </section>;
 }
 
-/** Home lists the projects: the prepared systems are the repositories. People are one line; profiles are a click away. */
+/** The landing page: what runcard is in one sentence, one action, the demo run beside it, what an agent can do here,
+    then the projects. People are one line; Kevin's profile is at #/u/kevin, not here. */
 function Home({ idx, own }: { idx: IndexEntry[]; own: Owners | null }) {
   useEffect(() => { document.title = "runcard"; }, []);
   const cs = cohorts(idx); const handles = ownerHandles(idx);
   const nameOf = (h: string) => own?.profiles[h]?.name ?? h;
-  return <section>
-    <h1>Validated records of <em>molecular simulations</em></h1>
-    <p className="lede">A project is one prepared system. Its runs are the commits, a fork is a rerun with lineage, and every number on the page traces to a file in the run directory. An agent reads the same page through WebMCP; a person approves every change to an input.</p>
+  const demo = idx.find(r => r.id === DEMO_RUN) ?? null;
+  const toActions = (e: { preventDefault(): void }) => { e.preventDefault(); document.getElementById("agent-actions")?.scrollIntoView({ behavior: "smooth", block: "start" }); };
+  return <section className="home">
+    <div className="hero">
+      <div className="hero-copy">
+        <h1>MD runs you can <em>inspect, verify, fork</em> and continue.</h1>
+        <p className="lede">Runcard turns simulation outputs into structured records with provenance, validation and lineage, so collaborators and AI agents can understand what happened and build on it. Every number traces to a file in the run directory, an agent reads the same page through WebMCP, and a person approves every change to an input.</p>
+        <div className="cta"><a className="btn" href={`#/run/${DEMO_RUN}`}>Explore the demo run →</a><a className="btn ghost" href="#agent-actions" onClick={toActions}>See what an agent can do</a></div>
+      </div>
+      {demo && <StartHere r={demo} idx={idx} own={own} />}
+    </div>
     {!idx.length && <p className="dim" role="status">loading runs…</p>}
+    <AgentActionsCard runId={DEMO_RUN} />
+    {cs.length > 0 && <h2 className="section-label">projects <span className="dim">one prepared system each; its runs are the commits</span></h2>}
     {cs.map(c => <ProjectCard key={c.key} c={c} idx={idx} own={own} />)}
     {handles.length > 0 && <p className="people">People on runcard: {handles.map((h, i) => { const o = ownerStats(idx, h); return <span key={h}>{i ? " · " : ""}<a href={`#/u/${h}`}>{nameOf(h)}</a> <span className="dim">@{h} · {o.runs} {plural(o.runs, "run")}{o.forks_from_others > 0 ? `, forks of ${o.forked_from.map(nameOf).join(", ")}'s` : ""}</span></span>; })}</p>}
   </section>;
+}
+
+/** The demo run as a card beside the claim: what it is, its number with the uncertainty that applies, and what came of
+    forking it. Every clause is read from the index; the card is a link to the run. */
+function StartHere({ r, idx, own }: { r: IndexEntry; idx: IndexEntry[]; own: Owners | null }) {
+  const nameOf = (h: string) => own?.profiles[h]?.name ?? h;
+  const sys = describeSystem(r.title, r.ligand); const ens = ensemble(idx, r.id); const net = forkNetwork(idx, r.id);
+  const by = [...new Set(net.forks.map(f => f.owner).filter((o): o is string => !!o && o !== r.owner))];
+  const crossEngine = net.engines.forks.some(e => e !== net.engines.parent);
+  const href = `#/run/${r.id}`;
+  return <div className="card start-here" onClick={e => { if ((e.target as HTMLElement).closest("a")) return; navigate(`/run/${r.id}`); }}>
+    <p className="kicker">start here <span className="badge start">demo run</span><span className="mono">{r.id}</span></p>
+    <h2 className="headline"><a href={href}>{sys?.name ?? r.title}</a></h2>
+    <p className="start-desc">{sys ? `${sys.sentence} ` : ""}{r.production_ps} ps of production on {r.engine}{r.owner ? `, published by ${nameOf(r.owner)}` : ""}.</p>
+    <p className="cohort-dg">ΔG <b className="mono">{fmt(r.delta_g)}{ens.all.sd != null ? ` ± ${fmt(ens.all.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{ens.all.sd != null ? ` · ± is the run-to-run SD over ${ens.all.n} runs` : ""}</span></p>
+    {net.n > 0 && <p className="start-forks"><span className={`badge ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`}>{net.n} forks · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</span> {net.n} independent reruns from its bundle{by.length ? `, executed by ${by.map(nameOf).join(", ")}` : ""}{crossEngine ? " on a different engine" : ""}, {net.status === "agree" ? "reproduce it to seed noise" : net.status === "tension" ? "disagree with it beyond seed noise" : "agree with it in sign"}.</p>}
+    <p className="start-open"><a href={href}>Open the run →</a></p>
+  </div>;
+}
+
+/** What an agent can do on a run, in a reader's words, each row the tool it really calls. "Run it" opens the demo run
+    with the call made from the page, "prepare it" with the call in the console — the same table an agent reaches through
+    WebMCP; nothing here is a mock, and nothing here approves anything. */
+function AgentActionsCard({ runId }: { runId: string }) {
+  const webmcp = useStore(s => s.webmcp);
+  const tryIt = (a: AgentAction) => { set({ console: { tool: a.tool, input: JSON.stringify(a.input(runId), null, 1), run: !a.prefill } }); navigate(`/run/${runId}`); };
+  return <div className="card" id="agent-actions">
+    <h2>What an agent can do here <span className="dim">{AGENT_ACTIONS.length} of the {TOOLS.length} WebMCP tools, in a reader's words; each runs on the demo run, {runId}</span></h2>
+    <ol className="agent-actions">{AGENT_ACTIONS.map(a => { const t = TOOLS.find(x => x.name === a.tool)!; return <li key={a.id}>
+      <b>{a.verb}{a.prefill && <span className="badge warn">needs your approval</span>}</b>
+      <span>{a.does}</span>
+      <button type="button" className="linklike try" onClick={() => tryIt(a)}>{a.prefill ? "Prepare it on the demo run →" : "Run it on the demo run →"} <span className="mono dim">{t.name}</span></button>
+    </li>; })}</ol>
+    <p className="dim small">{webmcp === "registered" ? "Your agent sees these tools now; ask it in your own words." : "An agent in a WebMCP browser calls these itself; here the page makes the same call for you."} Agent proposals, deterministic checks, archived data and your approvals are labelled apart on every page, and an agent can prepare a change but never apply one.</p>
+  </div>;
+}
+
+/** One next step, from the confidence ladder: the first rung this site can climb from here, its own `to_climb` (which
+    names the tool — that is the trace), and one button that starts it. */
+function NextStepCallout({ step, m, ens }: { step: NonNullable<ReturnType<typeof nextStep>>; m: Manifest; ens: ReturnType<typeof ensemble> | null }) {
+  // A verified rung with a to_climb is the ladder's "what next" beyond the evidence: the record is as established as this site makes it, and what remains is a scientific question.
+  const body = step.status === "verified" ? `The record is as established as this site can make it (repeatable stays expected: nothing is executed here). What remains is a scientific question, not more evidence for this number: ${step.to_climb}.` : `${step.rung} is ${step.status}: ${step.to_climb}.`;
+  const kinds = forkKinds(m, ens);
+  const verb = step.action === "replicate" ? "run independent replicates" : step.action === "extend" ? "vary one modelling choice in a controlled extension" : step.action === "plan_sampling" ? "sample longer" : step.action === "reproduce" ? "replay it exactly" : "climb the next rung";
+  const k = step.action === "replicate" || step.action === "extend" || step.action === "reproduce" ? kinds.find(x => x.id === step.action) : null;
+  const planIt = () => set({ console: { tool: "plan_sampling", input: JSON.stringify({ run_id: m.id }, null, 1), run: true } });
+  const jump = (e: { preventDefault(): void }) => { e.preventDefault(); const el = document.getElementById("fork-card"); el?.scrollIntoView({ behavior: "smooth", block: "start" }); el?.classList.add("flash"); setTimeout(() => el?.classList.remove("flash"), 1200); };
+  return <div className="callout next" role="note">
+    <p className="callout-head">Next step: {verb}</p>
+    <p className="callout-body">{body}</p>
+    <div className="callout-actions">
+      {k ? <button type="button" onClick={k.run}>{k.action}{k.approval ? " · needs your approval" : ""}</button> : step.action === "plan_sampling" ? <button type="button" onClick={planIt}>Plan the sampling</button> : null}
+      <a href="#fork-card" onClick={jump}>Fork and continue ↓</a>
+    </div>
+  </div>;
 }
 
 /** The fork network's verdict as one scientific finding with a next step, not a paragraph of arithmetic. Every clause
@@ -357,11 +426,24 @@ function ProposalThread({ p, compact }: { p: Proposal; compact?: boolean }) {
   return <div className={`thread ${p.status}`}>
     <div className="thread-who"><span className={`chip ${p.source === "webmcp" ? "agent" : ""}`}>{p.source === "webmcp" ? "agent proposal" : "proposal"}</span> {p.source && <Source source={p.source} />}{when && <span className="dim"> · {when}</span>}{compact && <span className="dim"> · <b>{p.run}</b> / {p.stage}</span>}{p.fork && <span className="dim"> · fork: {p.fork.kind}</span>}<span className={`badge ${p.status}`}>{p.status}</span></div>
     <p className="thread-ask">{p.reason}</p>
+    {p.fork && <ForkTerms p={p} />}
     <div className="thread-diff mono">{(p.changes ?? []).length ? p.changes.map(c => <div key={c.key}><span className="k">{c.key}</span> <s className="old">{c.before ?? "(unset)"}</s> <span className="new">{c.after}</span>{c.meaning && <span className="dim sans"> — {c.meaning}{c.material ? "" : " · not material"}</span>}</div>) : Object.entries(p.edits).map(([k, v]) => <div key={k}><span className="k">{k}</span> <span className="new">{v}</span></div>)}</div>
     <div className="thread-check">{p.material_classes?.length ? <span className="badge warn">material · {p.material_classes.map(c => c.replace("_", " ")).join(", ")}</span> : null} validation after <Verdict r={p.after} />{p.after.findings.filter(f => f.level !== "PASS").map((f, i) => <div key={i} className="dim small">{f.level}: {f.rule} — {f.detail}</div>)}</div>
     {p.status === "pending" && <div className="row"><button className="primary" onClick={() => setProposalStatus(p.id, "approved")} disabled={p.after.hasFail}>Approve</button><button className="ghost" onClick={() => setProposalStatus(p.id, "rejected")}>Reject</button>{p.after.hasFail && <span className="dim small" style={{ alignSelf: "center" }}>cannot approve: the edit fails validation</span>}</div>}
     <UndoLine p={p} />
     {p.status === "pending" && captured && <p className="dim small undo-note">The bundle prepared at {fmtTime(captured.generatedAt)} still contains this edit: it captured the approval that was undone.</p>}
+  </div>;
+}
+/** What a fork proposal inherits, what it changes and what Approve does — the terms a person agrees to, from the fork's
+    own meta. The values are in the diff below; this block gives their scope. */
+function ForkTerms({ p }: { p: Proposal }) {
+  const f = p.fork!; const t = f.treatment;
+  const named = f.controls.slice(0, 2); const held = f.controls.slice(2);
+  const others = f.stages.filter(x => x !== p.stage);
+  return <div className="fork-terms">
+    <div><b>Inherits</b> {named.join("; ")}{held.length > 0 && <>; and <details className="small"><summary className="dim">{held.length} held settings</summary><span className="mono">{held.join(" · ")}</span></details></>}</div>
+    <div><b>Changes</b> {t ? <>one variable, <span className="mono">{t.key}</span>{t.meaning ? ` (${t.meaning})` : ""}, in {f.stages.join(" and ")}{others.length > 0 && <span className="dim"> — this thread is the {p.stage} edit; {others.join(", ")} {others.length === 1 ? "has its own pin" : "have their own pins"}</span>}</> : "no input"}</div>
+    <div><b>Approve</b> applies this edit to <span className="mono">{p.stage}.in</span> in the rerun bundle only; the archived run is never modified, and the bundle records <span className="mono">{p.run}</span> as parent.</div>
   </div>;
 }
 const SHEET = "(max-width: 700px)";
@@ -434,8 +516,8 @@ function ForkMenu({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> | 
   const kinds = forkKinds(m, ens);
   const jump = () => { setOpen(false); const el = document.getElementById("fork-card"); el?.scrollIntoView({ behavior: "smooth", block: "start" }); el?.classList.add("flash"); setTimeout(() => el?.classList.remove("flash"), 1200); };
   return <div className="fork-menu" ref={ref}>
-    <button type="button" className="fork-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(o => !o)}>Fork <span aria-hidden="true">▾</span></button>
-    {open && <div className="menu" role="menu" aria-label="fork this experiment">
+    <button type="button" className="fork-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(o => !o)}>Fork and continue <span aria-hidden="true">▾</span></button>
+    {open && <div className="menu" role="menu" aria-label="fork this experiment and continue it">
       {kinds.map(k => <button key={k.id} type="button" role="menuitem" className="menu-item" onClick={() => { setOpen(false); k.run(); }}>
         <span className="menu-title">{k.title}{k.approval && <span className="badge warn">needs your approval</span>}</span>
         <span className="menu-desc">{k.desc}</span>
@@ -458,7 +540,7 @@ function forkKinds(m: Manifest, ens: ReturnType<typeof ensemble> | null) {
     { id: "replicate", title: "Replicate", desc: ens && ens.all.n > 1 ? `Same protocol, fresh seeds. An executed rerun joins the ${ens.all.n}-run spread above.` : "Same protocol, fresh seeds. An executed rerun starts the run-to-run spread this card lacks.", action: "Plan replicate", approval: false,
       run: () => callTool("fork_experiment", { run_id: m.id, kind: "replicate" }, "page"),
       prompt: `Plan a replicate of ${card}: how many more independent runs are needed and at what length? Then prepare the replicate fork.` },
-    { id: "extend", title: "Extend", desc: "Change one variable, hold the rest fixed — e.g. temp0 → 310 K. The controlled diff becomes a proposal pinned to its stages.", action: "Prefill console", approval: true,
+    { id: "extend", title: "Extend", desc: "Change one variable, hold the rest fixed — e.g. temp0 → 310 K. The controlled diff becomes a proposal pinned to its stages.", action: "Prepare extension", approval: true,
       run: () => { set({ console: { tool: "fork_experiment", input: JSON.stringify({ run_id: m.id, kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" }, null, 1) } }); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); },
       prompt: `Using ${card}, prepare a controlled temperature change and explain what stays fixed. Stop at a pending proposal and wait for my approval.` },
   ];
@@ -467,7 +549,7 @@ function ForkCards({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> |
   const [copied, setCopied] = useState<string | null>(null);
   const copy = async (id: string, text: string) => { try { await navigator.clipboard.writeText(text); setCopied(id); } catch { setCopied(`error:${id}`); } };
   const kinds = forkKinds(m, ens);
-  return <div className="card" id="fork-card"><h2>Fork this experiment <span className="dim">reproduce and replicate change no inputs; extend changes one and waits for your approval</span></h2>
+  return <div className="card" id="fork-card"><h2>Fork and continue <span className="dim">a fork inherits the prepared system, protocol, force fields and MM-GBSA model, and records what changed — reproduce and replicate change no inputs; extend changes one and waits for your approval</span></h2>
     <div className="fork-cards">{kinds.map(k => <div key={k.id} className="fork-card">
       {k.approval && <span className="badge warn">needs your approval</span>}
       <h3>{k.title}</h3><p>{k.desc}</p>
@@ -593,6 +675,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
       setTimeout(() => setLinkState("idle"), 1600);
     } catch { setLinkState("error"); }
   };
+  const step = ladder ? nextStep(ladder) : null;
   return (
     <section className="run">
       <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span>{(() => { const c = projectOf(idx, id); return c ? <><a href={`#/p/${c.slug}`}>{c.title}</a><span aria-hidden="true">/</span></> : null; })()}<span className="mono">{m.id}</span></nav>
@@ -602,14 +685,19 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
         <button type="button" className="ghost" aria-live="polite" title="Copy a shareable link to this run" onClick={copyRunLink}>{linkState === "copied" ? "Link copied" : linkState === "error" ? "Copy unavailable" : "Copy link"}</button>
         {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks{(() => { const by = [...new Set(net.forks.map(f => f.owner).filter(o => o && o !== net.parent.owner))]; return by.length ? ` by ${by.join(", ")}` : ""; })()} · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</a>}
         <CompareSelect idx={idx} self={id} value="" onPick={other => navigate(`/compare/${id}/${other}`)} /></div>
-      {/* Lineage is identity, not provenance trivia: a replicate has to say what it replicates before it shows
-          a number, or a reader takes its ΔG for an independent measurement of a different thing. */}
-      {m.parent && <p className="lineage">{m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{qualified(idx, m.parent)}</a>{m.fork?.seed === "fresh" ? " — same prepared system and protocol, fresh seeds" : ""}{m.fork?.complete === false ? " — partially applied" : ""}.</p>}
+      {/* The objective line: what this run measures and where it sits, derived from the record — no run directory records
+          why a run was made, so the page states only what it can read. Lineage is identity, not provenance trivia: a
+          replicate says what it replicates before it shows a number, or a reader takes its ΔG for an independent measurement. */}
+      {(() => { const o = objectiveOf(m, idx); const parentEntry = m.parent ? idx.find(r => r.id === m.parent) : null; const by = net ? [...new Set(net.forks.map(f => f.owner).filter((x): x is string => !!x && x !== net.parent.owner))] : [];
+        return <p className="objective">{o.measures} {o.place}
+          {m.parent && <> {m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{qualified(idx, m.parent)}</a>{m.fork?.seed === "fresh" ? ": same prepared system and protocol, fresh seeds" : ""}{parentEntry && prod?.engine && parentEntry.engine !== prod.engine ? `, on ${prod.engine} where the parent used ${parentEntry.engine}` : ""}{m.fork?.complete === false ? ", partially applied" : ""}.</>}
+          {net && net.n > 0 && <> Parent of <a href={`#network-${m.id}`}>{net.n} independent {plural(net.n, "fork")}</a>{by.length ? ` executed by ${by.map(h => own?.profiles[h]?.name ?? h).join(", ")}` : ""}.</>}
+        </p>; })()}
 
-      {/* Run metadata, one line: who, which engine, how long, which seed. The result comes next, then what qualifies it. */}
+      {/* Run metadata, one line: who, which engine, which seed (the length is in the objective line). The result comes next, then what qualifies it. */}
       <div className="summary-strip">
         {(() => { const o = ownerOf(idx, id); return o ? <span><a href={`#/u/${o}`}>{own?.profiles[o]?.name ?? o}</a> <span className="mono dim">@{o}</span></span> : null; })()}
-        <span><b>{prod?.engine ?? m.environment.pmemd}</b></span><span>{prod?.length_ps != null ? `${prod.length_ps} ps production` : "no production stage"}</span><span>seed <span className="mono">{prod?.realized_seed ?? "—"}</span></span>
+        <span><b>{prod?.engine ?? m.environment.pmemd}</b></span><span>seed <span className="mono">{prod?.realized_seed ?? "—"}</span></span>
       </div>
 
       <div className={m.results.plip ? "grid2" : ""}>
@@ -647,9 +735,11 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
         </div>}
       </div>
 
+      {step && <NextStepCallout step={step} m={m} ens={ens} />}
+
       <h2 className="section-label">can I trust it?{ladder && <span className="badge pass">{ladder.verified_of_assessable} assessed rungs verified</span>}</h2>
-      {net && net.n > 0 && <ForkCallout net={net} detailHref={`#network-${m.id}`} onReplicate={() => forkKinds(m, ens).find(k => k.id === "replicate")?.run()} />}
-      {ladder && <EvidenceOverview ladder={ladder} explanation={explanation} investigation={investigation} validationVerdict={overall} />}
+      {net && net.n > 0 && <ForkCallout net={net} detailHref={`#network-${m.id}`} />}
+      {ladder && <EvidenceOverview ladder={ladder} explanation={explanation} validationVerdict={overall} />}
       {ladder && (() => { const L = ladder; const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
         <h2>Confidence ladder <span className="dim">computed from the archived data{L.rungs.some(r => r.status === "partly established") ? ` · ${L.rungs.filter(r => r.status === "partly established").length} partly established` : ""} · 1 not assessed</span></h2>
         <ol className="ladder">{L.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><span className="dim mono">{i + 1}.</span> <span className={`badge ${cls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span>
@@ -663,7 +753,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
       <h2 className="section-label">build on it</h2>
       <ForkCards m={m} ens={ens} />
       {net && net.n > 0 && <ForkNetworkCard net={net} compact />}
-      <CurrentInvestigation runId={id} investigation={investigation} partnerId={ens?.all.runs.find(r => r.id !== m.id)?.id ?? others[0]?.id} />
+      <CurrentInvestigation runId={id} investigation={investigation} net={net} partnerId={ens?.all.runs.find(r => r.id !== m.id)?.id ?? others[0]?.id} />
 
       <h2 className="section-label">how it was produced</h2>
       <div className="card">
@@ -705,21 +795,18 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   );
 }
 
-function EvidenceOverview({ ladder, explanation, investigation, validationVerdict }: { ladder: ReturnType<typeof confidenceLadderFull>; explanation: any; investigation?: InvestigationState; validationVerdict: string }) {
+function EvidenceOverview({ ladder, explanation, validationVerdict }: { ladder: ReturnType<typeof confidenceLadderFull>; explanation: any; validationVerdict: string }) {
   const missing = ladder.rungs.filter(r => r.status !== "verified");
-  const replicate = ladder.rungs.find(r => r.rung === "independently replicated");
-  const plan: any = investigation?.samplingPlan?.value;
   return <section className="evidence-overview" aria-labelledby="evidence-overview-title">
-    <h2 id="evidence-overview-title">Evidence overview <span className="dim">what this record supports before you build on it</span></h2>
+    <h2 id="evidence-overview-title">Evidence overview <span className="dim">what this record supports before you build on it; the next step is stated under the result</span></h2>
     <div className="evidence-grid">
       <div><h3>Checks supporting it</h3><p>{ladder.rungs.filter(r => r.status === "verified").map(r => r.rung).join(", ")}. Input sanity checks: <span className={`badge ${validationVerdict.toLowerCase()}`}>{validationVerdict}</span>. A passing input check is not convergence or physical accuracy.</p></div>
       <div><h3>Still unestablished</h3><p>{missing.map(r => `${r.rung}: ${r.status}`).join("; ")}. {explanation?.within_run?.verdict ? `Archived-window verdict: ${explanation.within_run.verdict}.` : "Within-run drift could not be assessed."}</p></div>
-      <div><h3>Next relevant action</h3><p>{replicate?.to_climb ?? "Inspect the detailed evidence below."}</p>{plan && <p className="dim small"><b>Separate precision target:</b> {plan.recommendation}</p>}</div>
     </div>
   </section>;
 }
 
-function CurrentInvestigation({ runId, investigation, partnerId }: { runId: string; investigation?: InvestigationState; partnerId?: string }) {
+function CurrentInvestigation({ runId, investigation, net, partnerId }: { runId: string; investigation?: InvestigationState; net?: ForkNetwork | null; partnerId?: string }) {
   // Subscribe to the stable array and filter outside the selector: useStore passes the selector straight to
   // useSyncExternalStore as getSnapshot, so returning a fresh array here re-renders without end (React #185).
   const proposals = useStore(s => s.proposals).filter(p => p.run === runId);
@@ -740,7 +827,21 @@ function CurrentInvestigation({ runId, investigation, partnerId }: { runId: stri
       <p className="dim small">{auto.value.created}</p></div>}
     {re && <div className="investigation-item"><h3>Reanalysis <Source source={re.source} /></h3><p>Frames {re.value.window.start_frame}–{re.value.window.end_frame}{re.value.window.interval > 1 ? ` every ${re.value.window.interval}th` : ""}: <b>{fmt(re.value.delta_g.mean)} ± {fmt(re.value.delta_g.corrected_sem)} kcal/mol</b>, {re.value.delta_g.verdict}. Difference from archive: {fmt(re.value.vs_archived.diff)} kcal/mol. The archive is unchanged.</p></div>}
     {plan && <div className="investigation-item"><h3>Sampling plan <Source source={plan.source} /></h3><p><span className="badge warn">expected, not measured</span> Target ±{fmt(plan.value.target_uncertainty_kcal)} kcal/mol on the ensemble mean. {plan.value.recommendation}</p>{plan.value.run_to_run.n_needed_range && <p className="dim small">Estimation range n={plan.value.run_to_run.n_needed_range.low}–{plan.value.run_to_run.n_needed_range.high}. Principal assumptions: {plan.value.assumptions.join(" ")}</p>}</div>}
-    {forks.map(f => { const v: any = f.value; return <div className="investigation-item" key={v.fork_id}><h3>{v.kind} fork <Source source={f.source} /></h3><p>{v.question || v.tests}</p>{v.treatment && <p><b>{v.treatment.key}</b>: {Object.entries(v.treatment.from).map(([s, x]) => `${s} ${x}`).join(", ")} → {v.treatment.to}; changed stages: {v.stages_changed.join(", ")}.</p>}<p className="dim small">{v.stages_unchanged_note || v.controls_note}</p></div>; })}
+    {/* A planned fork: parent → child lineage, what it inherits and changes, how far its approval has got, and the one
+        action left — preparing the bundle. It is expected, not measured: nothing runs here, and the page says so. */}
+    {forks.map(f => { const v: any = f.value; const ps = proposals.filter(p => p.fork?.id === v.fork_id); const approved = ps.filter(p => p.status === "approved").length; const ready = ps.length === 0 || approved === ps.length; const inBundle = bundle?.forks.find(b => b.id === v.fork_id) ?? null;
+      return <div className="investigation-item planned-fork" key={v.fork_id}>
+        <h3>Planned {v.kind} fork <Source source={f.source} /></h3>
+        <p className="lineage-line"><span className="mono">{runId}</span> <span className="dim">→</span> <span className="mono">{v.fork_id}</span> <span className="badge warn">expected · not yet run</span></p>
+        <p>{v.question || v.tests}</p>
+        <p><b>Inherits</b> the prepared system, protocol, force fields and MM-GBSA model of {runId}{v.treatment ? <> except <span className="mono">{v.treatment.key}</span></> : null}; the bundle's manifest records {runId} as parent and {v.kind === "reproduce" ? "pins the seeds" : "draws fresh seeds"}.</p>
+        {v.treatment ? <p><b>Changes</b> <span className="mono">{v.treatment.key}</span>: {Object.entries(v.treatment.from).map(([s, x]) => `${s} ${x}`).join(", ")} → {v.treatment.to}; stages {v.stages_changed.join(", ")}.</p> : <p><b>Changes</b> no input.</p>}
+        {ps.length > 0 && <p><b>Approval</b> {approved} of {ps.length} stage {plural(ps.length, "edit")} approved{ready ? "." : <> — the rest wait on their pinned threads: {ps.filter(p => p.status !== "approved").map((p, i) => <span key={p.id}>{i ? ", " : ""}<button type="button" className="linklike" onClick={() => set({ openStage: p.stage })}>{p.stage}</button> ({p.status})</span>)}.</>}</p>}
+        {inBundle ? <p className="dim small">In the bundle prepared at {fmtTime(bundle!.generatedAt)}, below{inBundle.complete ? "" : `, with ${inBundle.missingStages.join(", ")} not applied`}. No result yet: it runs when the bundle is executed elsewhere and comes back as a child card.</p>
+          : ready ? <div className="row"><button type="button" onClick={async () => { const raw = await callTool("generate_rerun_bundle", { run_id: runId, seed: v.kind === "reproduce" ? "pinned" : "fresh", target: "slurm" }, "page"); const o = JSON.parse(raw); setMessage(o.error ? o.error : "Rerun bundle prepared; download below."); }}>Prepare rerun bundle</button><span className="dim small">writes the bundle with the parent link; nothing runs here</span></div> : null}
+        <p className="dim small">{v.stages_unchanged_note || v.controls_note}</p>
+      </div>; })}
+    {forks.length > 0 && net && net.n > 0 && <p className="dim small executed-forks">What an executed fork of this run looks like: {net.n} {plural(net.n, "rerun")} from its bundle came back as child cards — the fork network above compares them, and <a href={`#/compare/${runId}/${net.forks[0].id}`}>compare {runId} with {net.forks[0].id}</a> shows the inherited system, the changed engine and seed, and the ΔG difference.</p>}
     {proposals.length > 0 && <div className="investigation-item"><h3>Human review</h3><p>{proposals.map(p => <span key={p.id} className={`proposal-chip ${p.status}`}>{p.stage}: {p.status}</span>)}</p><p className="dim small">Approval and rejection remain human actions in the Proposals panel.</p></div>}
     {bundle && <div className="investigation-item"><h3>Prepared rerun bundle <Source source={investigation!.bundle!.source} /></h3><p><b>{bundle.name}</b> · {bundle.appliedProposalIds.length} approved proposal{bundle.appliedProposalIds.length === 1 ? "" : "s"} captured at generation · {bundle.selfContained ? "self-contained" : `missing ${bundle.missingInputs.join(", ")}`}. Prepared does not mean simulated.</p>{bundle.forks.map(f => <p className={f.complete ? "dim small" : "warnbox"} key={f.id}>Fork {f.id}: {f.complete ? "complete at generation" : `partially approved — ${f.missingStages.join(", ")} not applied`}.</p>)}{bundle.combinesMultipleForks && <p className="warnbox">This bundle combines multiple fork questions.</p>}
       <details className="small"><summary className="dim">{Object.keys(bundle.files).length} files in this bundle</summary><pre className="small">{Object.keys(bundle.files).join("\n")}</pre></details>
@@ -819,7 +920,12 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
   const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [pOpen, setPOpen] = useState(false);
   const callRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setDout(""); setTouched(true); setMode("manual"); set({ console: null }); setTimeout(() => callRef.current?.focus(), 50); } }, [pre]);
+  // The last verb pressed on this card, so its result can be summarised below the buttons in the call log's own words.
+  const [last, setLast] = useState<AgentAction | null>(null);
+  useEffect(() => { if (!pre) return; setTool(pre.tool); setInput(pre.input); setDout(""); setTouched(true); setMode("manual"); setLast(null); set({ console: null });
+    // A page action may ask for the call to be made at once (the landing page's "run it on the demo run"); otherwise the person presses Call.
+    if (pre.run) { let parsed: unknown; try { parsed = JSON.parse(pre.input); } catch (e) { setDout(String(e)); return; } callTool(pre.tool, parsed, "page").then(setDout, e => setDout(String(e))); }
+    else setTimeout(() => callRef.current?.focus(), 50); }, [pre]);
   // Prefill run_id with the run on screen, so "pick explain_result, press Call" works on a run page.
   // The run on screen: a run page's run, or the first run of a compare page (so Investigate stays scoped there too).
   const currentRun = route.startsWith("/run/") || route.startsWith("/compare/") ? route.split("/")[2] || "" : "";
@@ -832,11 +938,12 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
   // route would let a pending proposal sit unseen while the panel said "None yet". Each card names its run.
   const proposals = [...allProposals].sort((a, b) => Number(b.run === currentRun) - Number(a.run === currentRun));
   // The demo proposal: prefills propose_change into the developer console; the human presses Call, then Approve on the pinned thread.
-  const draftProposal = () => { const run = currentRun || "1l2y-rep4"; set({ console: { tool: "propose_change", input: JSON.stringify({ run_id: run, stage: "product", edits: { dt: "0.001" }, reason: "halve the timestep — a test of the proposal flow" }, null, 1) } }); if (!currentRun) navigate(`/run/${run}`); };
+  const draftProposal = () => { const run = currentRun || DEMO_RUN; set({ console: { tool: "propose_change", input: JSON.stringify({ run_id: run, stage: "product", edits: { dt: "0.001" }, reason: "halve the timestep — a test of the proposal flow" }, null, 1) } }); if (!currentRun) navigate(`/run/${run}`); };
   // What a judge with a connected agent can type: one sentence naming the page, copyable.
   const askPrompt = context === "site" ? "What is on this site, and which run should I start with?" : `Investigate ${target} on this page and tell me what to do next.`;
   const [copied, setCopied] = useState(false);
   const copyAsk = async () => { try { await navigator.clipboard.writeText(askPrompt); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { setCopied(false); } };
+  const act = async (a: AgentAction) => { if (!target) return; if (a.prefill) { set({ console: { tool: a.tool, input: JSON.stringify(a.input(target), null, 1) } }); return; } setLast(a); try { setOut(await callTool(a.tool, a.input(target), "page")); } catch (e: any) { setOut(String(e)); } };
   const prefill = (name: string) => { const props: any = (TOOLS.find(x => x.name === name)!.inputSchema as any).properties ?? {}; return JSON.stringify(currentRun && props.run_id ? { run_id: currentRun } : currentRun && props.run_a ? { run_a: currentRun, run_b: "" } : {}); };
   // On a run page the most useful first call is explain_result for that run — until the human picks a tool themselves.
   useEffect(() => { if (!touched) { if (target) { setTool("explain_result"); setInput(JSON.stringify({ run_id: target })); } else { setTool("list_runs"); setInput("{}"); } setDout(""); } }, [target, touched]);
@@ -867,12 +974,17 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
         {context === "project" && projectNet && <button className="ghost" onClick={() => ask("fork_network", { run_id: target })}>Check the forks</button>}
         {context === "run" && !allProposals.some(p => p.run === currentRun) && <button className="ghost" onClick={draftProposal} title="Prefills propose_change below; you press Call, then Approve or Reject on the thread pinned to the stage">Draft a proposal</button>}
       </div>
+      {/* The seven things an agent does here, as verbs: each is one tool from the table below, called from the page on the run on screen. ✎ marks a tool that writes page state; only the fork prepares a change to an input, and it waits for Approve. */}
+      {context !== "site" && <ul className="agent-verbs" aria-label="what an agent can do on this run">{AGENT_ACTIONS.map(a => { const t = TOOLS.find(x => x.name === a.tool)!; return <li key={a.id}><button type="button" className={`chip ${last?.id === a.id ? "on" : ""}`} title={`${a.does} (${t.name}${a.prefill ? ", prepared in the console; its proposals wait for your Approve" : ""})`} onClick={() => act(a)}>{a.verb}{t.readOnly ? "" : " ✎"}</button></li>; })}</ul>}
       <div role="status" aria-live="polite">{out && (outErr
         ? <ToolFail e={outErr} tool={outTool} />
         : <div className="dim small">{(() => { let v: any = null; try { v = JSON.parse(out); } catch { return null; }
+            if (typeof v?.brief === "string") return <p>{v.brief}</p>;
             if (Array.isArray(v)) return <p>{v.length} runs across {cohorts(idx).length} {plural(cohorts(idx).length, "project")}; each row names its owner. Open a project to see them grouped.</p>;
             if (v?.trace) return <p>Trace rendered under <a href="#investigation-title" onClick={e => { e.preventDefault(); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Current investigation ↓</a>.</p>;
             if (typeof v?.verdict === "string") return <p><b>{v.status === "tension" ? "Forks in tension." : v.status === "agree" ? "Forks agree." : "Forks: sign only."}</b> {v.verdict}</p>;
+            // Any other verb: the call log's one-line summary of what came back, the same line the activity card shows.
+            if (last && calls[0]?.tool === last.tool) return <p>{calls[0].summary}</p>;
             return null; })()}<details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{pretty(out)}</pre></details></div>)}</div>
       <details className="devtools" open={mode === "manual"} onToggle={e => setMode((e.target as HTMLDetailsElement).open ? "manual" : "auto")}>
         <summary>Developer tools <span className="dim">· the {TOOLS.length} tools an agent sees, called by hand · ✎ changes page state</span></summary>

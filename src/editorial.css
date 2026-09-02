@@ -123,6 +123,27 @@ table.runs td .dim { font-family: var(--mono); font-size: 13px; }
 .tablewrap { overflow-x: auto; max-width: 100%; }
 @media (max-width: 600px) { table.runs { min-width: 640px; } }
 
+/* landing page: the claim, one primary action, the demo run beside it, then what an agent can do */
+.hero { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, 1fr); gap: 36px; align-items: start; margin: 0 0 28px; }
+.hero .lede { margin-bottom: 22px; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
+.cta a.btn { font-size: 15.5px; padding: 11px 22px; }
+.start-here { margin: 0; cursor: pointer; }
+.start-here:hover { box-shadow: 0 1px 2px rgba(20, 30, 45, .06), 0 0 0 1px var(--navy); }
+.start-here h2.headline { font-size: clamp(22px, 2vw, 27px); }
+.start-here .start-desc { margin: 0 0 10px; color: var(--ink-2); font-size: 15px; line-height: 1.5; }
+.start-here .cohort-dg { margin: 0 0 10px; }
+.start-here .start-forks { margin: 0 0 10px; font-size: 14.5px; color: var(--ink-2); line-height: 1.55; } .start-here .start-forks .badge { margin-right: 4px; }
+.start-here .start-open { margin: 0; font-weight: 600; font-size: 14.5px; }
+.agent-actions { list-style: none; margin: 4px 0 12px; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+.agent-actions li { border-top: 1px solid var(--line); padding: 10px 0 12px; font-size: 14.5px; display: grid; gap: 3px; align-content: start; }
+.agent-actions li b { font-weight: 600; color: var(--ink); display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.agent-actions li > span { color: var(--muted); line-height: 1.5; }
+.agent-actions li .try { justify-self: start; font-family: var(--sans); font-size: 14px; font-weight: 600; margin-top: 2px; }
+.agent-actions li .try .mono { font-weight: 400; }
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; gap: 20px; } }
+@media (max-width: 700px) { .agent-actions { grid-template-columns: 1fr; } }
+
 /* project cards: the kicker names the system, the headline says what it is, the spread is the object */
 .cohort { margin-top: 0; }
 .cohort-desc { color: var(--ink-2); margin: 2px 0 6px; max-width: 72ch; font-size: 15.5px; }
@@ -243,9 +264,9 @@ details.card.proposals[open] > summary { margin-bottom: 10px; }
 @media (max-width: 600px) { .titlebar { position: relative; } .fork-menu { position: static; } .fork-menu .menu { left: 0; right: 0; width: auto; max-width: none; top: 100%; } }
 #fork-card.flash { box-shadow: 0 0 0 3px #cfe0f2; transition: box-shadow .2s; }
 
-/* lineage sits between the title and the result */
-.lineage { margin: -4px 0 14px; font-size: 14.5px; color: var(--muted); }
-.lineage a { font-family: var(--mono); font-size: 13.5px; }
+/* the objective line sits between the title and the result: what the run measures, where it sits, what it descends from */
+.objective { margin: -2px 0 14px; font-size: 15.5px; line-height: 1.55; color: var(--ink-2); max-width: 84ch; }
+.objective a { font-family: var(--mono); font-size: 14px; }
 
 /* stage pipeline: dots on a line, coloured by verdict */
 .stages { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(96px, 1fr); gap: 0; position: relative; padding-top: 8px; overflow-x: auto; }
@@ -274,6 +295,9 @@ button.stagebox:focus-visible { outline: 2px solid var(--blue); outline-offset: 
 .thread-check { font-size: 13.5px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .thread .row { margin-top: 8px; gap: 4px; }
 .thread .row.undo { align-items: center; } .thread .undo-note { margin: 8px 0 0; }
+.fork-terms { display: grid; gap: 5px; font-size: 13.5px; line-height: 1.5; background: var(--card); border-radius: 8px; padding: 8px 12px; margin: 0 0 8px; color: var(--ink-2); }
+.fork-terms b { font-weight: 600; color: var(--ink); margin-right: 4px; }
+.fork-terms details.small { margin: 2px 0 0; display: inline-block; } .fork-terms details.small .mono { font-size: 12.5px; display: block; margin-top: 4px; overflow-wrap: anywhere; }
 p.undo { margin: 0 0 8px; }
 .pinned-summary { font-size: 14.5px; margin: 0 0 8px; }
 /* the thread rides under its pin as a popover, above the sticky header; on phones it is a bottom sheet behind a scrim */
@@ -343,7 +367,7 @@ details.small { margin-top: 8px; } details.small summary { cursor: pointer; } de
 /* evidence overview + investigation */
 .section-title { margin-top: 28px; }
 .evidence-overview { border-left: 3px solid var(--navy); border-radius: 0 var(--radius) var(--radius) 0; }
-.evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; }
+.evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
 .evidence-grid > div { border-top: 1px solid var(--line); padding: 2px 0 8px; }
 .evidence-grid p { margin: 4px 0 8px; font-size: 14.5px; }
 .request-examples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 18px 0 8px; }
@@ -352,6 +376,9 @@ details.small { margin-top: 8px; } details.small summary { cursor: pointer; } de
 .request pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: none; margin-top: 6px; background: transparent; border: 0; padding: 0; }
 .investigation-item { border-top: 1px solid var(--line); padding: 8px 0; }
 .investigation-item p { margin: 4px 0 8px; font-size: 15px; }
+.planned-fork .lineage-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; }
+.planned-fork .row { align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 2px 0 6px; }
+.executed-forks { border-top: 1px solid var(--line); padding-top: 8px; margin: 0 0 8px; }
 .source-label { font: 13px var(--mono); color: var(--muted); font-weight: 400; margin-left: 8px; white-space: nowrap; }
 .proposal-chip { display: inline-block; font: 13.5px var(--mono); margin: 0 10px 4px 0; }
 .proposal-chip.pending { color: var(--warn); } .proposal-chip.approved { color: var(--pass); } .proposal-chip.rejected { color: var(--fail); }
@@ -379,6 +406,8 @@ aside .agent > h2 { font-family: var(--serif); font-optical-sizing: auto; font-w
 aside .agent > h2 .dim { display: block; font-family: var(--sans); font-size: 13.5px; margin-top: 6px; }
 aside .agent .kicker { margin-bottom: 8px; }
 aside .agent .row.wrap { margin: 4px 0 2px; }
+.agent-verbs { list-style: none; display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 4px; padding: 0; }
+.agent-verbs button.chip { font-family: var(--sans); font-size: 13.5px; font-weight: 500; padding: 3px 11px; }
 /* a failed call in the rail: the callout sits under the buttons or the input box, its raw JSON folded */
 aside .callout { margin: 10px 0 0; padding: 10px 14px; } aside .callout p:last-of-type { margin-bottom: 4px; } aside .callout pre { margin-top: 6px; }
 details.devtools { margin-top: 14px; border-top: 1px solid rgba(30, 58, 95, .15); padding-top: 10px; }
@@ -411,7 +440,7 @@ aside textarea[aria-invalid="true"], aside textarea[aria-invalid="true"]:focus {
 @media (max-width: 600px) { .profile { gap: 12px; } .profile .avatar { width: 44px; height: 44px; font-size: 22px; } .profile .stats { gap: 4px 14px; } }
 
 /* sticky header clearance for in-page scroll targets */
-#tool-console, .stagebox { scroll-margin-top: calc(var(--header-h) + 12px); }
+#tool-console, .stagebox, #agent-actions, #fork-card { scroll-margin-top: calc(var(--header-h) + 12px); }
 
 /* phones */
 @media (max-width: 700px) { .big { font-size: 28px; } .section-label { font-size: 24px; margin-top: 32px; } }

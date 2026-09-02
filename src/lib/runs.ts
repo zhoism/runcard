@@ -2,6 +2,7 @@ import type { Manifest, IndexEntry, SystemKey, Owners } from "./types";
 import { checkAmberIn, type Report } from "./amberCheck";
 import { zipSync, strToU8 } from "fflate";
 import { GB_TERMS, type PerFrame, type GbTerm } from "./types";
+import { describeSystem } from "./systemCatalog";
 import { mean, sd, sem, statisticalInefficiency, integratedAutocorrelationTime, correctedSem, blockAverageSem, halves, driftSlope, round, projectedSem } from "./stats";
 
 // ---- loading ----------------------------------------------------------
@@ -862,6 +863,36 @@ export function confidenceLadderFull(m: Manifest, idx: IndexEntry[]) {
 }
 
 // ---- fork this experiment: reproduce / replicate / extend ------------------------------
+// ---- the objective line and the next step: derived from the record, never typed ---------------------------------
+/** What this run measures and where it sits among its peers, for the line under the title. No run directory records
+    why a run was made, so the page states only what it can read: the system from the catalogue, the method from the
+    MM-GBSA result, the length from the production stage, the count from the run index. Lineage (parent, forks) is the
+    page's to render, with links. */
+export function objectiveOf(m: Manifest, idx: IndexEntry[]): { measures: string; place: string } {
+  const sys = describeSystem(m.title, m.system.ligand.resname ?? "");
+  const lig = sys?.ligand ?? m.system.ligand.resname ?? "the ligand"; const prot = sys?.protein ?? "the prepared protein";
+  const L = m.stages.find(s => s.role === "production")?.length_ps ?? null;
+  const run = L != null ? `a ${L} ps production run` : "a run with no production stage";
+  const measures = m.results.mmgbsa
+    ? `Measures the binding free energy of ${lig} to ${prot} by MM-GBSA over ${run}.`
+    : `${run[0].toUpperCase()}${run.slice(1)} of ${lig} bound to ${prot}; no MM-GBSA result.`;
+  const me = idx.find(r => r.id === m.id);
+  const n = me ? idx.filter(r => sameSystem(r, me)).length : 0;
+  const place = n > 1 ? `One of ${n} runs of this prepared system on runcard.` : n === 1 ? "The only run of this prepared system on runcard." : "Not in the run index.";
+  return { measures, place };
+}
+export type NextAction = "reproduce" | "replicate" | "extend" | "plan_sampling" | null;
+/** The one next step the confidence ladder implies: the first rung this site can climb from here (not verified, not
+    merely expected, not unassessed) with the action its `to_climb` names; when every assessable rung is verified, the
+    last verified rung's own "what next" (a controlled extension). Null when the ladder names nothing. */
+export function nextStep(ladder: { rungs: { rung: string; status: string; to_climb: string | null }[] }): { rung: string; status: string; to_climb: string; action: NextAction } | null {
+  const climbable = ladder.rungs.find(r => !["verified", "expected", "not assessed"].includes(r.status) && r.to_climb)
+    ?? [...ladder.rungs].reverse().find(r => r.status === "verified" && r.to_climb);
+  if (!climbable) return null;
+  const t = climbable.to_climb!;
+  const action: NextAction = /kind='replicate'/.test(t) ? "replicate" : /kind='extend'/.test(t) ? "extend" : /seed='pinned'|kind='reproduce'/.test(t) ? "reproduce" : /plan_sampling/.test(t) ? "plan_sampling" : null;
+  return { rung: climbable.rung, status: climbable.status, to_climb: t, action };
+}
 export type ForkKind = "reproduce" | "replicate" | "extend";
 export interface ForkMeta { id: string; kind: ForkKind; parent: string; question: string | null; treatment: { key: string; meaning: string | null; class: ParamClass; from: Record<string, string>; to: string } | null; stages: string[]; controls: string[]; runs_per_condition?: number | null }
 let forkSeq = 0;

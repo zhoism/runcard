@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { describeSystem } from "../src/lib/systemCatalog";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks, ownerStats, ownerHandles, cohortBySlug, projectSummary, protocolPairs } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks, ownerStats, ownerHandles, cohortBySlug, projectSummary, protocolPairs, objectiveOf, nextStep } from "../src/lib/runs";
 import { ANALYSIS_CATALOG, ANALYSIS_CATEGORIES, analysisInfo } from "../src/lib/analysisCatalog";
 import { mean, sd, round } from "../src/lib/stats";
 // mmgbsa.dat prints DELTA TOTAL to 4 dp and the per-frame series is archived at the same precision, so a correct
@@ -683,7 +683,7 @@ describe("projects", () => {
 
 describe("system catalogue", () => {
   it("names both prepared systems from their titles; unknown titles get nothing", () => {
-    expect(describeSystem("1L2Y + MOL", "MOL")).toEqual({ name: "Trp-cage · indole", sentence: "Trp-cage, a 20-residue designed miniprotein (PDB 1L2Y), with indole bound." });
+    expect(describeSystem("1L2Y + MOL", "MOL")).toEqual({ name: "Trp-cage · indole", sentence: "Trp-cage, a 20-residue designed miniprotein (PDB 1L2Y), with indole bound.", protein: "Trp-cage", ligand: "indole" });
     expect(describeSystem("3HTB + JZ4", "JZ4")!.name).toBe("T4 lysozyme L99A/M102Q · 2-propylphenol");
     expect(describeSystem("1L2Y + MOL", "XYZ")!.sentence).toMatch(/with XYZ bound/);
     expect(describeSystem("something else", "MOL")).toBeNull();
@@ -699,5 +699,51 @@ describe("analysis catalogue", () => {
     expect(analysisInfo("mystery")).toEqual({ name: "mystery", category: "other", shows: "" });
     for (const [k, i] of Object.entries(ANALYSIS_CATALOG)) { // one flat technical clause per plot: no digits, no second sentence, no reassurance
       expect(i.shows, k).not.toMatch(/\d|;|\.\s|\.$/); expect(i.shows, k).not.toMatch(/\b(normal|fine|not a problem|is not|healthy|expected)\b/i); }
+  });
+});
+
+// ---- the objective line and the next step: derived, never typed ----
+describe("objectiveOf and nextStep", () => {
+  it("states what the demo run measures and where it sits, from the catalogue, the result, the stage and the index", () => {
+    const o = objectiveOf(load("1l2y-rep4"), idx);
+    expect(o.measures).toBe("Measures the binding free energy of indole to Trp-cage by MM-GBSA over a 30 ps production run.");
+    const n = idx.filter((r: any) => r.system.ligand === "MOL").length;
+    expect(o.place).toBe(`One of ${n} runs of this prepared system on runcard.`);
+  });
+  it("names the other catalogued system and never a typed number", () => {
+    const m = load("3htb-jz4"); const o = objectiveOf(m, idx);
+    expect(o.measures).toMatch(/^Measures the binding free energy of 2-propylphenol to T4 lysozyme L99A\/M102Q by MM-GBSA over a \d+(\.\d+)? ps production run\.$/);
+    expect(o.measures).toContain(`${m.stages.find((s: any) => s.role === "production").length_ps} ps`);
+  });
+  it("falls back to the resname and says so when there is no MM-GBSA result", () => {
+    const m = load("1l2y-rep4"); const o = objectiveOf({ ...m, title: "unknown system", results: { ...m.results, mmgbsa: null } }, idx);
+    expect(o.measures).toBe("A 30 ps production run of MOL bound to the prepared protein; no MM-GBSA result.");
+  });
+  it("picks the first climbable rung and reads the action from its to_climb; expected and unassessed rungs are skipped", () => {
+    const rungs = [
+      { rung: "recomputable", status: "verified", to_climb: null },
+      { rung: "repeatable", status: "expected", to_climb: "execute the pinned bundle" },
+      { rung: "independently replicated", status: "partly established", to_climb: "2 more independent runs at 30 ps (fork_experiment kind='replicate')" },
+      { rung: "robust to analysis-window choices", status: "not established", to_climb: "longer sampling (plan_sampling)" },
+      { rung: "externally supported", status: "not assessed", to_climb: "link an external reference" }];
+    expect(nextStep({ rungs })).toEqual({ rung: "independently replicated", status: "partly established", to_climb: rungs[2].to_climb, action: "replicate" });
+    expect(nextStep({ rungs: [rungs[0], rungs[1], { ...rungs[2], status: "verified", to_climb: null }, rungs[3], rungs[4]] })?.action).toBe("plan_sampling");
+  });
+  it("when every assessable rung is verified, the next step is the ladder's own what-next: a controlled extension", () => {
+    const rungs = [
+      { rung: "recomputable", status: "verified", to_climb: null },
+      { rung: "repeatable", status: "expected", to_climb: null },
+      { rung: "independently replicated", status: "verified", to_climb: null },
+      { rung: "robust to analysis-window choices", status: "verified", to_climb: "vary a modelling choice in a controlled extension (fork_experiment kind='extend')" },
+      { rung: "externally supported", status: "not assessed", to_climb: "link an external reference" }];
+    expect(nextStep({ rungs })?.action).toBe("extend");
+    expect(nextStep({ rungs: rungs.map(r => ({ ...r, to_climb: null })) })).toBeNull();
+  });
+  it("on every real run the ladder yields a next step whose action the page can start", () => {
+    for (const r of idx) {
+      const m = load(r.id); const step = nextStep(confidenceLadderFull(m, idx));
+      expect(step, r.id).not.toBeNull();
+      expect(["reproduce", "replicate", "extend", "plan_sampling"], `${r.id}: ${step!.to_climb}`).toContain(step!.action);
+    }
   });
 });

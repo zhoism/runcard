@@ -2,6 +2,27 @@
 
 Updated 2026-09-02. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
 
+## Golden path pass (2026-09-02, branch `feat/golden-path`, preview only, not promoted)
+
+From a product brief on the live site (a GPT pass) and the user's rulings: the golden run is `1l2y-rep4`; `#/` is a
+landing page and Kevin's profile stays at `#/u/kevin`. **Home:** one claim ("MD runs you can inspect, verify, fork and
+continue"), one primary CTA to the demo run, a "Start here" card read from the index (ΔG ± run-to-run SD, fork-network
+status, engine change named), and a "What an agent can do here" card: seven verbs from `src/agentActions.ts`, each the
+real tool it calls; "run it on the demo run" makes the call from the page (`console.run` in the store), the fork verb
+prefills the console and its proposals wait for Approve. **Run page:** an objective line derived by `objectiveOf`
+(system from the catalogue, method, length, count of runs, lineage with the engine change named on a fork — no run
+directory records an objective, so nothing is typed), a "Next step" callout from `nextStep(confidenceLadderFull)` (the
+first climbable rung → replicate / extend / plan_sampling / reproduce; a fully verified ladder yields the controlled
+extension), the length dropped from the summary strip, the evidence overview down to two cells, "Fork and continue"
+on the button and the cards, the seven verbs on the agent rail. A proposal thread from a fork carries a fork-terms
+block (inherits / changes / what Approve does). **Current investigation** shows a planned fork (parent → child,
+"expected · not yet run", approval x of y with links to the waiting pins, Prepare rerun bundle once approved, then the
+bundle line) and points at the four executed forks and the compare page: the honest "fork created" — nothing runs in
+the browser, and the executed forks are the proof the loop closes. Verified end to end in headless Chrome at 1440 and
+390 (no overflow, no console errors): home → demo run → Fork and continue → Extend → Call → popover → Approve ×2 →
+planned fork → bundle; explain and trace from the rail; the home "run it" auto-call; the ice1 objective; compare.
+Tests 691 (agentActions ↔ TOOLS schema check, every verb runs on the demo run, objective/next-step); lint unchanged.
+
 ## GitHub-for-MD-runs reframe (2026-09-01)
 
 The intent, decided with the user 2026-09-01: **a shareable, agent-readable GitHub for MD runs.** Since the evening of 2026-09-01: **repo = prepared system (a project),
