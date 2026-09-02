@@ -63,9 +63,14 @@ function Mark() {
 
 function Header() {
   const st = useStore(s => s.webmcp);
+  const route = useStore(s => s.route);
   return (
     <header>
       <a href="#/" className="brand"><Mark />runcard</a>
+      <nav className="top-nav" aria-label="primary">
+        <a href="#/" aria-current={route === "/" || route.startsWith("/p/") ? "page" : undefined}>Projects</a>
+        <a href="#/compare" aria-current={route.startsWith("/compare") ? "page" : undefined}>Compare</a>
+      </nav>
       {/* One pill says what an agent gets here. Green: registered with navigator.modelContext. Amber: this browser does not expose WebMCP; the pill leads to the console, which calls the same table by hand. */}
       {st === "registered" ? <span className="webmcp registered" title="Registered with navigator.modelContext — an agent in this browser can call every tool on this page">WebMCP · {TOOLS.length} tools</span>
        : st === "registering" ? <span className="webmcp registering" title="This browser exposes WebMCP; the tools are being registered">WebMCP · {TOOLS.length} tools <span className="dim">· registering…</span></span>
