@@ -110,18 +110,21 @@ export function ensemble(idx: IndexEntry[], id: string) {
   const me = idx.find(r => r.id === id); if (!me) throw new Error(`no run '${id}' in the run index. Call list_runs (or open #/) for valid run ids.`);
   const peers = idx.filter(r => sameSystem(r, me));
   const all = stratum(peers), long = stratum(peers.filter(r => r.production_ps >= LONG_RUN_MIN_PS));
+  const engines = [...peers.reduce((m, r) => m.set(r.engine, (m.get(r.engine) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
   return { fingerprint: systemFingerprint(me.system), all, long: { min_ps: LONG_RUN_MIN_PS, ...long },
     sd_convention: "sample SD (n−1) across runs",
+    /** engine × count across the peers: the spread is run-to-run across whatever engines are disclosed here, not pure seed noise */
+    engines: engines.map(([engine, n]) => ({ engine, n })),
     caveat: peers.length < 2
       ? `Only one run of this prepared system (${me.production_ps} ps); no run-to-run spread can be estimated. At least 3 independent runs (ig=-1) are needed before an ensemble uncertainty can be quoted.`
-      : `Independent runs of the same prepared system — same build inputs, force fields and protocol, different realized seeds (ig=-1 Langevin). Production lengths differ (${[...new Set(peers.map(r => r.production_ps))].sort((a, b) => a - b).join(", ")} ps), so 'all' mixes short and long runs; 'long' keeps runs ≥ ${LONG_RUN_MIN_PS} ps. The spread is seed-to-seed variation over picoseconds from one prepared start, not a survey of conformational space. Run-to-run spread, not the per-frame SEM, is the uncertainty to quote.` };
+      : `Independent runs of the same prepared system — same build inputs, force fields and protocol, different realized seeds (ig=-1 Langevin). Production lengths differ (${[...new Set(peers.map(r => r.production_ps))].sort((a, b) => a - b).join(", ")} ps), so 'all' mixes short and long runs; 'long' keeps runs ≥ ${LONG_RUN_MIN_PS} ps. The spread is run-to-run variation over picoseconds from one prepared start, not a survey of conformational space. Run-to-run spread, not the per-frame SEM, is the uncertainty to quote.` };
 }
 /** "all 9 runs give ΔG < 0" / "7 of 9" / "none" — computed, never assumed. `label` names the stratum when it is empty ("no runs ≥ 10 ps of this system"). */
 export function signClaim(st: Stratum, label = ""): string {
   if (st.n === 0) return `no runs${label ? ` ${label}` : ""} of this system`;
   const range = st.n === 1 ? `ΔG = ${st.min} kcal/mol` : `range ${st.min} to ${st.max} kcal/mol`;
   const ps = st.runs.map(r => r.production_ps).filter(x => x != null); const psRange = ps.length ? `${Math.min(...ps)}–${Math.max(...ps)} ps` : "";
-  const pinned = st.sd != null ? `; the observed seed-to-seed SD is ±${st.sd.toFixed(1)} kcal/mol in this short, mixed-length ensemble (${psRange}; range width ${(st.max! - st.min!).toFixed(1)}) — a spread, not a converged uncertainty` : "";
+  const pinned = st.sd != null ? `; the observed run-to-run SD is ±${st.sd.toFixed(1)} kcal/mol in this short, mixed-length ensemble (${psRange}; range width ${(st.max! - st.min!).toFixed(1)}; seeds and lengths differ, and engines where disclosed) — a spread, not a converged uncertainty` : "";
   if (st.negative === st.n) return `${st.n === 1 ? "The single run gives" : `All ${st.n} independent runs give`} ΔG < 0 (${range}); ${st.n >= 3 ? `the sign is robust to seed variation${pinned}` : "the sign is not yet established (n < 3)"}.`;
   if (st.negative === 0) return `None of the ${st.n} runs gives ΔG < 0 (${range}).`;
   return `${st.negative} of ${st.n} runs give ΔG < 0 (${range}); the sign is not robust across runs.`;
@@ -475,7 +478,7 @@ function explainResultFull(m: Manifest, idx: IndexEntry[]) {
   // Name the stratum: explain_result quotes the all-runs SD; plan_sampling plans on the ≥ LONG_RUN_MIN_PS ps stratum when it has ≥ 3 runs. Say both so the two tools do not appear to disagree.
   const stratumNote = ens.long.sd != null && ens.long.n < ens.all.n ? `; the ≥ ${LONG_RUN_MIN_PS} ps stratum alone gives ±${ens.long.sd.toFixed(2)}, n=${ens.long.n}, which is what plan_sampling plans on` : "";
   const ratio = unc && spreadSd != null ? spreadSd / unc.corrected_sem : null;
-  const dominates = ratio == null ? "" : ratio >= 2 ? "so seed-to-seed variation, not frame noise, dominates" : ratio >= 1.2 ? "so seed-to-seed variation and frame noise are comparable" : "so the run-to-run spread is not distinguishable from this run's frame noise";
+  const dominates = ratio == null ? "" : ratio >= 2 ? "so run-to-run variation, not frame noise, dominates" : ratio >= 1.2 ? "so run-to-run variation and frame noise are comparable" : "so the run-to-run spread is not distinguishable from this run's frame noise";
   const byLen = new Map<number, IndexEntry[]>(); for (const r of ens.all.runs.map(x => idx.find(y => y.id === x.id)!).filter(Boolean)) byLen.set(r.production_ps, [...(byLen.get(r.production_ps) ?? []), r]);
   const matchedSd = [...byLen.entries()].filter(([, rs]) => rs.length >= 3).map(([ps, rs]) => `${ps} ps: n=${rs.length}, SD ±${stratum(rs).sd?.toFixed(2)}`);
   const which = unc && spreadSd != null
@@ -572,7 +575,7 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
       ? `Same prepared system and protocol; only ${[...classes].join(" and ") || "seeds"} differ, so the two ΔG values are independent samples of the same protocol.`
       : material.every(c => c === "sampling_length")
         ? `Same prepared system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}), so they are different-length samples of the same protocol. Whether either run is converged is reported per run (drift verdict in explain_result).`
-        : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes). The ΔG difference combines that change with seed-to-seed sampling; the run-to-run spread is the scale to judge it against.`;
+        : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes). The ΔG difference combines that change with run-to-run sampling; the run-to-run spread is the scale to judge it against.`;
   return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, stages_compared: stages.length, differing_classes: [...classes], material_classes: material,
     realized_seeds: seeds, delta_g: dg, delta_g_vs_noise: noise, run_to_run_spread: spread, verdict, interpretation, scale: vsSpread };
 }

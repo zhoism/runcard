@@ -328,14 +328,15 @@ describe("review batch 2026-08-29 (workflow findings)", () => {
   it("ensemble: single-run system gets a one-run caveat and stratum-aware sign claims; bad id names the recovery", () => {
     const e = ensemble(idx, "3htb-jz4"); expect(e.caveat).toMatch(/Only one run/); expect(e.caveat).not.toMatch(/mixes short and long/);
     expect(signClaim(e.long, "≥ 10 ps")).toBe("no runs ≥ 10 ps of this system"); expect(signClaim(e.all)).toMatch(/single run gives ΔG < 0 \(ΔG = -27/);
-    expect(signClaim(ensemble(idx, "1l2y-rep4").all)).toMatch(/observed seed-to-seed SD is ±0\.6 kcal\/mol in this short, mixed-length ensemble \(2–30 ps/);
+    expect(signClaim(ensemble(idx, "1l2y-rep4").all)).toMatch(/observed run-to-run SD is ±0\.6 kcal\/mol in this short, mixed-length ensemble \(2–30 ps.*engines where disclosed/);
+    expect(ensemble(idx, "1l2y-rep4").engines).toEqual([{ engine: "Amber 26 PMEMD (2026)", n: 9 }, { engine: "Amber 24 SANDER (2024)", n: 4 }]);
     expect(() => ensemble(idx, "nope")).toThrow(/list_runs/);
   });
   it("explain_result names the stratum, gates the 'dominates' clause on the ratio", () => {
     const e = explainResult(B, idx, true) as any;
     expect(e.which_uncertainty_to_quote).toMatch(/≥ 10 ps stratum alone gives ±0\.67, n=9/);
     expect(e.which_uncertainty_to_quote).toMatch(/dominates|comparable|not distinguishable/);
-    const e3 = explainResult(load("1l2y-rep3"), idx, true) as any; expect(e3.which_uncertainty_to_quote).not.toMatch(/1\.0× the corrected SEM, so seed-to-seed variation, not frame noise, dominates/);
+    const e3 = explainResult(load("1l2y-rep3"), idx, true) as any; expect(e3.which_uncertainty_to_quote).not.toMatch(/1\.0× the corrected SEM, so run-to-run variation, not frame noise, dominates/);
   });
   it("recompute_result: discard_ps beyond the run names the argument and the length", () => {
     expect(() => recomputeResult(A, { discard_ps: 100 })).toThrow(/discard_ps 100 ≥ the 5 ps production length/);

@@ -38,13 +38,13 @@ export default function App() {
       <Header />
       <main>
         {idxErr && <div className="interp warn" role="alert">{idxErr} — reload the page to try again.</div>}
-        <Boundary label="Page">{parts[0] === "run" && parts[1] ? <RunPage key={parts[1]} id={parts[1]} idx={idx} /> :
+        <Boundary label="Page">{parts[0] === "run" && parts[1] ? <RunPage key={parts[1]} id={parts[1]} idx={idx} own={own} /> :
          parts[0] === "compare" && parts[2] ? <ComparePage a={parts[1]} b={parts[2]} idx={idx} /> :
          parts[0] === "p" && parts[1] ? <ProjectPage key={parts[1]} slug={decodeURIComponent(parts[1])} idx={idx} own={own} /> :
          parts[0] === "u" && parts[1] ? <Profile key={parts[1]} handle={decodeURIComponent(parts[1])} idx={idx} own={own} /> :
          <Home idx={idx} own={own} />}</Boundary>
       </main>
-      <Sidebar />
+      <Sidebar idx={idx} />
     </div>
   );
 }
@@ -98,7 +98,7 @@ function ProjectCard({ c, idx, own, rows, handle }: { c: Cohort; idx: IndexEntry
     <h2><a href={`#/p/${c.slug}`}>{c.title}</a>{sys && <span className="dim"> — {sys.name}</span>}{st && st !== "none" && <span className={`badge ${st === "agree" ? "pass" : st === "tension" ? "warn" : ""}`}>{st === "agree" ? "forks agree" : st === "tension" ? "forks in tension" : "forks: sign only"}</span>}</h2>
     <p className="cohort-desc">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and protocol run ${c.n} times with fresh seeds, ${span}.` : "One run so far."}</p>
     <CountsLine c={c} p={p} own={own} />
-    <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{c.sd != null ? ` · ± is the spread across the ${c.n} runs, the uncertainty that matters` : " · one run, so no run-to-run spread yet"}</span></p>
+    <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{c.sd != null ? ` · ± is the observed run-to-run spread across the ${c.n} runs` : " · one run, so no run-to-run spread yet"}</span></p>
     <div className="cohort-actions">
       <a className="btn" href={`#/p/${c.slug}`}>Open project →</a>
       <a className="btn ghost" href={`#/run/${p.start.id}`}>Longest run <span className="dim">{p.start.id} · {p.start.production_ps} ps</span></a>
@@ -119,7 +119,7 @@ function Home({ idx, own }: { idx: IndexEntry[]; own: Owners | null }) {
   const cs = cohorts(idx); const handles = ownerHandles(idx);
   const nameOf = (h: string) => own?.profiles[h]?.name ?? h;
   return <section>
-    <h1>Projects{cs.length ? <span className="dim count"> {cs.length}</span> : null}</h1>
+    <h1>Projects</h1>
     <p className="lede">Prepared molecular systems on runcard. Each holds its runs, their spread, its forks, and the evidence behind the number.</p>
     {!idx.length && <p className="dim" role="status">loading runs…</p>}
     {cs.map(c => <ProjectCard key={c.key} c={c} idx={idx} own={own} />)}
@@ -146,6 +146,19 @@ function ForkCallout({ net, detailHref, onReplicate }: { net: ForkNetwork; detai
   </div>;
 }
 
+/** Compare two runs of a project: GitHub's branch picker, not "this run with…" — on a project page there is no "this run". */
+function ComparePair({ runs }: { runs: IndexEntry[] }) {
+  const [a, setA] = useState(runs[0]?.id ?? ""); const [b, setB] = useState("");
+  const label = (r: IndexEntry) => `${r.id} · ${r.owner ?? "—"} · ${r.engine} · ${r.production_ps} ps`;
+  return <div className="compare-pair" role="group" aria-label="compare two runs">
+    <span className="dim">Compare two runs</span>
+    <select value={a} aria-label="first run" onChange={e => setA(e.target.value)}>{runs.map(r => <option key={r.id} value={r.id}>{label(r)}</option>)}</select>
+    <span className="dim">with</span>
+    <select value={b} aria-label="second run" onChange={e => setB(e.target.value)}><option value="">select second run…</option>{runs.filter(r => r.id !== a).map(r => <option key={r.id} value={r.id}>{label(r)}</option>)}</select>
+    <button type="button" disabled={!a || !b} onClick={() => navigate(`/compare/${a}/${b}`)}>Compare</button>
+  </div>;
+}
+
 /** The project page: a prepared system is the repository and its runs are the commits. Everything here is read from the
     index except the longest run's manifest, loaded for the confidence ladder and the fork actions and labelled as that run's. */
 function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own: Owners | null }) {
@@ -165,8 +178,7 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
   return <section className="project">
     <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span><span>{c.title}</span></nav>
     <div className="titlebar"><h1>{c.title}</h1>{sys && <span className="dim sans">{sys.name}</span>}
-      {p.network && <a className={`badge fork ${netCls}`} href={`#network-${p.network.parent.id}`}>{p.network.n} forks · {p.network.status === "agree" ? "agree" : p.network.status === "tension" ? "in tension" : "sign only"}</a>}
-      <CompareSelect idx={idx} self={start.id} value="" onPick={other => navigate(`/compare/${start.id}/${other}`)} /></div>
+      {p.network && <a className={`badge fork ${netCls}`} href={`#network-${p.network.parent.id}`}>{p.network.n} forks · {p.network.status === "agree" ? "agree" : p.network.status === "tension" ? "in tension" : "sign only"}</a>}</div>
     <p className="lede">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and protocol run ${c.n} times with fresh seeds, ${span}.` : "One run so far."}</p>
     <CountsLine c={c} p={p} own={own} />
 
@@ -178,7 +190,7 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
           <dt>protocol</dt><dd className="mono small">{pairs.map(x => `${x.key}=${x.value}`).join(" · ")}</dd>
           <dt>engines</dt><dd>{p.engines.map(e => `${e.engine} × ${e.n}`).join(" · ")}</dd>
         </dl>
-        <p className="dim small">Runs here differ only in seed, length and engine. That is what makes their spread the uncertainty of the number.</p>
+        <p className="dim small">Every run here shares all of the above; seeds, lengths{p.engines.length > 1 ? " and engines" : ""} differ.</p>
       </div>
       <div className="card">
         <h2>Ensemble result <span className="dim">MM-GBSA ΔG across the runs</span></h2>
@@ -187,6 +199,7 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
           <dt>all runs</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}</dd>
           {ens.long.n > 0 && ens.long.n < ens.all.n && <><dt>≥ {ens.long.min_ps} ps</dt><dd><b>n={ens.long.n}</b>: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</dd></>}
         </dl>}
+        {c.sd != null && <p className="dim small">The ± is the observed run-to-run spread across {c.n} comparable runs with different seeds and lengths{p.engines.length > 1 ? ` and ${p.engines.length} disclosed engines` : ""}: an empirical spread, not pure seed noise{p.external_forks ? ` — the ${p.external_forks} external forks changed engine and seed together` : ""}.</p>}
         <p className="dim small">{signClaim(ens.all)}</p>
       </div>
     </div>
@@ -215,6 +228,7 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
     <div className="card">
       <h2>Comparability <span className="dim">what may be compared here and what may not</span></h2>
       <p>Runs in this project share one system fingerprint (protein, ligand atom types and charges, solvent, box, force fields) and one production protocol key ({pairs.length} &amp;cntrl and GB settings). Seeds and lengths are free to differ: that is the spread. Engines are disclosed, not assumed equal: {p.engines.map(e => `${e.engine} × ${e.n}`).join(", ")}. A run of another system, or of this system under another protocol, is not a replicate, and the compare page says so.</p>
+      <ComparePair runs={c.runs} />
     </div>
   </section>;
 }
@@ -376,7 +390,7 @@ function ForkNetworkCard({ net, compact }: { net: ReturnType<typeof forkNetwork>
       <ul className="forks">{net.forks.map(f => <li key={f.id}><Node n={f} role="fork" /></li>)}</ul>
     </div>
     <p className="verdict">{net.verdict}</p>
-    {!compact && <p className="dim small">ΔG in kcal/mol, MM-GBSA. Agreement is judged against the run-to-run SD of the whole same-system cohort, the uncertainty that matters — a fork is a rerun, and this is the check a rerun exists to make.</p>}
+    {!compact && <p className="dim small">ΔG in kcal/mol, MM-GBSA. Agreement is judged against the observed run-to-run SD of the whole same-system cohort — a fork is a rerun, and this is the check a rerun exists to make.</p>}
   </section>;
 }
 
@@ -407,7 +421,7 @@ function LoadError({ message, onRetry }: { message: string; onRetry: () => void 
     <p><a href="#/">← back to the run list</a> <button className="ghost" onClick={onRetry}>retry</button></p>
   </section>;
 }
-function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
+function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners | null }) {
   const [m, setM] = useState<Manifest | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -443,7 +457,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const net = idx.length ? forkNetwork(idx, id) : null;
   return (
     <section className="run">
-      <nav className="crumbs" aria-label="breadcrumb">{ownerOf(idx, id) ? <a href={`#/u/${ownerOf(idx, id)}`}>{ownerOf(idx, id)}</a> : <a href="#/">projects</a>}<span aria-hidden="true">/</span>{(() => { const c = projectOf(idx, id); return c ? <><a href={`#/p/${c.slug}`}>{c.title}</a><span aria-hidden="true">/</span></> : null; })()}<span className="mono">{m.id}</span></nav>
+      <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span>{(() => { const c = projectOf(idx, id); return c ? <><a href={`#/p/${c.slug}`}>{c.title}</a><span aria-hidden="true">/</span></> : null; })()}<span className="mono">{m.id}</span></nav>
       <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
         {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {qualified(idx, m.parent)}</a>}
         <ForkMenu m={m} ens={ens} />
@@ -453,13 +467,11 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
           a number, or a reader takes its ΔG for an independent measurement of a different thing. */}
       {m.parent && <p className="lineage">{m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{qualified(idx, m.parent)}</a>{m.fork?.seed === "fresh" ? " — same prepared system and protocol, fresh seeds" : ""}{m.fork?.complete === false ? " — partially applied" : ""}.</p>}
 
-      {/* One line a reader can check before anything else: what ran, how long, which seed, how many rungs it has climbed; and the one agent action. */}
+      {/* Run metadata, one line: who, which engine, how long, which seed. The result comes next, then what qualifies it. */}
       <div className="summary-strip">
+        {(() => { const o = ownerOf(idx, id); return o ? <span><a href={`#/u/${o}`}>{own?.profiles[o]?.name ?? o}</a> <span className="mono dim">@{o}</span></span> : null; })()}
         <span><b>{prod?.engine ?? m.environment.pmemd}</b></span><span>{prod?.length_ps != null ? `${prod.length_ps} ps production` : "no production stage"}</span><span>seed <span className="mono">{prod?.realized_seed ?? "—"}</span></span>
-        {ladder && <span className="badge pass">{ladder.verified_of_assessable} assessed rungs verified</span>}
-        <button type="button" onClick={async () => { await callTool("investigate_run", { run_id: id }, "page"); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} title="Reads the ladder, chases the weakest rung with the read-only tools, recommends one action. Creates nothing.">Investigate this run</button>
       </div>
-      {net && net.n > 0 && <ForkCallout net={net} detailHref={`#network-${m.id}`} onReplicate={() => forkKinds(m, ens).find(k => k.id === "replicate")?.run()} />}
 
       <div className={m.results.plip ? "grid2" : ""}>
         <div className="card">
@@ -473,7 +485,7 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
             <dl>
               {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
                 {ens.long.n > 0 && ens.long.n < ens.all.n && <><br /><b>n={ens.long.n}</b> runs ≥ {ens.long.min_ps} ps: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</>}
-                <span className="dim"> — seed-to-seed variation over 2–30 ps from one prepared start; production lengths differ across runs</span></dd></>}
+                <span className="dim"> — observed run-to-run variation from one prepared start; seeds and lengths differ{ens.engines.length > 1 ? `, and so do engines (${ens.engines.map(e => `${e.engine} × ${e.n}`).join(", ")})` : ""}</span></dd></>}
               {u && <><dt>within run</dt><dd>corrected SEM <b>{fmt(u.corrected_sem, 3)}</b> (g = {u.statistical_inefficiency_g}, N<sub>eff</sub> ≈ {u.n_eff}) · halves {fmt(u.halves.first)} → {fmt(u.halves.second)} · <b>{u.verdict}</b> <span className="dim">(halves test over {prod?.length_ps ?? "?"} ps)</span></dd></>}
               {re && <><dt>current reanalysis</dt><dd>frames {re.window.start_frame}–{re.window.end_frame}{re.window.interval > 1 ? ` every ${re.window.interval}th` : ""} ({re.window.frames_used} frames{re.window.start_ps != null ? `, ${re.window.start_ps}–${re.window.end_ps} ps` : ""}) → <b>{fmt(re.delta_g.mean)} ± {fmt(re.delta_g.corrected_sem)}</b>, {re.delta_g.verdict} <span className="dim">(recomputed in the browser from the archived per-frame energies; ± is the corrected SEM; the archived value above is unchanged)</span></dd></>}
               <dt>method</dt><dd>MM-GBSA igb={mm.igb}, saltcon={mm.saltcon} · computed {mm.run_on}</dd></dl>
@@ -496,7 +508,8 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
         </div>}
       </div>
 
-      <h2 className="section-label">can I trust it?</h2>
+      <h2 className="section-label">can I trust it?{ladder && <span className="badge pass">{ladder.verified_of_assessable} assessed rungs verified</span>}</h2>
+      {net && net.n > 0 && <ForkCallout net={net} detailHref={`#network-${m.id}`} onReplicate={() => forkKinds(m, ens).find(k => k.id === "replicate")?.run()} />}
       {ladder && <EvidenceOverview ladder={ladder} explanation={explanation} investigation={investigation} validationVerdict={overall} />}
       {ladder && (() => { const L = ladder; const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
         <h2>Confidence ladder <span className="dim">{L.verified_of_assessable} assessed rungs verified{L.rungs.some(r => r.status === "partly established") ? ` · ${L.rungs.filter(r => r.status === "partly established").length} partly established` : ""} · 1 not assessed · computed from the archived data</span></h2>
@@ -627,7 +640,7 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
   if (err) return <LoadError message={`compare ${a} vs ${b}: ${err}`} onRetry={() => setAttempt(n => n + 1)} />;
   if (!d) return <p className="dim" role="status">comparing…</p>;
   return <section>
-    <nav className="crumbs" aria-label="breadcrumb">{ownerOf(idx, a) ? <a href={`#/u/${ownerOf(idx, a)}`}>{ownerOf(idx, a)}</a> : <a href="#/">projects</a>}<span aria-hidden="true">/</span>{(() => { const c = projectOf(idx, a); return c ? <><a href={`#/p/${c.slug}`}>{c.title}</a><span aria-hidden="true">/</span></> : null; })()}<a href={`#/run/${a}`}>{a}</a><span aria-hidden="true">/</span><span>compare with <span className="mono">{b}</span></span></nav>
+    <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span>{(() => { const c = projectOf(idx, a); return c ? <><a href={`#/p/${c.slug}`}>{c.title}</a><span aria-hidden="true">/</span></> : null; })()}<a href={`#/run/${a}`}>{a}</a><span aria-hidden="true">/</span><span>compare with <span className="mono">{b}</span></span></nav>
     <div className="titlebar"><h1>Compare <a href={`#/run/${a}`}>{idx.find(r => r.id === a)?.title ?? a}</a> vs <a href={`#/run/${b}`}>{idx.find(r => r.id === b)?.title ?? b}</a></h1>
       <CompareSelect idx={idx} self={a} value={b} onPick={other => navigate(`/compare/${a}/${other}`)} wide /></div>
     {/* The verdict first, in bold; the reasoning under it; the numbers live once, in the table below. */}
@@ -645,43 +658,41 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
   </section>;
 }
 
-function Sidebar() {
+function Sidebar({ idx }: { idx: IndexEntry[] }) {
   const allProposals = useStore(s => s.proposals); const calls = useStore(s => s.calls);
   const route = useStore(s => s.route); const webmcp = useStore(s => s.webmcp); const pre = useStore(s => s.console);
   const [tool, setTool] = useState(TOOLS[0].name); const [input, setInput] = useState("{}"); const [out, setOut] = useState(""); const [touched, setTouched] = useState(false);
   // Agent-first on run pages: the console opens on Investigate; the 17-tool console is one click away under Developer tools.
   // Elsewhere there is no run to investigate, so it opens on the tools. The visitor's own choice sticks for the visit.
-  const [mode, setModeRaw] = useState<"auto" | "manual">("manual"); const [modeTouched, setModeTouched] = useState(false);
-  const setMode = (m: "auto" | "manual") => { setModeTouched(true); setModeRaw(m); };
+  // Agent-first everywhere: the console opens on what an agent would do for the page on screen; the 17-tool console is one click
+  // away under Developer tools. The visitor's own choice sticks for the visit.
+  const [mode, setMode] = useState<"auto" | "manual">("auto");
+  const [pOpen, setPOpen] = useState(false);
   // A page button can hand the console a drafted call (the human edits and presses Call — the console is the only path).
   const callRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setOut(""); setTouched(true); setModeRaw("manual"); setModeTouched(true); set({ console: null }); setTimeout(() => callRef.current?.focus(), 50); } }, [pre]);
+  useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setOut(""); setTouched(true); setMode("manual"); set({ console: null }); setTimeout(() => callRef.current?.focus(), 50); } }, [pre]);
   // Prefill run_id with the run on screen, so "pick explain_result, press Call" works on a run page.
   // The run on screen: a run page's run, or the first run of a compare page (so Investigate stays scoped there too).
   const currentRun = route.startsWith("/run/") || route.startsWith("/compare/") ? route.split("/")[2] || "" : "";
-  const onRunPage = route.startsWith("/run/");
-  useEffect(() => { if (!modeTouched) setModeRaw(onRunPage ? "auto" : "manual"); }, [onRunPage, modeTouched]);
+  // On a project page the agent action is on its longest run; on home there is no run, so the action is "what is here".
+  const project = route.startsWith("/p/") && idx.length ? cohorts(idx).find(c => c.slug === decodeURIComponent(route.split("/")[2] || "")) ?? null : null;
+  const target = currentRun || project?.runs[0]?.id || "";
+  const context: "run" | "project" | "site" = currentRun ? "run" : project ? "project" : "site";
+  const projectNet = project && idx.length ? forkNetworks(idx).find(n => project.runs.some(r => r.id === n.parent.id)) ?? null : null;
   // The approval queue is global on purpose: list_proposals is unfiltered, so scoping this list to the
   // route would let a pending proposal sit unseen while the panel said "None yet". Each card names its run.
   const proposals = [...allProposals].sort((a, b) => Number(b.run === currentRun) - Number(a.run === currentRun));
   const prefill = (name: string) => { const props: any = (TOOLS.find(x => x.name === name)!.inputSchema as any).properties ?? {}; return JSON.stringify(currentRun && props.run_id ? { run_id: currentRun } : currentRun && props.run_a ? { run_a: currentRun, run_b: "" } : {}); };
   // On a run page the most useful first call is explain_result for that run — until the human picks a tool themselves.
-  useEffect(() => { if (currentRun && !touched) { setTool(mode === "auto" ? "investigate_run" : "explain_result"); setInput(JSON.stringify({ run_id: currentRun })); setOut(""); } }, [currentRun, touched, mode]);
+  useEffect(() => { if (!touched) { if (target) { setTool(mode === "auto" ? "investigate_run" : "explain_result"); setInput(JSON.stringify({ run_id: target })); } else { setTool("list_runs"); setInput("{}"); } setOut(""); } }, [target, touched, mode]);
   const t = TOOLS.find(x => x.name === tool)!;
   const outIsError = out.startsWith("SyntaxError") || out.startsWith("{\"error\"");
   return <aside>
-    <div className="card">
-      <h2>Proposals <span className="dim">agent proposes, you approve{allProposals.length ? ` · ${allProposals.filter(p => p.status === "pending").length} pending of ${allProposals.length}` : ""}</span></h2>
-      {proposals.length === 0 && <p className="dim">None yet. An agent's proposed edits appear as comments pinned to the stage they target; nothing applies until you approve there.</p>}
-      {proposals.length === 0 && <button className="ghost" onClick={() => { const run = currentRun || "1l2y-rep4"; set({ console: { tool: "propose_change", input: JSON.stringify({ run_id: run, stage: "product", edits: { dt: "0.001" }, reason: "halve the timestep — a test of the proposal flow" }, null, 1) } }); if (!currentRun) navigate(`/run/${run}`); }}>Try it: draft a proposal, then press Call</button>}
-      {/* This run's proposals live on the page as pinned comments; the panel only points at them. Other runs' proposals are listed in full so nothing waits unseen. */}
-      {(() => { const here = proposals.filter(p => p.run === currentRun); const pend = here.filter(p => p.status === "pending"); const stages = [...new Set(here.map(p => p.stage))];
-        return here.length ? <p className="pinned-summary">{pend.length ? <b>{pend.length} awaiting your approval</b> : <span>{here.length} reviewed</span>} on this run — pinned at {stages.map((st, i) => <span key={st}>{i > 0 ? ", " : ""}<button className="linklike" onClick={() => set({ openStage: st })}>{st}</button></span>)}.</p> : null; })()}
-      {proposals.filter(p => p.run !== currentRun).map(p => <ProposalThread key={p.id} p={p} compact />)}
-    </div>
-    <div className="card" id="tool-console" data-mode={mode} data-run={currentRun}>
+    <div className="card" id="tool-console" data-mode={mode} data-run={target} data-context={context}>
       {mode === "auto"
-        ? <h2>Ask runcard about this run <span className="dim">{currentRun ? `investigate_run on ${currentRun}` : "pick a run first"} · the same tool an agent would call</span></h2>
+        ? (context === "run" ? <h2>Ask runcard about this run <span className="dim">investigate_run on {currentRun} · the same tool an agent would call</span></h2>
+          : context === "project" ? <h2>Investigate this project <span className="dim">investigate_run on its longest run, {target}{projectNet ? "; fork_network for the reruns" : ""}</span></h2>
+          : <h2>Ask what is here <span className="dim">list_runs · the same tool an agent would call</span></h2>)
         : <h2>Developer tools <span className="dim">the 17 tools an agent sees, called by hand · ✎ = changes page state</span></h2>}
       {webmcp !== "registered" && <p className="dim small">No agent is connected to this page. In Chrome, enable <code>chrome://flags/#enable-webmcp-testing</code> and reload to let an agent call these tools itself{mode === "auto" ? "; the button below runs the same investigation from the page." : "; or call them by hand here."}</p>}
       {/* Investigate and the developer console call the same table: Investigate is investigate_run, which picks the tools;
@@ -693,11 +704,22 @@ function Sidebar() {
           onClick={() => { setMode("manual"); setOut(""); }}>Developer tools</button>
       </div>
       {mode === "auto" ? <>
-        <p className="dim small">Reads the confidence ladder, chases whichever rung is holding this run back with the read-only tools, and recommends one action. It creates nothing: no proposal, no bundle, no changed input.</p>
-        <button ref={callRef} disabled={!currentRun} onClick={async () => { try { setOut(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setOut(String(e)); } }}>Investigate {currentRun || "this run"}</button>
+        {context === "run" && <p className="dim small">Reads the confidence ladder, chases whichever rung is holding this run back with the read-only tools, and recommends one action. It creates nothing: no proposal, no bundle, no changed input.</p>}
+        {context === "project" && <p className="dim small">Investigates the longest run, {target}: its ladder, the rung holding it back, one next action; the page moves to that run to show the trace.{projectNet ? " Check the forks asks whether the reruns from its bundle agree with it." : ""} Neither creates anything.</p>}
+        {context === "site" && <p className="dim small">Choose a project above, or ask what is on this site: every run with its owner, project, length and ΔG.</p>}
+        <div className="row wrap">
+          {context === "site"
+            ? <button ref={callRef} onClick={async () => { try { setOut(await callTool("list_runs", {}, "console")); } catch (e: any) { setOut(String(e)); } }}>What is on this site?</button>
+            : <button ref={callRef} disabled={!target} onClick={async () => { try { setOut(await callTool("investigate_run", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Investigate {target}</button>}
+          {context === "project" && projectNet && <button className="ghost" onClick={async () => { try { setOut(await callTool("fork_network", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Check the forks</button>}
+        </div>
         <div role="status" aria-live="polite">{out && (outIsError
           ? <pre className="small out">{out}</pre>
-          : <p className="dim small">Trace rendered under <a href="#investigation-title" onClick={e => { e.preventDefault(); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Current investigation ↓</a>.<details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre></details></p>)}</div>
+          : <div className="dim small">{(() => { let v: any = null; try { v = JSON.parse(out); } catch { return null; }
+              if (Array.isArray(v)) return <p>{v.length} runs across {cohorts(idx).length} {plural(cohorts(idx).length, "project")}; each row names its owner. Open a project above to see them grouped.</p>;
+              if (v?.trace) return <p>Trace rendered under <a href="#investigation-title" onClick={e => { e.preventDefault(); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Current investigation ↓</a>.</p>;
+              if (typeof v?.verdict === "string") return <p><b>{v.status === "tension" ? "Forks in tension." : v.status === "agree" ? "Forks agree." : "Forks: sign only."}</b> {v.verdict}</p>;
+              return null; })()}<details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre></details></div>)}</div>
       </> : <>
         <select value={tool} aria-label="tool" onChange={e => { setTouched(true); setTool(e.target.value); setInput(prefill(e.target.value)); }}>{TOOLS.map(t => <option key={t.name} value={t.name}>{t.name}{t.readOnly ? "" : " ✎"}</option>)}</select>
         {(() => { const q = t.description.indexOf("? "); const head = q > 0 ? t.description.slice(0, q + 1) : t.description; const rest = q > 0 ? t.description.slice(q + 2) : ""; return <div className="dim small">{head}{rest && <details className="small"><summary className="dim">what it returns</summary><p className="dim">{rest}</p></details>}</div>; })()}
@@ -707,6 +729,16 @@ function Sidebar() {
         <div role="status" aria-live="polite">{out && <pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre>}</div>
       </>}
     </div>
+    {/* Collapsed to a count until something needs approval, an agent adds one, or the reader opens it: an empty queue is not news. */}
+    <details className="card proposals" open={allProposals.some(p => p.status === "pending") || pOpen} onToggle={e => setPOpen((e.target as HTMLDetailsElement).open)}>
+      <summary><h2>Proposals <span className="dim">· {allProposals.length}{allProposals.length ? ` · ${allProposals.filter(p => p.status === "pending").length} pending` : ""} · agent proposes, you approve</span></h2></summary>
+      {proposals.length === 0 && <p className="dim">None yet. An agent's proposed edits appear as comments pinned to the stage they target; nothing applies until you approve there.</p>}
+      {proposals.length === 0 && <button className="ghost" onClick={() => { const run = currentRun || "1l2y-rep4"; set({ console: { tool: "propose_change", input: JSON.stringify({ run_id: run, stage: "product", edits: { dt: "0.001" }, reason: "halve the timestep — a test of the proposal flow" }, null, 1) } }); if (!currentRun) navigate(`/run/${run}`); }}>Try it: draft a proposal, then press Call</button>}
+      {/* This run's proposals live on the page as pinned comments; the panel only points at them. Other runs' proposals are listed in full so nothing waits unseen. */}
+      {(() => { const here = proposals.filter(p => p.run === currentRun); const pend = here.filter(p => p.status === "pending"); const stages = [...new Set(here.map(p => p.stage))];
+        return here.length ? <p className="pinned-summary">{pend.length ? <b>{pend.length} awaiting your approval</b> : <span>{here.length} reviewed</span>} on this run — pinned at {stages.map((st, i) => <span key={st}>{i > 0 ? ", " : ""}<button className="linklike" onClick={() => set({ openStage: st })}>{st}</button></span>)}.</p> : null; })()}
+      {proposals.filter(p => p.run !== currentRun).map(p => <ProposalThread key={p.id} p={p} compact />)}
+    </details>
     {/* What the agent just did, announced to screen readers; the visible log is below. */}
     <div role="status" aria-live="polite" style={srOnly}>{calls[0] ? `${calls[0].tool}: ${calls[0].summary}` : ""}</div>
     {calls.length > 0 && <div className="card"><h2>Tool activity <span className="dim">agent, console, and page actions are identified separately</span></h2>

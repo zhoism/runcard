@@ -154,6 +154,17 @@ details.runs-list .tablewrap { margin-top: 4px; }
 .warnstatus.quiet { border-left-color: var(--muted); } .warnstatus summary { cursor: pointer; line-height: 1.5; } .warnstatus summary b { font-weight: 600; }
 .warnstatus .warn-verbatim { margin: 8px 0 4px; font-family: var(--mono); font-size: 13px; }
 @media (max-width: 600px) { .summary-strip button { margin-left: 0; } }
+.section-label .badge { margin-left: 10px; }
+/* collapsed proposals: a count until something needs approval */
+details.card.proposals > summary { cursor: pointer; list-style: none; }
+details.card.proposals > summary::-webkit-details-marker { display: none; }
+details.card.proposals > summary h2 { display: inline; margin: 0; }
+details.card.proposals > summary h2::before { content: "▸ "; color: var(--muted); } details.card.proposals[open] > summary h2::before { content: "▾ "; }
+details.card.proposals[open] > summary { margin-bottom: 10px; }
+.row.wrap { flex-wrap: wrap; gap: 8px; }
+.compare-pair { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-top: 10px; font-size: 14.5px; }
+.compare-pair select { width: auto; max-width: min(320px, 100%); background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-family: var(--sans); font-size: 14px; }
+.compare-pair button { font-size: 14px; padding: 6px 14px; }
 
 /* fork network: the parent node, a rail, and the forks hanging off it (GitHub's network graph, one level deep) */
 .network .tree { margin: 4px 0 12px; }

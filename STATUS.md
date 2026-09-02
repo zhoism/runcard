@@ -61,6 +61,18 @@ pages scope the run id to their first run (the `{}` Auto input the reviewer hit)
 protocol per system), an ensemble-level confidence score (the ladder is per run), "Ask an agent" on cards (Investigate is a
 deterministic trace, labelled as such).
 
+**Tightening pass after the reviewer's second look (same night).** Seven cleanups, no new architecture: breadcrumbs are
+project-first (`projects / 1L2Y + MOL / 1l2y-rep4`) with the owner as run metadata (`Kevin Zhou @kevin` in the summary strip);
+the project page's "compare this run with" became **Compare two runs** (two pickers, in the Comparability card); the **Proposals
+panel collapses to a count** (`details.card.proposals`, forced open only while something is pending) and sits below the console;
+the console is **agent-first on every page** with a contextual action — run: Investigate; project: Investigate the longest run +
+Check the forks (`fork_network`); home: What is on this site? (`list_runs`) — Developer tools is the alternate tab; the header
+"Investigate this run" button is gone (one primary button, in the sidebar); on the run page the **result comes before the fork
+callout** (metadata → ΔG → "can I trust it?" with the rung badge → callout → evidence → ladder); and the spread is worded as the
+**observed run-to-run spread across comparable runs with different seeds, lengths and disclosed engines** everywhere it was
+"seed-to-seed" (`signClaim`, `explainResult`, `diffRuns`, the ΔG card, project and cards; `ensemble()` now returns `engines`).
+"Projects 2" lost its count.
+
 **Experiment cards, not a run table (same evening).** The user: "this is just a load of runs… if they are really just run files
 and there's 9 of them, put them under a dropdown." The runs are the commits, not the repo. Each prepared system is now one card:
 title + what it is (`src/lib/systemCatalog.ts`, reference facts about the PDB entries and ligands, no numbers: Trp-cage · indole,
