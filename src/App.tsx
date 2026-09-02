@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { Manifest, IndexEntry } from "./lib/types";
-import { loadIndex, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem } from "./lib/runs";
+import type { Manifest, IndexEntry, Owners } from "./lib/types";
+import { loadIndex, loadOwners, ownerStats, ownerHandles, loadRun, validateStage, ensemble, cohorts, type Cohort, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem } from "./lib/runs";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set } from "./store";
@@ -13,6 +13,9 @@ import type { InvestigationState } from "./lib/investigation";
 const fmtArgs = (input: unknown) => input && typeof input === "object" && !Array.isArray(input) ? Object.entries(input as Record<string, unknown>).map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`).join(" ") : input == null ? "" : JSON.stringify(input);
 const show = (v: unknown) => Array.isArray(v) ? v.join(" ") : v == null ? "—" : String(v);
 const fmt = (n: number | null | undefined, d = 2) => n == null ? "—" : n.toFixed(d);
+/** GitHub's "owner / repo": a run is named by whose card it is. Falls back to the bare id until the index has loaded. */
+const ownerOf = (idx: IndexEntry[], id: string) => idx.find(r => r.id === id)?.owner;
+const qualified = (idx: IndexEntry[], id: string) => { const o = ownerOf(idx, id); return o ? `${o}/${id}` : id; };
 /** One color code everywhere (design ruling 2026-09-01): green pass, amber warn, red fail. The copy still scopes PASS as an input sanity check, not physical validity. */
 const Verdict = ({ r }: { r: Report }) => { const v = verdictOf(r); return <span className={`badge ${v.toLowerCase()}`}>{v}</span>; };
 /** Visually hidden, read by screen readers. Inline so it survives a stylesheet swap. */
@@ -21,9 +24,12 @@ const srOnly = { position: "absolute", width: 1, height: 1, overflow: "hidden", 
 export default function App() {
   const route = useStore(s => s.route);
   const [idx, setIdx] = useState<IndexEntry[]>([]);
+  const [own, setOwn] = useState<Owners | null>(null);
   const [idxErr, setIdxErr] = useState<string | null>(null);
-  useEffect(() => { loadIndex().then(setIdx, e => setIdxErr(String(e?.message ?? e))); }, []);
+  useEffect(() => { loadIndex().then(setIdx, e => setIdxErr(String(e?.message ?? e))); loadOwners().then(setOwn, () => setOwn(null)); }, []);
   const parts = route.split("/").filter(Boolean);
+  // Home is the default owner's profile: the site has no accounts, so the visitor lands on whose runs these are.
+  const home = own?.default ?? ownerHandles(idx)[0];
   return (
     <div className="app">
       <Header />
@@ -31,7 +37,8 @@ export default function App() {
         {idxErr && <div className="interp warn" role="alert">{idxErr} — reload the page to try again.</div>}
         <Boundary label="Page">{parts[0] === "run" && parts[1] ? <RunPage key={parts[1]} id={parts[1]} idx={idx} /> :
          parts[0] === "compare" && parts[2] ? <ComparePage a={parts[1]} b={parts[2]} idx={idx} /> :
-         <Home idx={idx} />}</Boundary>
+         parts[0] === "u" && parts[1] ? <Profile key={parts[1]} handle={decodeURIComponent(parts[1])} idx={idx} own={own} /> :
+         home ? <Profile key={home} handle={home} idx={idx} own={own} /> : idxErr ? null : <p className="dim" role="status">loading runs…</p>}</Boundary>
       </main>
       <Sidebar />
     </div>
@@ -65,24 +72,45 @@ function Header() {
 const cohortLine = (c: Cohort) => c.n > 1
   ? `${c.n} independent runs of one prepared system and protocol, ${c.lengths_ps[0]}–${c.lengths_ps[c.lengths_ps.length - 1]} ps · ΔG ${fmt(c.mean)} ± ${fmt(c.sd)} kcal/mol (run-to-run SD)`
   : `1 run · ΔG ${fmt(c.mean)} kcal/mol (no run-to-run spread yet)`;
-function Home({ idx }: { idx: IndexEntry[] }) {
-  useEffect(() => { document.title = "runcard"; }, []);
-  const cs = cohorts(idx);
-  const nets = forkNetworks(idx);
+/** A profile is the page a visitor lands on: whose runs these are, how they connect to other people's, then the runs.
+    No accounts — every card is public and the owner is site metadata (public/runs/owners.json), never a login. */
+function Profile({ handle, idx, own }: { handle: string; idx: IndexEntry[]; own: Owners | null }) {
+  const p = own?.profiles[handle];
+  const name = p?.name ?? handle;
+  const isHome = handle === (own?.default ?? handle);
+  useEffect(() => { document.title = isHome ? "runcard" : `${name} · runcard`; }, [isHome, name]);
+  const allProposals = useStore(s => s.proposals);
+  const mine = idx.filter(r => r.owner === handle);
+  if (idx.length && !mine.length && !p) return <section><h1>No profile <span className="dim handle">@{handle}</span></h1><p className="dim">Nobody by that handle has a run here. <a href="#/">Back to the home page.</a></p></section>;
+  const st = ownerStats(idx, handle);
+  const others = ownerHandles(idx).filter(h => h !== handle);
+  const cs = cohorts(idx).map(c => ({ c, rows: c.runs.filter(r => r.owner === handle) })).filter(x => x.rows.length);
+  const nets = forkNetworks(idx).filter(n => n.parent.owner === handle || n.forks.some(f => f.owner === handle));
+  const pending = allProposals.filter(pr => pr.status === "pending" && mine.some(r => r.id === pr.run)).length;
+  const who = (h: string) => <a href={`#/u/${h}`}>{own?.profiles[h]?.name ?? h}</a>;
+  const list = (hs: string[]) => hs.map((h, i) => <span key={h}>{i > 0 ? ", " : ""}{who(h)}</span>);
+  const plural = (n: number, w: string) => `${n === 1 ? w : w + "s"}`;
   return (
     <section>
-      <h1>Runs{idx.length ? <span className="dim count"> {idx.length}</span> : null}</h1>
-      <p className="lede">Molecular-dynamics runs, each read from its own files and grouped by prepared system. Open one; your agent can read the same page through its tools.</p>
-      {cs.map(c => (
+      <div className="profile">
+        <span className="avatar" aria-hidden="true">{name[0].toUpperCase()}</span>
+        <div className="profile-body">
+          <h1>{name} <span className="dim handle">@{handle}</span></h1>
+          {p?.bio && <p className="bio">{p.bio}</p>}
+          <p className="stats"><span><b>{st.runs}</b> {plural(st.runs, "run")}</span><span><b>{st.systems}</b> {plural(st.systems, "system")}</span>{st.forks_of_theirs > 0 && <span><b>{st.forks_of_theirs}</b> {plural(st.forks_of_theirs, "fork")} of these runs, by {list(st.forked_by)}</span>}{st.forks_from_others > 0 && <span><b>{st.forks_from_others}</b> forked from {list(st.forked_from)}</span>}{pending > 0 && <span><b>{pending}</b> {plural(pending, "proposal")} awaiting approval</span>}</p>
+        </div>
+      </div>
+      {others.length > 0 && <p className="people">Also on runcard: {others.map((h, i) => { const o = ownerStats(idx, h); return <span key={h}>{i > 0 ? " · " : ""}{who(h)} <span className="dim">@{h} · {o.runs} {plural(o.runs, "run")}{o.forks_from_others > 0 && o.forked_from.includes(handle) ? `, forked from ${name}` : ""}</span></span>; })}</p>}
+      {cs.map(({ c, rows }) => (
         <section key={c.key} className="cohort">
-          <h2>{c.title} <span className="dim">— {cohortLine(c)}</span></h2>
+          <h2>{c.title} <span className="dim">— {cohortLine(c)}{rows.length < c.n ? ` · ${rows.length} of ${c.n} here` : ""}</span></h2>
           <div className="tablewrap"><table className="runs">
             <thead><tr><th>run</th><th>ligand</th><th>protein atoms</th><th>production</th><th>ΔG MM-GBSA <span className="dim">kcal/mol</span></th><th>PLIP</th></tr></thead>
-            <tbody>{c.runs.map(r => <tr key={r.id} onClick={() => navigate(`/run/${r.id}`)}><td><a href={`#/run/${r.id}`}>{r.title}</a>{r.id === c.start_here && <span className="badge start">start here · longest run</span>}<div className="dim">{r.id}{r.parent ? <span className="forkmark"> ↳ fork of {r.parent}</span> : null}{(() => { const k = idx.filter(x => x.parent === r.id).length; return k ? <span className="forkmark"> · {k} forks</span> : null; })()}</div></td><td>{r.ligand}</td><td>{r.protein_atoms}</td><td>{r.production_ps} ps</td><td className="num">{fmt(r.delta_g)}</td><td>{r.plip ? "✓" : ""}</td></tr>)}</tbody>
+            <tbody>{rows.map(r => <tr key={r.id} onClick={() => navigate(`/run/${r.id}`)}><td><a href={`#/run/${r.id}`}>{r.title}</a>{r.id === c.start_here && <span className="badge start">start here · longest run</span>}<div className="dim">{r.id}{r.parent ? <span className="forkmark"> ↳ fork of {qualified(idx, r.parent)}</span> : null}{(() => { const ks = idx.filter(x => x.parent === r.id); if (!ks.length) return null; const by = [...new Set(ks.map(k => k.owner).filter(o => o && o !== r.owner))]; return <span className="forkmark"> · {ks.length} forks{by.length ? ` by ${by.join(", ")}` : ""}</span>; })()}</div></td><td>{r.ligand}</td><td>{r.protein_atoms}</td><td>{r.production_ps} ps</td><td className="num">{fmt(r.delta_g)}</td><td>{r.plip ? "✓" : ""}</td></tr>)}</tbody>
           </table></div>
         </section>
       ))}
-      {/* The fork network sits under the tables: the tables already mark forks per row; this is the check across them. */}
+      {/* The fork network sits under the tables: the rows already mark forks; this is the check across them. */}
       {nets.map(net => <ForkNetworkCard key={net.parent.id} net={net} compact />)}
     </section>
   );
@@ -198,7 +226,7 @@ function ForkNetworkCard({ net, compact }: { net: ReturnType<typeof forkNetwork>
   const cls = net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : "";
   const label = net.status === "agree" ? "forks agree" : net.status === "tension" ? "forks in tension" : net.status === "sign" ? "sign only" : "no forks";
   const Node = ({ n, role }: { n: ReturnType<typeof forkNetwork>["parent"]; role: "parent" | "fork" }) => <a className={`node ${role}`} href={`#/run/${n.id}`}>
-    <span className="node-id mono">{n.id}</span><span className="dim">{n.engine} · {n.production_ps} ps{role === "fork" && n.kind ? ` · ${n.kind}${n.seed === "fresh" ? ", fresh seeds" : ""}${n.complete === false ? ", partial" : ""}` : ""}</span><span className="node-dg mono">{fmt(n.delta_g)}</span>
+    <span className="node-id mono">{n.owner && <span className="node-owner">{n.owner}/</span>}{n.id}</span><span className="dim">{n.engine} · {n.production_ps} ps{role === "fork" && n.kind ? ` · ${n.kind}${n.seed === "fresh" ? ", fresh seeds" : ""}${n.complete === false ? ", partial" : ""}` : ""}</span><span className="node-dg mono">{fmt(n.delta_g)}</span>
   </a>;
   return <section className="card network" aria-labelledby={`network-${net.parent.id}`}>
     <h2 id={`network-${net.parent.id}`}>Fork network <span className={`badge ${cls}`}>{label}</span><span className="dim">{compact ? `${net.n} reruns of ${net.parent.id}` : `${net.n} runs re-executed from ${net.parent.id}'s rerun bundle, each a card that points back at its parent`}</span></h2>
@@ -274,15 +302,15 @@ function RunPage({ id, idx }: { id: string; idx: IndexEntry[] }) {
   const net = idx.length ? forkNetwork(idx, id) : null;
   return (
     <section className="run">
-      <nav className="crumbs" aria-label="breadcrumb"><a href="#/">← all runs</a><span aria-hidden="true">/</span>{(() => { const c = cohorts(idx).find(c => c.runs.some(r => r.id === id)); return c ? <><span>{c.title}</span><span aria-hidden="true">/</span></> : null; })()}<span className="mono">{m.id}</span></nav>
+      <nav className="crumbs" aria-label="breadcrumb">{ownerOf(idx, id) ? <a href={`#/u/${ownerOf(idx, id)}`}>{ownerOf(idx, id)}</a> : <a href="#/">runs</a>}<span aria-hidden="true">/</span><span className="mono">{m.id}</span></nav>
       <div className="titlebar"><h1>{m.title}</h1><span className="dim">{m.id}</span>
-        {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {m.parent}</a>}
+        {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {qualified(idx, m.parent)}</a>}
         <ForkMenu m={m} ens={ens} />
-        {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</a>}
+        {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks{(() => { const by = [...new Set(net.forks.map(f => f.owner).filter(o => o && o !== net.parent.owner))]; return by.length ? ` by ${by.join(", ")}` : ""; })()} · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</a>}
         <CompareSelect idx={idx} self={id} value="" onPick={other => navigate(`/compare/${id}/${other}`)} /></div>
       {/* Lineage is identity, not provenance trivia: a replicate has to say what it replicates before it shows
           a number, or a reader takes its ΔG for an independent measurement of a different thing. */}
-      {m.parent && <p className="lineage">{m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{m.parent}</a>{m.fork?.seed === "fresh" ? " — same prepared system and protocol, fresh seeds" : ""}{m.fork?.complete === false ? " — partially applied" : ""}.</p>}
+      {m.parent && <p className="lineage">{m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{qualified(idx, m.parent)}</a>{m.fork?.seed === "fresh" ? " — same prepared system and protocol, fresh seeds" : ""}{m.fork?.complete === false ? " — partially applied" : ""}.</p>}
 
       <div className={m.results.plip ? "grid2" : ""}>
         <div className="card">
@@ -451,7 +479,7 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
   if (err) return <LoadError message={`compare ${a} vs ${b}: ${err}`} onRetry={() => setAttempt(n => n + 1)} />;
   if (!d) return <p className="dim" role="status">comparing…</p>;
   return <section>
-    <nav className="crumbs" aria-label="breadcrumb"><a href="#/">← all runs</a><span aria-hidden="true">/</span><a href={`#/run/${a}`}>{a}</a><span aria-hidden="true">/</span><span>compare with <span className="mono">{b}</span></span></nav>
+    <nav className="crumbs" aria-label="breadcrumb">{ownerOf(idx, a) ? <a href={`#/u/${ownerOf(idx, a)}`}>{ownerOf(idx, a)}</a> : <a href="#/">runs</a>}<span aria-hidden="true">/</span><a href={`#/run/${a}`}>{a}</a><span aria-hidden="true">/</span><span>compare with <span className="mono">{b}</span></span></nav>
     <div className="titlebar"><h1>Compare <a href={`#/run/${a}`}>{idx.find(r => r.id === a)?.title ?? a}</a> vs <a href={`#/run/${b}`}>{idx.find(r => r.id === b)?.title ?? b}</a></h1>
       <CompareSelect idx={idx} self={a} value={b} onPick={other => navigate(`/compare/${a}/${other}`)} wide /></div>
     {/* The verdict first, in bold; the reasoning under it; the numbers live once, in the table below. */}
@@ -478,7 +506,7 @@ function Sidebar() {
   const callRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setOut(""); setTouched(true); set({ console: null }); setTimeout(() => callRef.current?.focus(), 50); } }, [pre]);
   // Prefill run_id with the run on screen, so "pick explain_result, press Call" works on a run page.
-  const currentRun = route.split("/")[2] || "";
+  const currentRun = route.startsWith("/run/") ? route.split("/")[2] || "" : "";
   // The approval queue is global on purpose: list_proposals is unfiltered, so scoping this list to the
   // route would let a pending proposal sit unseen while the panel said "None yet". Each card names its run.
   const proposals = [...allProposals].sort((a, b) => Number(b.run === currentRun) - Number(a.run === currentRun));

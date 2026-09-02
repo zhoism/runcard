@@ -1,4 +1,4 @@
-import type { Manifest, IndexEntry, SystemKey } from "./types";
+import type { Manifest, IndexEntry, SystemKey, Owners } from "./types";
 import { checkAmberIn, type Report } from "./amberCheck";
 import { zipSync, strToU8 } from "fflate";
 import { GB_TERMS, type PerFrame, type GbTerm } from "./types";
@@ -34,6 +34,16 @@ export async function loadIndex(): Promise<IndexEntry[]> {
   const idx = await readJson(r, url);
   if (!Array.isArray(idx)) throw new Error(`run index could not be loaded: ${url} is not a list of runs`);
   return idx as IndexEntry[];
+}
+
+/** The profiles on the site and which one the home page shows. */
+export async function loadOwners(): Promise<Owners> {
+  const url = "/runs/owners.json";
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`owners could not be loaded: HTTP ${r.status} for ${url}`);
+  const o = await readJson(r, url);
+  if (!o || typeof o !== "object" || !(o as any).profiles || !(o as any).default) throw new Error(`owners could not be loaded: ${url} has no profiles`);
+  return o as Owners;
 }
 
 async function fetchRun(id: string): Promise<Manifest> {
@@ -142,7 +152,7 @@ export function cohorts(idx: IndexEntry[]): Cohort[] {
 
 // ---- fork network: a parent and the runs re-executed from its bundle ----------
 /** One node of the network: the fields a reader compares across a parent and its forks. */
-export interface ForkNode { id: string; title: string; engine: string; production_ps: number; delta_g: number; kind?: string; seed?: string; complete?: boolean }
+export interface ForkNode { id: string; title: string; owner?: string; engine: string; production_ps: number; delta_g: number; kind?: string; seed?: string; complete?: boolean }
 export interface ForkNetwork {
   parent: ForkNode; forks: ForkNode[]; n: number;
   fork_mean: number | null; fork_sd: number | null;
@@ -153,7 +163,7 @@ export interface ForkNetwork {
   status: "none" | "agree" | "tension" | "sign";
   verdict: string;
 }
-const node = (r: IndexEntry): ForkNode => ({ id: r.id, title: r.title, engine: r.engine, production_ps: r.production_ps, delta_g: r.delta_g, ...(r.fork ? { kind: r.fork.kind, seed: r.fork.seed, complete: r.fork.complete } : {}) });
+const node = (r: IndexEntry): ForkNode => ({ id: r.id, title: r.title, owner: r.owner, engine: r.engine, production_ps: r.production_ps, delta_g: r.delta_g, ...(r.fork ? { kind: r.fork.kind, seed: r.fork.seed, complete: r.fork.complete } : {}) });
 /** The runs whose `parent` is `id`, with the honest comparison: sign agreement, fork mean ± SD, and where the parent sits
     relative to that mean in units of the cohort's run-to-run SD (the uncertainty that matters, from `ensemble`). A parent
     more than 2 SDs from its forks is reported as tension, not smoothed over — that is what the network exists to surface. */
@@ -182,6 +192,28 @@ export function forkNetwork(idx: IndexEntry[], id: string): ForkNetwork {
 export function forkNetworks(idx: IndexEntry[]): ForkNetwork[] {
   const parents = [...new Set(idx.map(r => r.parent).filter((p): p is string => !!p && idx.some(r => r.id === p)))];
   return parents.map(p => forkNetwork(idx, p)).sort((a, b) => b.n - a.n || a.parent.id.localeCompare(b.parent.id));
+}
+
+// ---- owners: whose cards these are, and how they connect ----------------
+export interface OwnerStats { handle: string; runs: number; systems: number; forks_of_theirs: number; forked_by: string[]; forks_from_others: number; forked_from: string[] }
+/** The social summary of one owner: their runs and systems, how many times others forked their runs and who,
+    and how many of their runs are forks of someone else's. Pure; reads only the index. */
+export function ownerStats(idx: IndexEntry[], handle: string): OwnerStats {
+  const mine = idx.filter(r => r.owner === handle);
+  const byId = new Map(idx.map(r => [r.id, r]));
+  const parentOwner = (r: IndexEntry) => r.parent ? byId.get(r.parent)?.owner : undefined;
+  const ofTheirs = idx.filter(r => parentOwner(r) === handle && r.owner !== handle);
+  const fromOthers = mine.filter(r => { const o = parentOwner(r); return o != null && o !== handle; });
+  const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter((x): x is string => !!x))].sort();
+  return { handle, runs: mine.length, systems: new Set(mine.map(r => systemFingerprint(r.system))).size,
+    forks_of_theirs: ofTheirs.length, forked_by: uniq(ofTheirs.map(r => r.owner)),
+    forks_from_others: fromOthers.length, forked_from: uniq(fromOthers.map(parentOwner)) };
+}
+/** Every owner with a card on the site, most runs first. */
+export function ownerHandles(idx: IndexEntry[]): string[] {
+  const n = new Map<string, number>();
+  for (const r of idx) if (r.owner) n.set(r.owner, (n.get(r.owner) ?? 0) + 1);
+  return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([h]) => h);
 }
 
 // ---- explain --------------------------------------------------------

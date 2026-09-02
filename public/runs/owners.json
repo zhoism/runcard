@@ -1,0 +1,22 @@
+{
+ "_comment": "Who published each card. Site metadata typed by hand: the one field on the page that is not read from a run directory, because no artifact records who ran it. Runs not listed under 'runs' belong to 'default'. There are no accounts; every card is public.",
+ "default": "kevin",
+ "profiles": {
+  "kevin": {
+   "name": "Kevin Zhou",
+   "bio": "Internship pipeline: 1L2Y + indole and 3HTB + JZ4, Amber 26 PMEMD. Every card here is read from the run's own files.",
+   "where": "internship pipeline"
+  },
+  "pace-ice": {
+   "name": "PACE-ICE",
+   "bio": "Georgia Tech's PACE-ICE cluster, Amber 24 SANDER. Four reruns executed from the 1l2y-rep4 rerun bundle with fresh seeds, under Kevin's cluster account.",
+   "where": "Georgia Tech PACE-ICE"
+  }
+ },
+ "runs": {
+  "1l2y-rep4-ice1": "pace-ice",
+  "1l2y-rep4-ice2": "pace-ice",
+  "1l2y-rep4-ice3": "pace-ice",
+  "1l2y-rep4-ice4": "pace-ice"
+ }
+}

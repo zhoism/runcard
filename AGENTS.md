@@ -30,6 +30,11 @@ reader-facing layer only — nothing runs or is authored here.
   instead of Amber 26 PMEMD. They carry `parent`/`fork` lineage and their system
   composition is read from their own files (no `s*.json`), never copied from the
   parent.
+- `public/runs/owners.json` — who published each card. Two profiles: `kevin` (default;
+  the home page `#/` is his profile) and `pace-ice` (the four PACE-ICE reruns, executed under
+  Kevin's cluster account — say that; it is not a second person). Site metadata typed by hand,
+  the one field not read from a run directory, because no artifact records who ran it.
+  `tools/build_index.py` stamps `owner` into `index.json`; profiles live at `#/u/<handle>`.
 
 ## Rules that carry over from the parent project
 

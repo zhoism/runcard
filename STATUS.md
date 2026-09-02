@@ -1,6 +1,6 @@
 # STATUS — runcard
 
-Updated 2026-08-31. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
+Updated 2026-09-01. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP Challenge).
 
 ## GitHub-for-MD-runs reframe (2026-09-01)
 
@@ -24,6 +24,22 @@ general agent prompts moved into Current investigation. 390 px re-measured clean
 same evening on the owner's instruction**; the app is back on the navy/bento report theme of e365aa6. Kept from the
 interval: the Fork dropdown, the grouped compare picker, the header logo mark, the fixed approved-pin colour.
 Next if time: an activity feed (the call log as a timeline) and an agent-review card on pending proposals.
+
+### Profiles: the home page has an owner (2026-09-01, evening)
+
+The user, walking the site as a new visitor: "is this really what I'm opening runcard to? Don't we need a home? A profile?"
+The opening page was an unowned run table, so it read as "my runs" with the name torn off. Decided: **the home page `#/` is a
+profile** — GitHub's logged-out org page, not a dashboard — and there are still no accounts. `public/runs/owners.json` names
+who published each card (`kevin`, default; `pace-ice` for the four PACE-ICE reruns, *under Kevin's cluster account* — the bio says
+so; it is a second profile to open in the demo, not a second person). It is the one hand-typed field on the site, because no
+artifact records who ran a job; `tools/build_index.py` stamps `owner` into `index.json`, and `list_runs` / `fork_network` return it.
+Profile page (`Profile` in `App.tsx`, `ownerStats` / `ownerHandles` / `loadOwners` in `runs.ts`, 3 tests): avatar, name, `@handle`,
+bio, stats (runs, systems, forks of these runs by whom, forks from whom, proposals awaiting approval), an "Also on runcard" line to
+every other profile, the owner's rows in each cohort table (the cohort line stays site-wide, with "9 of 13 here"), and the fork
+network compact under the tables. Run pages are named `owner / id` in the breadcrumb, `fork of kevin/1l2y-rep4` in the badge and
+lineage line, and fork-network nodes carry their owner. `#/u/<handle>`; an unknown handle says so. Sidebar prefill now reads the run
+id only on `/run/` routes (it had taken `pace-ice` for a run id). Before this, the same evening: the home page was cut to lead with
+the tables (one-line lede, fork network compact and below) — superseded by the profile.
 
 ## Investigation workspace build (live 2026-08-31 as 5a885d9)
 

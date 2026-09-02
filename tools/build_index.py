@@ -6,6 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "public/runs"
+# Who published each card: site metadata (there are no accounts), the one field not read from a run directory.
+OWNERS = json.loads((RUNS / "owners.json").read_text())
 
 # &cntrl keys that define the production protocol (mirrors PARAM_CLASS physics / thermodynamic_state / restraints in src/lib/runs.ts).
 PROTOCOL_KEYS = ("dt", "cut", "ntc", "ntf", "ntb", "nmropt", "temp0", "tempi", "ntt", "gamma_ln", "ntp", "pres0", "barostat", "taup", "ntr", "restraint_wt", "restraintmask")
@@ -22,7 +24,7 @@ def entry(m):
     sy = m["system"]; mm = m["results"].get("mmgbsa") or {}
     return {
         "protocol": protocol_key(prod, mm), "seed": prod.get("realized_seed") if prod else None,
-        "id": m["id"], "title": m["title"], "ligand": sy["ligand"]["resname"], "protein_atoms": sy["protein"]["atoms"],
+        "id": m["id"], "title": m["title"], "owner": OWNERS["runs"].get(m["id"], OWNERS["default"]), "ligand": sy["ligand"]["resname"], "protein_atoms": sy["protein"]["atoms"],
         "production_ps": prod["length_ps"] if prod else None, "delta_g": mm.get("delta_total_kcal_mol"),
         "plip": "plip" in m["results"], "engine": m["environment"].get("pmemd") or m["engine"],
         # lineage, so the home page can draw the fork network without opening every manifest

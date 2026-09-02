@@ -45,7 +45,18 @@ a.webmcp:hover { text-decoration: none; background: rgba(255, 255, 255, 0.2); co
 
 /* type: hierarchy by size and weight only */
 h1 { font-weight: 700; font-size: clamp(22px, 3vw, 28px); line-height: 1.2; letter-spacing: -0.015em; margin: 0 0 8px; }
-h1 .count { font-weight: 500; }
+/* profile: the page a visitor lands on — whose runs, how they connect to others, then the runs */
+.profile { display: flex; gap: 18px; align-items: flex-start; margin: 4px 0 6px; }
+.profile .avatar { width: 60px; height: 60px; border-radius: 50%; background: var(--navy); color: #fff; font-weight: 700; font-size: 26px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.profile-body { min-width: 0; }
+.profile h1 { margin: 6px 0 4px; }
+.profile .handle { font-family: var(--mono); font-weight: 400; font-size: 15px; }
+.profile .bio { color: var(--ink-2); font-size: 15.5px; max-width: 68ch; margin: 0 0 8px; }
+.profile .stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; font-size: 14.5px; color: var(--ink-2); }
+.profile .stats b { color: var(--ink); font-weight: 600; }
+.people { font-size: 14.5px; color: var(--ink-2); margin: 10px 0 0; }
+.network .node-owner { font-weight: 400; opacity: 0.75; }
+@media (max-width: 600px) { .profile { gap: 12px; } .profile .avatar { width: 44px; height: 44px; font-size: 20px; } .profile .stats { gap: 4px 14px; } }
 h1 a { color: var(--navy); } h1 a:hover { color: var(--blue); }
 h2 { font-weight: 600; font-size: 16px; color: var(--ink); margin: 0 0 10px; letter-spacing: 0; }
 h2 .dim { font-weight: 400; font-size: 14.5px; color: var(--muted); }

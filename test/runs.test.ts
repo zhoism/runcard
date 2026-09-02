@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks, ownerStats, ownerHandles } from "../src/lib/runs";
 import { ANALYSIS_CATALOG, ANALYSIS_CATEGORIES, analysisInfo } from "../src/lib/analysisCatalog";
 import { mean, sd, round } from "../src/lib/stats";
 // mmgbsa.dat prints DELTA TOTAL to 4 dp and the per-frame series is archived at the same precision, so a correct
@@ -619,6 +619,26 @@ describe("fork network", () => {
     const fake = idx.map(r => r.id === "1l2y-rep4" ? { ...r, delta_g: -17.5 } : r);
     const net = forkNetwork(fake, "1l2y-rep4");
     expect(net.status).toBe("agree"); expect(net.verdict).toMatch(/Within 2 SDs/);
+  });
+});
+
+describe("owners", () => {
+  it("every run has an owner; kevin owns the parents and pace-ice the four PACE-ICE reruns", () => {
+    expect(idx.every((r: any) => typeof r.owner === "string" && r.owner)).toBe(true);
+    expect(ownerHandles(idx)).toEqual(["kevin", "pace-ice"]);
+    expect(idx.filter((r: any) => r.owner === "pace-ice").map((r: any) => r.id).sort()).toEqual(["1l2y-rep4-ice1", "1l2y-rep4-ice2", "1l2y-rep4-ice3", "1l2y-rep4-ice4"]);
+  });
+  it("ownerStats: kevin's runs were forked 4× by pace-ice; pace-ice's 4 runs are all forks of kevin's", () => {
+    const k = ownerStats(idx, "kevin"); expect([k.runs, k.systems, k.forks_of_theirs, k.forked_by, k.forks_from_others, k.forked_from]).toEqual([10, 2, 4, ["pace-ice"], 0, []]);
+    const p = ownerStats(idx, "pace-ice"); expect([p.runs, p.systems, p.forks_of_theirs, p.forked_by, p.forks_from_others, p.forked_from]).toEqual([4, 1, 0, [], 4, ["kevin"]]);
+    expect(ownerStats(idx, "nobody").runs).toBe(0);
+  });
+  it("owners.json names only runs that exist and profiles that exist; fork_network nodes carry owners", () => {
+    const own = JSON.parse(readFileSync("public/runs/owners.json", "utf8"));
+    expect(own.profiles[own.default]).toBeTruthy();
+    for (const id of Object.keys(own.runs)) expect(idx.some((r: any) => r.id === id), id).toBe(true);
+    for (const h of Object.values(own.runs)) expect(own.profiles[h as string], String(h)).toBeTruthy();
+    const net = forkNetwork(idx, "1l2y-rep4"); expect(net.parent.owner).toBe("kevin"); expect(net.forks.every(f => f.owner === "pace-ice")).toBe(true);
   });
 });
 
