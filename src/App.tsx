@@ -43,6 +43,7 @@ export default function App() {
         {idxErr && <div className="interp warn" role="alert">{idxErr} — reload the page to try again.</div>}
         <Boundary label="Page">{parts[0] === "run" && parts[1] ? <RunPage key={parts[1]} id={parts[1]} idx={idx} own={own} /> :
          parts[0] === "compare" && parts[2] ? <ComparePage a={parts[1]} b={parts[2]} idx={idx} /> :
+         parts[0] === "compare" ? <CompareStart idx={idx} /> :
          parts[0] === "p" && parts[1] ? <ProjectPage key={parts[1]} slug={decodeURIComponent(parts[1])} idx={idx} own={own} /> :
          parts[0] === "u" && parts[1] ? <Profile key={parts[1]} handle={decodeURIComponent(parts[1])} idx={idx} own={own} /> :
          <Home idx={idx} own={own} />}</Boundary>
@@ -64,9 +65,14 @@ function Mark() {
 
 function Header() {
   const st = useStore(s => s.webmcp);
+  const route = useStore(s => s.route);
   return (
     <header>
       <a href="#/" className="brand"><Mark />runcard</a>
+      <nav className="top-nav" aria-label="primary">
+        <a href="#/" aria-current={route === "/" || route.startsWith("/p/") ? "page" : undefined}>Projects</a>
+        <a href="#/compare" aria-current={route.startsWith("/compare") ? "page" : undefined}>Compare</a>
+      </nav>
       {/* One pill says what an agent gets here. Green: registered with navigator.modelContext. Amber: this browser does not expose WebMCP; the pill leads to the console, which calls the same table by hand. */}
       {st === "registered" ? <span className="webmcp registered" title="Registered with navigator.modelContext — an agent in this browser can call every tool on this page">WebMCP · {TOOLS.length} tools</span>
        : st === "registering" ? <span className="webmcp registering" title="This browser exposes WebMCP; the tools are being registered">WebMCP · {TOOLS.length} tools <span className="dim">· registering…</span></span>
@@ -167,6 +173,40 @@ function ComparePair({ runs }: { runs: IndexEntry[] }) {
     <select value={b} aria-label="second run" onChange={e => setB(e.target.value)}><option value="">select second run…</option>{runs.filter(r => r.id !== a).map(r => <option key={r.id} value={r.id}>{label(r)}</option>)}</select>
     <button type="button" disabled={!a || !b} onClick={() => navigate(`/compare/${a}/${b}`)}>Compare</button>
   </div>;
+}
+
+/** A neutral compare entry point for the header: pick any two run records, grouped by their prepared-system project. */
+function CompareStart({ idx }: { idx: IndexEntry[] }) {
+  const [a, setA] = useState("");
+  const [b, setB] = useState("");
+  useEffect(() => {
+    if (!idx.length || a) return;
+    const primary = [...cohorts(idx)].sort((x, y) => y.n - x.n)[0];
+    const first = primary?.start_here ?? idx[0].id;
+    const second = primary?.runs.find(r => r.id !== first)?.id ?? idx.find(r => r.id !== first)?.id ?? "";
+    setA(first); setB(second);
+  }, [idx, a]);
+  useEffect(() => { document.title = "compare runs · runcard"; }, []);
+  const pickA = (next: string) => {
+    setA(next);
+    if (!b || b === next) setB(idx.find(r => r.id !== next)?.id ?? "");
+  };
+  const label = (r: IndexEntry) => `${r.id} · ${r.owner ?? "—"} · ${r.engine} · ${r.production_ps} ps`;
+  const options = (exclude: string) => cohorts(idx).map(c => <optgroup key={c.key} label={c.title}>{c.runs.filter(r => r.id !== exclude).map(r => <option key={r.id} value={r.id}>{label(r)}</option>)}</optgroup>);
+  return <section className="compare-start-page">
+    <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span><span>compare</span></nav>
+    <p className="kicker">Run comparison</p>
+    <h1>Compare two <em>runs</em></h1>
+    <p className="lede">Choose two run records. runcard first checks whether they share a prepared system, then separates material protocol changes from sampling and output differences.</p>
+    {!idx.length ? <p className="dim" role="status">loading runs…</p> : <div className="card compare-start" role="group" aria-label="choose two runs to compare">
+      <div className="compare-fields">
+        <label><span>First run</span><select aria-label="first run" value={a} onChange={e => pickA(e.target.value)}>{options("")}</select></label>
+        <span className="compare-with" aria-hidden="true">with</span>
+        <label><span>Second run</span><select aria-label="second run" value={b} onChange={e => setB(e.target.value)}>{options(a)}</select></label>
+      </div>
+      <button type="button" className="primary" disabled={!a || !b || a === b} onClick={() => navigate(`/compare/${a}/${b}`)}>Compare</button>
+    </div>}
+  </section>;
 }
 
 /** The project page: a prepared system is the repository and its runs are the commits. Everything here is read from the
@@ -511,6 +551,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   const [m, setM] = useState<Manifest | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [linkState, setLinkState] = useState<"idle" | "copied" | "error">("idle");
   const [open, setOpen] = useState<string | null>(null);
   // Which stage's proposal thread is open as a popover under its pin; independent of the inline stage detail.
   const [thread, setThread] = useState<string | null>(null);
@@ -536,6 +577,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   const mm = m.results.mmgbsa; const prod = m.stages.find(s => s.role === "production");
   const reports = Object.fromEntries(m.stages.map(s => [s.name, validateStage(m, s.name)]));
   const overall = verdictOf({ hasFail: Object.values(reports).some(r => r.hasFail), hasWarn: Object.values(reports).some(r => r.hasWarn) });
+  const stageLegend = "Dots show input-check status: pass, needs attention, fail.";
   const others = idx.filter(r => r.id !== id);
   const netCharge = m.system.ligand.net_charge;
   const u = mm?.per_frame ? uncertaintyFromFrames(mm.per_frame, prod?.length_ps ?? null) : null;
@@ -544,12 +586,20 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   const ladder = idx.length ? confidenceLadderFull(m, idx) : null;
   const explanation = idx.length ? explainResult(m, idx) as any : null;
   const net = idx.length ? forkNetwork(idx, id) : null;
+  const copyRunLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setLinkState("copied");
+      setTimeout(() => setLinkState("idle"), 1600);
+    } catch { setLinkState("error"); }
+  };
   return (
     <section className="run">
       <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span>{(() => { const c = projectOf(idx, id); return c ? <><a href={`#/p/${c.slug}`}>{c.title}</a><span aria-hidden="true">/</span></> : null; })()}<span className="mono">{m.id}</span></nav>
       <div className="titlebar"><h1>{describeSystem(m.title, m.system.ligand.resname ?? "")?.name ?? m.title}</h1><span className="dim">{m.id}</span>
         {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {qualified(idx, m.parent)}</a>}
         <ForkMenu m={m} ens={ens} />
+        <button type="button" className="ghost" aria-live="polite" title="Copy a shareable link to this run" onClick={copyRunLink}>{linkState === "copied" ? "Link copied" : linkState === "error" ? "Copy unavailable" : "Copy link"}</button>
         {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks{(() => { const by = [...new Set(net.forks.map(f => f.owner).filter(o => o && o !== net.parent.owner))]; return by.length ? ` by ${by.join(", ")}` : ""; })()} · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</a>}
         <CompareSelect idx={idx} self={id} value="" onPick={other => navigate(`/compare/${id}/${other}`)} /></div>
       {/* Lineage is identity, not provenance trivia: a replicate has to say what it replicates before it shows
@@ -617,16 +667,16 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
 
       <h2 className="section-label">how it was produced</h2>
       <div className="card">
-        <h2>Stages <span className={`badge ${overall.toLowerCase()}`}>input checks {overall}</span></h2>
+        <h2>Stages <span className={`badge ${overall.toLowerCase()}`} title={stageLegend}>input checks {overall}</span></h2>
         <p className="dim small">11 rules on each .in file (timestep vs SHAKE, cutoff, thermostat, barostat, restarts, seeds, output cadence): a sanity check of the input files, not evidence of convergence or physical accuracy and not a rung of the confidence ladder — select a stage for its input and findings.</p>
         {/* Each stage is a native disclosure button: Tab reaches it, Enter/Space toggle it, aria-expanded carries the state. The arrow is decoration. */}
-        <div className="stages">{m.stages.map((s, i) => <div key={s.name} className={`stage ${open === s.name ? "open" : ""}`}>
+        <div className="stages">{m.stages.map((s, i) => { const stageVerdict = verdictOf(reports[s.name]); const stageStatus = stageVerdict === "WARN" ? "needs attention" : stageVerdict.toLowerCase(); return <div key={s.name} className={`stage ${open === s.name ? "open" : ""}`}>
           {i > 0 && <span className="arrow" aria-hidden="true">→</span>}
-          <button type="button" className="stagebox" id={`stage-${s.name}`} aria-expanded={open === s.name} aria-controls={open === s.name ? "stagedetail" : undefined} onClick={() => setOpen(open === s.name ? null : s.name)}>
+          <button type="button" className="stagebox" id={`stage-${s.name}`} title={`${s.name} input checks: ${stageStatus}. ${stageLegend}`} aria-expanded={open === s.name} aria-controls={open === s.name ? "stagedetail" : undefined} onClick={() => setOpen(open === s.name ? null : s.name)}>
             <span className="stagename">{s.name}</span><span className="dim">{s.role}{s.length_ps != null ? ` · ${s.length_ps} ps` : ""}</span>
             <span className="dim">{s.cntrl.temp0 ? `${s.cntrl.temp0} K` : ""}{s.role === "minimization" ? "" : s.cntrl.ntp === "1" ? " NPT" : s.cntrl.ntb === "1" ? " NVT" : ""}{s.cntrl.ntr === "1" ? " restrained" : ""}</span>
-            {verdictOf(reports[s.name]) !== overall || overall !== "PASS" ? <Verdict r={reports[s.name]} /> : null}</button>
-          <ProposalPin stage={s.name} proposals={runProposals.filter(p => p.stage === s.name)} expanded={thread === s.name} onToggle={() => setThread(t => t === s.name ? null : s.name)} /></div>)}</div>
+            {stageVerdict !== overall || overall !== "PASS" ? <Verdict r={reports[s.name]} /> : null}</button>
+          <ProposalPin stage={s.name} proposals={runProposals.filter(p => p.stage === s.name)} expanded={thread === s.name} onToggle={() => setThread(t => t === s.name ? null : s.name)} /></div>; })}</div>
         {thread && runProposals.some(p => p.stage === thread) && <ThreadPopover stage={thread} proposals={runProposals.filter(p => p.stage === thread)} onClose={closeThread} />}
         {open && (() => { const s = m.stages.find(x => x.name === open)!; const r = reports[open]; return <div className="stagedetail" id="stagedetail" role="region" aria-labelledby={`stage-${open}`}>
           <div><h3>{s.name}.in</h3><pre>{s.mdin}</pre>
@@ -812,7 +862,7 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
           the console is you picking. Both go through callTool, so the activity log below records them identically. */}
       <div className="row wrap">
         {context === "site"
-          ? <button className="primary" onClick={() => ask("list_runs", {})}>What is on this site?</button>
+          ? <button className={route === "/compare" ? undefined : "primary"} onClick={() => ask("list_runs", {})}>What is on this site?</button>
           : <button className="primary" disabled={!target} onClick={() => ask("investigate_run", { run_id: target })}>Investigate {target}</button>}
         {context === "project" && projectNet && <button className="ghost" onClick={() => ask("fork_network", { run_id: target })}>Check the forks</button>}
         {context === "run" && !allProposals.some(p => p.run === currentRun) && <button className="ghost" onClick={draftProposal} title="Prefills propose_change below; you press Call, then Approve or Reject on the thread pinned to the stage">Draft a proposal</button>}
