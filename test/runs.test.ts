@@ -586,6 +586,14 @@ describe("the rerun bundle reproduces the number, not just the trajectory", () =
     expect(ice["run_analysis.sh"]).toContain("# no --radii: the archived run's radii set is not recorded in its artifacts");
     expect(ice["README.md"]).toContain("GB radii unrecorded in this run's artifacts");
   });
+  it("names the engine when a fork ran on another engine: the &cntrl diff is empty, the index is not", () => {
+    const d = diffRuns(load("1l2y-rep4"), load("1l2y-rep4-ice1"), idx);
+    expect(d.engines).toEqual({ a: "Amber 26 PMEMD (2026)", b: "Amber 24 SANDER (2024)", differ: true });
+    expect(d.interpretation).toMatch(/only seeds and the engine \(Amber 26 PMEMD \(2026\) vs Amber 24 SANDER \(2024\)\) differ/);
+    expect(d.interpretation).toMatch(/cannot separate them/);
+    const e = diffRuns(load("1l2y-rep4"), load("1l2y-rep6"), idx);
+    expect(e.engines.differ).toBe(false); expect(e.interpretation).not.toMatch(/engine/);
+  });
   it("adds SLURM directives to the analysis job too, not just the MD job", () => {
     const f = rerunBundle(B, { seed: "pinned", target: "slurm", approved: [] });
     expect(f["run_analysis.sh"].split("\n")[1]).toBe("#SBATCH --job-name=1l2y-rep4-mmgbsa");

@@ -68,7 +68,7 @@ function Header() {
       {/* One pill says what an agent gets here. Green: registered with navigator.modelContext. Amber: this browser does not expose WebMCP; the pill leads to the console, which calls the same table by hand. */}
       {st === "registered" ? <span className="webmcp registered" title="Registered with navigator.modelContext — an agent in this browser can call every tool on this page">WebMCP · {TOOLS.length} tools</span>
        : st === "error" ? <span className="webmcp error" title="registerTool threw; see the browser console">WebMCP · registration failed</span>
-       : <a className="webmcp" href="#tool-console" onClick={e => { e.preventDefault(); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} title="This browser does not expose WebMCP. Chrome 149+: chrome://flags/#enable-webmcp-testing, then reload. The console on this page calls the same tools by hand.">WebMCP · {TOOLS.length} tools <span className="dim">· not exposed here</span></a>}
+       : <a className="webmcp" href="#tool-console" onClick={e => { e.preventDefault(); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} title="This browser does not expose WebMCP. Chrome 149+: chrome://flags/#enable-webmcp-testing, then reload. The console on this page calls the same tools by hand.">WebMCP · {TOOLS.length} tools <span className="dim">· off in this browser</span><span className="dim short">· off</span></a>}
     </header>
   );
 }
@@ -125,9 +125,20 @@ function Home({ idx, own }: { idx: IndexEntry[]; own: Owners | null }) {
   useEffect(() => { document.title = "runcard"; }, []);
   const cs = cohorts(idx); const handles = ownerHandles(idx);
   const nameOf = (h: string) => own?.profiles[h]?.name ?? h;
+  const startRun = cs[0]?.runs[0]?.id ?? "1l2y-rep4";
   return <section>
     <h1>Validated records of <em>molecular simulations</em></h1>
     <p className="lede">A project is one prepared system. Its runs are the commits, a fork is a rerun with lineage, and every number on the page traces to a file in the run directory. An agent reads the same page through WebMCP; a person approves every change.</p>
+    {/* Quick demo: one click shows WebMCP working */}
+    <details className="card" style={{ marginBottom: 20 }} open>
+      <summary className="kicker">Quick demo (WebMCP)</summary>
+      <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
+        <button onClick={async () => { try { const r = await callTool("list_runs", {}, "page"); alert("list_runs: " + JSON.parse(r).length + " runs across " + cohorts(idx).length + " projects"); } catch (e: any) { alert(e); } }}>What's on this site? (list_runs)</button>
+        <button onClick={async () => { try { const r = await callTool("explain_result", { run_id: startRun }, "page"); const v = JSON.parse(r); alert(v.brief ?? "explained"); } catch (e: any) { alert(e); } }}>Explain {startRun} (explain_result)</button>
+        <button onClick={async () => { try { const r = await callTool("investigate_run", { run_id: startRun }, "page"); const v = JSON.parse(r); alert(v.summary ?? "investigated"); } catch (e: any) { alert(e); } }}>Investigate {startRun} (investigate_run)</button>
+      </div>
+      <p className="dim small" style={{ marginTop: 8 }}>These call the same 17 tools an agent sees. Open a project or run page for the full console.</p>
+    </details>
     {!idx.length && <p className="dim" role="status">loading runs…</p>}
     {cs.map(c => <ProjectCard key={c.key} c={c} idx={idx} own={own} />)}
     {handles.length > 0 && <p className="people">People on runcard: {handles.map((h, i) => { const o = ownerStats(idx, h); return <span key={h}>{i ? " · " : ""}<a href={`#/u/${h}`}>{nameOf(h)}</a> <span className="dim">@{h} · {o.runs} {plural(o.runs, "run")}{o.forks_from_others > 0 ? `, forks of ${o.forked_from.map(nameOf).join(", ")}'s` : ""}</span></span>; })}</p>}
@@ -191,11 +202,10 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
 
     <div className="card">
         <h2>Ensemble result <span className="dim">MM-GBSA ΔG across the runs</span></h2>
-        <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">{c.sd != null ? `run-to-run SD, n=${c.n}` : "one run, no spread yet"}</span></p>
+        <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">{c.sd != null ? "mean ± run-to-run SD" : "one run, no spread yet"}</span></p>
         <Spread runs={c.runs} mean={c.mean} sd={c.sd} own={own} ringId={p.network?.parent.id ?? c.start_here} ringWhy={p.network ? "the parent of the forks" : "the longest run"} />
-        {ens.all.n > 1 && <dl className="facts">
-          <dt>all runs</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}</dd>
-          {ens.long.n > 0 && ens.long.n < ens.all.n && <><dt>≥ {ens.long.min_ps} ps</dt><dd><b>n={ens.long.n}</b>: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</dd></>}
+        {ens.long.n > 0 && ens.long.n < ens.all.n && <dl className="facts">
+          <dt>≥ {ens.long.min_ps} ps only</dt><dd><b>n={ens.long.n}</b>: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</dd>
         </dl>}
         {c.sd != null && <p className="dim small">The ± is the observed run-to-run spread across {c.n} comparable runs with different seeds and lengths{p.engines.length > 1 ? ` and ${p.engines.length} disclosed engines` : ""}: an empirical spread, not pure seed noise{p.external_forks ? ` — the ${p.external_forks} external forks changed engine and seed together` : ""}.</p>}
         <p className="dim small">{signClaim(ens.all)}</p>
@@ -441,7 +451,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   const openStage = useStore(s => s.openStage);
   const seenProposal = useRef<string | null>(null);
   // A new pending proposal on this run opens its thread, so the reader sees what the agent asked for without hunting.
-  useEffect(() => { const p = runProposals[0]; if (p && p.status === "pending" && seenProposal.current !== p.id) { seenProposal.current = p.id; setOpen(p.stage); } }, [runProposals]);
+  useEffect(() => { const p = runProposals[0]; if (p && p.status === "pending" && seenProposal.current !== p.id) { seenProposal.current = p.id; setOpen(p.stage); setTimeout(() => document.getElementById(`stage-${p.stage}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 30); } }, [runProposals]);
   useEffect(() => { if (openStage) { setOpen(openStage); set({ openStage: null }); setTimeout(() => document.getElementById(`stage-${openStage}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 30); } }, [openStage]);
   useEffect(() => {
     let live = true; setM(null); setErr(null);
@@ -649,7 +659,7 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
   if (!d) return <p className="dim" role="status">comparing…</p>;
   return <section>
     <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span>{(() => { const c = projectOf(idx, a); return c ? <><a href={`#/p/${c.slug}`}>{c.title}</a><span aria-hidden="true">/</span></> : null; })()}<a href={`#/run/${a}`}>{a}</a><span aria-hidden="true">/</span><span>compare with <span className="mono">{b}</span></span></nav>
-    <div className="titlebar"><h1>Compare <a href={`#/run/${a}`}>{idx.find(r => r.id === a)?.title ?? a}</a> vs <a href={`#/run/${b}`}>{idx.find(r => r.id === b)?.title ?? b}</a></h1>
+    <div className="titlebar"><h1>Compare <a href={`#/run/${a}`}>{a}</a> <em>with</em> <a href={`#/run/${b}`}>{b}</a></h1>
       <CompareSelect idx={idx} self={a} value={b} onPick={other => navigate(`/compare/${a}/${other}`)} wide /></div>
     {/* The verdict first, in bold; the reasoning under it; the numbers live once, in the table below. */}
     <div className={`interp ${d.same_system ? "" : "warn"}`}><b>{d.verdict}</b><div className="dim">{d.interpretation}</div></div>
@@ -658,7 +668,7 @@ function ComparePage({ a, b, idx }: { a: string; b: string; idx: IndexEntry[] })
         {d.run_to_run_spread && <tr><td>run-to-run mean ± SD (n={d.run_to_run_spread.all.n})</td><td className="num">{fmt(d.run_to_run_spread.all.mean)} ± {fmt(d.run_to_run_spread.all.sd)}</td></tr>}
         {d.delta_g.diff != null && <tr><td>ΔΔG ({a} − {b}){d.delta_g_vs_noise ? <span className="dim"> · √2·SD = {fmt(d.delta_g_vs_noise.sd_of_difference)}</span> : null}</td><td className="num">{fmt(d.delta_g.diff)}</td></tr>}</tbody></table>
         <div className="dim mono small">seeds {a}: {d.realized_seeds.a.join(" ")}<br />seeds {b}: {d.realized_seeds.b.join(" ")}</div>
-        {d.system.length === 0 && <div className="dim small" style={{ marginTop: 8 }}>identical prepared system{d.stages.length === 0 ? <>; stage inputs identical across all {d.stages_compared} stages (every &amp;cntrl key compared, seeds excluded) — only the seeds above differ</> : null}</div>}</div>
+        {d.system.length === 0 && <div className="dim small" style={{ marginTop: 8 }}>identical prepared system{d.stages.length === 0 ? <>; stage inputs identical across all {d.stages_compared} stages (every &amp;cntrl key compared, seeds excluded) — {d.engines.differ ? <>the seeds above and the engine ({d.engines.a} vs {d.engines.b}) differ</> : <>only the seeds above differ</>}</> : null}</div>}</div>
       {d.system.length > 0 && <div className="card"><h2>System</h2><table><thead><tr><th>field</th><th>{a}</th><th>{b}</th></tr></thead><tbody>{d.system.map(s => <tr key={s.field}><td>{s.field.replace(/_/g, " ")}</td><td className="mono">{show(s.a)}</td><td className="mono">{show(s.b)}</td></tr>)}</tbody></table></div>}
     </div>
     {d.stages.length > 0 && <div className="card"><h2>Stage parameters</h2>{d.stages.map(s => <div key={s.stage}><h3>{s.stage}</h3><table><thead><tr><th>key</th><th>meaning</th><th>{a}</th><th>{b}</th><th>material?</th></tr></thead><tbody>{s.changes.map(c => <tr key={c.key} className={c.material ? "" : "dim"}><td className="mono">{c.key}</td><td>{c.meaning}</td><td className="mono">{c.a}</td><td className="mono">{c.b}</td><td>{c.material ? <span className="badge warn">material · {c.class.replace("_", " ")}</span> : <span className="badge">{d.same_system ? "not material" : "moot across systems"} · {c.class.replace("_", " ")}</span>}</td></tr>)}</tbody></table></div>)}</div>}
@@ -687,6 +697,8 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
   // The approval queue is global on purpose: list_proposals is unfiltered, so scoping this list to the
   // route would let a pending proposal sit unseen while the panel said "None yet". Each card names its run.
   const proposals = [...allProposals].sort((a, b) => Number(b.run === currentRun) - Number(a.run === currentRun));
+  // The demo proposal: prefills propose_change into the developer console; the human presses Call, then Approve on the pinned thread.
+  const draftProposal = () => { const run = currentRun || "1l2y-rep4"; set({ console: { tool: "propose_change", input: JSON.stringify({ run_id: run, stage: "product", edits: { dt: "0.001" }, reason: "halve the timestep — a test of the proposal flow" }, null, 1) } }); if (!currentRun) navigate(`/run/${run}`); };
   const prefill = (name: string) => { const props: any = (TOOLS.find(x => x.name === name)!.inputSchema as any).properties ?? {}; return JSON.stringify(currentRun && props.run_id ? { run_id: currentRun } : currentRun && props.run_a ? { run_a: currentRun, run_b: "" } : {}); };
   // On a run page the most useful first call is explain_result for that run — until the human picks a tool themselves.
   useEffect(() => { if (!touched) { if (target) { setTool("explain_result"); setInput(JSON.stringify({ run_id: target })); } else { setTool("list_runs"); setInput("{}"); } setDout(""); } }, [target, touched]);
@@ -712,9 +724,10 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
           ? <button onClick={async () => { try { setOut(await callTool("list_runs", {}, "console")); } catch (e: any) { setOut(String(e)); } }}>What is on this site?</button>
           : <button disabled={!target} onClick={async () => { try { setOut(await callTool("investigate_run", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Investigate {target}</button>}
         {context === "project" && projectNet && <button className="ghost" onClick={async () => { try { setOut(await callTool("fork_network", { run_id: target }, "console")); } catch (e: any) { setOut(String(e)); } }}>Check the forks</button>}
+        {context === "run" && !allProposals.some(p => p.run === currentRun) && <button className="ghost" onClick={draftProposal} title="Prefills propose_change below; you press Call, then Approve or Reject on the thread pinned to the stage">Draft a proposal</button>}
       </div>
       <div role="status" aria-live="polite">{out && (outIsError
-        ? <pre className="small out">{out}</pre>
+        ? <pre className="small out" style={{color: 'var(--fail)'}}>{pretty(out)}</pre>
         : <div className="dim small">{(() => { let v: any = null; try { v = JSON.parse(out); } catch { return null; }
             if (Array.isArray(v)) return <p>{v.length} runs across {cohorts(idx).length} {plural(cohorts(idx).length, "project")}; each row names its owner. Open a project to see them grouped.</p>;
             if (v?.trace) return <p>Trace rendered under <a href="#investigation-title" onClick={e => { e.preventDefault(); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Current investigation ↓</a>.</p>;
@@ -722,10 +735,10 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
             return null; })()}<details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{pretty(out)}</pre></details></div>)}</div>
       <details className="devtools" open={mode === "manual"} onToggle={e => setMode((e.target as HTMLDetailsElement).open ? "manual" : "auto")}>
         <summary>Developer tools <span className="dim">· the {TOOLS.length} tools an agent sees, called by hand · ✎ changes page state</span></summary>
-        <select value={tool} aria-label="tool" onChange={e => { setTouched(true); setTool(e.target.value); setInput(prefill(e.target.value)); }}>{TOOLS.map(t => <option key={t.name} value={t.name}>{t.name}{t.readOnly ? "" : " ✎"}</option>)}</select>
+        <div className="tool-chips" role="group" aria-label="tool">{TOOLS.map(x => <button type="button" key={x.name} className={`chip ${tool === x.name ? "on" : ""}`} aria-pressed={tool === x.name} onClick={() => { setTouched(true); setTool(x.name); setInput(prefill(x.name)); }}>{x.name}{x.readOnly ? "" : " ✎"}</button>)}</div>
         {(() => { const q = t.description.indexOf("? "); const head = q > 0 ? t.description.slice(0, q + 1) : t.description; const rest = q > 0 ? t.description.slice(q + 2) : ""; return <div className="dim small">{head}{rest && <details className="small"><summary className="dim">what it returns</summary><p className="dim">{rest}</p></details>}</div>; })()}
         <div className="dim small mono" id="tool-schema">{JSON.stringify((t.inputSchema as any).properties && Object.fromEntries(Object.entries((t.inputSchema as any).properties).map(([k, v]: any) => [k, v.enum ? v.enum.join("|") : v.type])))}</div>
-        <textarea value={input} onChange={e => { setTouched(true); setInput(e.target.value); }} rows={3} spellCheck={false} aria-label="tool input (JSON)" aria-describedby="tool-schema" aria-invalid={doutIsError || undefined} />
+        <textarea value={input} onChange={e => { setTouched(true); setInput(e.target.value); }} rows={Math.min(10, Math.max(3, input.split("\n").length))} spellCheck={false} aria-label="tool input (JSON)" aria-describedby="tool-schema" aria-invalid={doutIsError || undefined} />
         <button ref={callRef} onClick={async () => { try { setDout(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setDout(String(e)); } }}>Call</button>
         <div role="status" aria-live="polite">{dout && <pre className="small out">{pretty(dout)}</pre>}</div>
       </details>
@@ -734,7 +747,7 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
     <details className="card proposals" open={allProposals.some(p => p.status === "pending") || pOpen} onToggle={e => setPOpen((e.target as HTMLDetailsElement).open)}>
       <summary><h2>Proposals <span className="dim">· {allProposals.length}{allProposals.length ? ` · ${allProposals.filter(p => p.status === "pending").length} pending` : ""} · agent proposes, you approve</span></h2></summary>
       {proposals.length === 0 && <p className="dim">None yet. An agent's proposed edits appear as comments pinned to the stage they target; nothing applies until you approve there.</p>}
-      {proposals.length === 0 && <button className="ghost" onClick={() => { const run = currentRun || "1l2y-rep4"; set({ console: { tool: "propose_change", input: JSON.stringify({ run_id: run, stage: "product", edits: { dt: "0.001" }, reason: "halve the timestep — a test of the proposal flow" }, null, 1) } }); if (!currentRun) navigate(`/run/${run}`); }}>Try it: draft a proposal, then press Call</button>}
+      {proposals.length === 0 && context !== "run" && <button className="ghost" onClick={draftProposal}>Try it: draft a proposal, then press Call</button>}
       {/* This run's proposals live on the page as pinned comments; the panel only points at them. Other runs' proposals are listed in full so nothing waits unseen. */}
       {(() => { const here = proposals.filter(p => p.run === currentRun); const pend = here.filter(p => p.status === "pending"); const stages = [...new Set(here.map(p => p.stage))];
         return here.length ? <p className="pinned-summary">{pend.length ? <b>{pend.length} awaiting your approval</b> : <span>{here.length} reviewed</span>} on this run — pinned at {stages.map((st, i) => <span key={st}>{i > 0 ? ", " : ""}<button className="linklike" onClick={() => set({ openStage: st })}>{st}</button></span>)}.</p> : null; })()}

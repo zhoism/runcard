@@ -557,7 +557,10 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
   // Materiality is a within-system notion: across different complexes every parameter difference is moot, so none is flagged material.
   const material = same ? [...classes].filter(isMaterial) : [];
   const seeds = { a: a.stages.map(s => s.realized_seed), b: b.stages.map(s => s.realized_seed) };
-  const ea = ia.find(r => r.id === a.id);
+  const ea = ia.find(r => r.id === a.id), eb = ia.find(r => r.id === b.id);
+  // The engine is not a &cntrl key, so the stage diff cannot see it; the index carries it, and a fork on another engine must say so.
+  const engines = { a: ea?.engine ?? null, b: eb?.engine ?? null, differ: !!(ea && eb && ea.engine !== eb.engine) };
+  const engineNote = engines.differ ? ` and the engine (${engines.a} vs ${engines.b})` : "";
   // ΔΔG only between runs of the same prepared system; across different complexes the difference is meaningless and is not reported.
   const dg = { a: a.results.mmgbsa?.delta_total_kcal_mol, b: b.results.mmgbsa?.delta_total_kcal_mol,
     diff: same && a.results.mmgbsa && b.results.mmgbsa ? +(a.results.mmgbsa.delta_total_kcal_mol - b.results.mmgbsa.delta_total_kcal_mol).toFixed(4) : null };
@@ -572,12 +575,12 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
   const interpretation = !same
     ? "Different prepared systems (see the system table). The two ΔG values describe different complexes and are not compared here."
     : material.length === 0
-      ? `Same prepared system and protocol; only ${[...classes].join(" and ") || "seeds"} differ, so the two ΔG values are independent samples of the same protocol.`
+      ? `Same prepared system and protocol; only ${[...classes].join(" and ") || "seeds"}${engineNote} differ, so the two ΔG values are ${engines.differ ? "independent samples of the same protocol on different engines: the difference combines the engine change with sampling, and this record cannot separate them" : "independent samples of the same protocol"}.`
       : material.every(c => c === "sampling_length")
         ? `Same prepared system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}), so they are different-length samples of the same protocol. Whether either run is converged is reported per run (drift verdict in explain_result).`
-        : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes). The ΔG difference combines that change with run-to-run sampling; the run-to-run spread is the scale to judge it against.`;
+        : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes)${engineNote ? `,${engineNote}` : ""}. The ΔG difference combines that change with run-to-run sampling; the run-to-run spread is the scale to judge it against.`;
   return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, stages_compared: stages.length, differing_classes: [...classes], material_classes: material,
-    realized_seeds: seeds, delta_g: dg, delta_g_vs_noise: noise, run_to_run_spread: spread, verdict, interpretation, scale: vsSpread };
+    realized_seeds: seeds, delta_g: dg, delta_g_vs_noise: noise, run_to_run_spread: spread, engines, verdict, interpretation, scale: vsSpread };
 }
 
 // ---- proposals (bounded edits, human-approved) -----------------------
