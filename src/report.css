@@ -45,6 +45,7 @@ a.webmcp:hover { text-decoration: none; background: rgba(255, 255, 255, 0.2); co
 
 /* type: hierarchy by size and weight only */
 h1 { font-weight: 700; font-size: clamp(22px, 3vw, 28px); line-height: 1.2; letter-spacing: -0.015em; margin: 0 0 8px; }
+h1 .count { font-weight: 500; }
 h1 a { color: var(--navy); } h1 a:hover { color: var(--blue); }
 h2 { font-weight: 600; font-size: 16px; color: var(--ink); margin: 0 0 10px; letter-spacing: 0; }
 h2 .dim { font-weight: 400; font-size: 14.5px; color: var(--muted); }

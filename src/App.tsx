@@ -68,11 +68,11 @@ const cohortLine = (c: Cohort) => c.n > 1
 function Home({ idx }: { idx: IndexEntry[] }) {
   useEffect(() => { document.title = "runcard"; }, []);
   const cs = cohorts(idx);
+  const nets = forkNetworks(idx);
   return (
     <section>
-      <h1>Simulation runs and their evidence</h1>
-      <p className="lede">Each row is a molecular-dynamics run rendered from its artifacts: stages, parameters, seeds, results, environment. Runs of the same prepared system and protocol are grouped; their run-to-run spread is the uncertainty that matters. Open one and ask your agent about it — the page registers WebMCP tools (<code>navigator.modelContext</code>) to validate stages, compare runs, explain uncertainty, plan sampling, and prepare a controlled follow-up that waits for your approval.</p>
-      {forkNetworks(idx).map(net => <ForkNetworkCard key={net.parent.id} net={net} />)}
+      <h1>Runs{idx.length ? <span className="dim count"> {idx.length}</span> : null}</h1>
+      <p className="lede">Molecular-dynamics runs, each read from its own files and grouped by prepared system. Open one; your agent can read the same page through its tools.</p>
       {cs.map(c => (
         <section key={c.key} className="cohort">
           <h2>{c.title} <span className="dim">— {cohortLine(c)}</span></h2>
@@ -82,6 +82,8 @@ function Home({ idx }: { idx: IndexEntry[] }) {
           </table></div>
         </section>
       ))}
+      {/* The fork network sits under the tables: the tables already mark forks per row; this is the check across them. */}
+      {nets.map(net => <ForkNetworkCard key={net.parent.id} net={net} compact />)}
     </section>
   );
 }
@@ -199,7 +201,7 @@ function ForkNetworkCard({ net, compact }: { net: ReturnType<typeof forkNetwork>
     <span className="node-id mono">{n.id}</span><span className="dim">{n.engine} · {n.production_ps} ps{role === "fork" && n.kind ? ` · ${n.kind}${n.seed === "fresh" ? ", fresh seeds" : ""}${n.complete === false ? ", partial" : ""}` : ""}</span><span className="node-dg mono">{fmt(n.delta_g)}</span>
   </a>;
   return <section className="card network" aria-labelledby={`network-${net.parent.id}`}>
-    <h2 id={`network-${net.parent.id}`}>Fork network <span className={`badge ${cls}`}>{label}</span>{compact ? null : <span className="dim">{net.n} runs re-executed from {net.parent.id}'s rerun bundle, each a card that points back at its parent</span>}</h2>
+    <h2 id={`network-${net.parent.id}`}>Fork network <span className={`badge ${cls}`}>{label}</span><span className="dim">{compact ? `${net.n} reruns of ${net.parent.id}` : `${net.n} runs re-executed from ${net.parent.id}'s rerun bundle, each a card that points back at its parent`}</span></h2>
     <div className="tree">
       <Node n={net.parent} role="parent" />
       <ul className="forks">{net.forks.map(f => <li key={f.id}><Node n={f} role="fork" /></li>)}</ul>
@@ -488,7 +490,7 @@ function Sidebar() {
   return <aside>
     <div className="card">
       <h2>Proposals <span className="dim">agent proposes, you approve{allProposals.length ? ` · ${allProposals.filter(p => p.status === "pending").length} pending of ${allProposals.length}` : ""}</span></h2>
-      {proposals.length === 0 && <p className="dim">None yet. When an agent calls <code>propose_change</code> or <code>fork_experiment</code>, the proposal appears as a comment pinned to the stage it targets; nothing is applied until you approve it there.</p>}
+      {proposals.length === 0 && <p className="dim">None yet. An agent's proposed edits appear as comments pinned to the stage they target; nothing applies until you approve there.</p>}
       {proposals.length === 0 && <button className="ghost" onClick={() => { const run = currentRun || "1l2y-rep4"; set({ console: { tool: "propose_change", input: JSON.stringify({ run_id: run, stage: "product", edits: { dt: "0.001" }, reason: "halve the timestep — a test of the proposal flow" }, null, 1) } }); if (!currentRun) navigate(`/run/${run}`); }}>Try it: draft a proposal, then press Call</button>}
       {/* This run's proposals live on the page as pinned comments; the panel only points at them. Other runs' proposals are listed in full so nothing waits unseen. */}
       {(() => { const here = proposals.filter(p => p.run === currentRun); const pend = here.filter(p => p.status === "pending"); const stages = [...new Set(here.map(p => p.stage))];
