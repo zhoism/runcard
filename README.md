@@ -14,8 +14,9 @@ work that already happened.
 
 ## Try it with an agent
 
-Open the live URL in ChatGPT's built-in browser, or in Chrome with
-`chrome://flags/#enable-webmcp-testing` enabled. The header should read
+Open the live URL in ChatGPT's built-in browser, or in Chrome 149+ with
+`chrome://flags/#enable-webmcp-testing` enabled. (Chrome DevTools → Application →
+WebMCP lists the registered tools and can run any of them by hand.) The header should read
 `WebMCP: registered · 17 tools`. Without the flag it reads
 `no WebMCP here — use the Tool Console ↓`, and the in-page **Tool Console** runs
 the identical tool table by hand — one table drives both, so the console is never

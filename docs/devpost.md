@@ -5,6 +5,25 @@ or a Codex batch record as of live `502cd50`; nothing is aspirational.
 
 ---
 
+## Submission checklist (from webmcp.devpost.com/rules and /resources, read 2026-09-01)
+
+- [ ] **Push the repo.** Judges may score from the description and repo alone; `github.com/zhoism/runcard` must hold the
+      submitted code (it was 29 commits behind local on the evening of 2026-09-01). License must be visible in the About box
+      (MIT is detected already).
+- [ ] **Live URL works in ChatGPT's in-app browser or Chrome 149+ with `chrome://flags/#enable-webmcp-testing`.** Deploy
+      production last, then verify the header reads `WebMCP: registered · 17 tools`, and stop touching the site.
+- [ ] **Description must explicitly answer four things** (rule text): why the use case is a strong fit for WebMCP; how it
+      creates a better user experience; what people and agents can do together that was difficult or impossible before;
+      briefly, how WebMCP was implemented. The sections below carry them under the judging-criteria headings — keep the four
+      phrases visible.
+- [ ] **Video** under 3 minutes, **with audio narration** covering what was built and how WebMCP was used, public on YouTube,
+      no copyrighted music or third-party trademarks; link on the form.
+- [ ] **Testing instructions** for judges in the README and here (they are not required to build anything). Mention the
+      DevTools **Application › WebMCP** panel: it lists the registered tools and lets a judge run one by hand.
+- [ ] **Freeze at the deadline** (Sep 3, 1:00 pm PT): no edits to the submission, repo, or live site until winners are announced.
+- [ ] Project started 2026-08-27 (first commit), inside the submission period; the AMBER validator's rules are a port of the
+      internship pipeline's `check_amber.py` — say so, as the README does.
+
 ## Project name
 
 runcard

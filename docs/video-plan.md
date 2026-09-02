@@ -2,7 +2,9 @@
 
 Built to the Devpost recording rules: working product in the first 10–15 s, no intro/title/setup,
 agent-using-tools as the centerpiece, one strong example per feature, no live typing, no dead air,
-short clips, on-screen text over narration. Team story and inspiration stay in the written
+short clips, on-screen text plus **spoken narration — the rules require audio that covers what you built and how
+you used WebMCP** (checked against webmcp.devpost.com/rules on 2026-09-01; text overlays alone do not satisfy it).
+Upload public on YouTube, no copyrighted music. Team story and inspiration stay in the written
 description (`docs/devpost.md`), not here.
 
 **Runtime target: under 2:00.** Everything is recorded on the LIVE URL (https://runcard.vercel.app),
