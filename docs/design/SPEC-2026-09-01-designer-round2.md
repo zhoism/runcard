@@ -1,7 +1,8 @@
 # Designer round 2 — spec (2026-09-01)
 
 Source: the designer's `runcard-redesign.html` mockup and four screenshots, relayed by the user.
-Frame: **a shareable, agent-readable GitHub for MD runs.** Run = repo, fork = rerun with lineage,
+Frame: **a shareable, agent-readable GitHub for MD runs.** Run = repo, fork = rerun with lineage, *(superseded the same evening:
+repo = prepared system / project, commit = run — see STATUS "The reviewer pass")*
 proposal = pull request, Approve = merge, automode = agent review, compare = diff.
 
 Function priority on a run page: (1) the number and how much to trust it, (2) where the run sits

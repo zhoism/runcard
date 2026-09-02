@@ -11,7 +11,10 @@ A shareable, *validated* record of an MD simulation — a GitHub-style page for 
 computational experiment. The differentiator is not storage; it is that the page
 **understands what was stored**: stage semantics, physics validity, environment,
 seeds, and whether differing stochastic results are expected. The browser is the
-reader-facing layer only — nothing runs or is authored here.
+reader-facing layer only — nothing runs or is authored here. The hierarchy is
+GitHub's: a prepared system is the repository (`#/p/<slug>`, a *project*; home `#/`
+lists them), a run is a commit (`#/run/<id>`), a rerun from a bundle is a fork with
+lineage, a proposal is a pull request only a person can merge.
 
 - `src/lib/amberCheck.ts` — AMBER `.in` validator, a port of `check_amber.py`
   from the internship pipeline (`../project-prime`, finished). Pinned to the

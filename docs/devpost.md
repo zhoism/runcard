@@ -22,10 +22,14 @@ would fix it.
 
 Every computational chemistry paper rests on numbers like "ΔG = −19.2 kcal/mol."
 Today those numbers travel as PDFs and zip files that no reader can question.
-**runcard** is a GitHub-style page for an MD simulation where the record itself
+**runcard** is a GitHub for MD simulations where the record itself
 understands what it stores — stage semantics, force fields, seeds, physics
 validity, and whether a differing result is expected or alarming — and exposes
-that understanding to any agent through WebMCP.
+that understanding to any agent through WebMCP. The hierarchy is GitHub's:
+a prepared system is the repository (a *project*), each run is a commit, a
+rerun from a bundle is a fork with lineage, an agent's proposed edit is a pull
+request that only a person can merge, and validation plus the confidence
+ladder are the checks.
 
 The site's one rule: **a number is a claim.** Every figure on a page traces to a
 file in a run directory. "Verified" means executed and read; anything else says
@@ -33,7 +37,8 @@ file in a run directory. "Verified" means executed and read; anything else says
 
 ### Try it in three minutes (what we'd do in your seat)
 
-Open a run, e.g. `#/run/1l2y-rep4`, then ask your agent:
+Open the project `#/p/1l2y-mol` (13 runs, 4 forks in tension), then its longest run
+`#/run/1l2y-rep4`, then ask your agent:
 
 1. *"Is this ΔG trustworthy? Which uncertainty should I quote?"* —
    `explain_result` answers with the run-to-run spread (SD 0.64 kcal/mol over 13

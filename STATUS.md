@@ -4,9 +4,9 @@ Updated 2026-09-01. Deadline **Sep 3 2026, 1:00 pm PDT** (Devpost, OpenAI WebMCP
 
 ## GitHub-for-MD-runs reframe (2026-09-01)
 
-The intent, decided with the user 2026-09-01: **a shareable, agent-readable GitHub for MD runs.** Run = repo, fork = a run
-re-executed from a rerun bundle with `parent` lineage, proposal = pull request (Approve reads as Merge), automode = agent review,
-compare = diff. UI follows from it: lineage is a headline, agent work is auditable activity, Approve is the most important control.
+The intent, decided with the user 2026-09-01: **a shareable, agent-readable GitHub for MD runs.** Since the evening of 2026-09-01: **repo = prepared system (a project),
+commit = run**, fork = a run re-executed from a rerun bundle with `parent` lineage, proposal = pull request (Approve reads as Merge),
+CI = validation + confidence ladder, release = rerun bundle / evidence brief, automode = agent review, compare = diff. UI follows from it: lineage is a headline, agent work is auditable activity, Approve is the most important control.
 Built: `forkNetwork`/`forkNetworks` in `runs.ts` (index.json now carries `parent`/`fork`), the `fork_network` tool, a **Fork network**
 card on Home (parent node, rail, forks with engine/length/ΔG, computed verdict) and on the parent's run page below the ΔG card,
 `fork of …` / `N forks · status` badges in the titlebar, and `↳ fork of` / `· N forks` markers in the run table. The one real
@@ -40,6 +40,26 @@ network compact under the tables. Run pages are named `owner / id` in the breadc
 lineage line, and fork-network nodes carry their owner. `#/u/<handle>`; an unknown handle says so. Sidebar prefill now reads the run
 id only on `/run/` routes (it had taken `pace-ice` for a run id). Before this, the same evening: the home page was cut to lead with
 the tables (one-line lede, fork network compact and below) — superseded by the profile.
+
+**The reviewer pass (2026-09-01, late evening; commits a666296 → this).** A new-user review found the science credible but said
+the site "makes me absorb its entire internal data model before it tells me the simplest story" and asked to stop treating the run
+as the container for everything. Decided with the user: system = repo, run = commit; home = projects; all five priorities, minimal.
+Built: (A) `Cohort.slug`, `cohortBySlug`, `projectSummary` (runs per owner, external forks, engines, the cohort's fork network),
+`protocolPairs` — pure, tested. (B) **Home `#/` = the project list** (`ProjectCard`: what the system is, "13 comparable runs · 9 by
+Kevin Zhou · 4 by PACE-ICE (external forks)", ΔG ± SD, fork-status badge, Open project / Longest run) and a **project page
+`#/p/<slug>`**: shared system + protocol (re-read from the index key), ensemble result (`ensemble` strata + `signClaim`), the
+**fork callout** (`ForkCallout`: one finding + "Plan a replicate"; the arithmetic stays in the network card), the longest run's
+ladder *labelled as that run's*, the runs table with owner and engine, the full network, `ForkCards`, a comparability paragraph.
+Profiles keep their project cards with the owner's rows folded. (C) **Run page reordered**: crumbs `owner / project / id` →
+summary strip (engine · length · seed · "3 of 4 assessed rungs verified" · **Investigate this run**) → fork callout on parents →
+ΔG + contacts → *can I trust it?* (evidence overview, ladder) → *what happened* (structure, **3 featured plots** of 12 with "All
+analyses") → *build on it* (fork cards, network, current investigation) → *how it was produced* (stages with the proposal pins,
+system, provenance). The MMPBSA warning is an interpreted status (`details.warnstatus`: residual % of ΔG, "retained caveat, not
+outcome-determining" when < 0.1 %, verbatim text behind the summary). (D) **Sidebar agent-first on run pages**: "Ask runcard about
+this run" with one Investigate button; the 17-tool console sits under **Developer tools**; the visitor's choice sticks; compare
+pages scope the run id to their first run (the `{}` Auto input the reviewer hit). Not done, on purpose: a protocol nav level (one
+protocol per system), an ensemble-level confidence score (the ladder is per run), "Ask an agent" on cards (Investigate is a
+deterministic trace, labelled as such).
 
 **Experiment cards, not a run table (same evening).** The user: "this is just a load of runs… if they are really just run files
 and there's 9 of them, put them under a dropdown." The runs are the commits, not the repo. Each prepared system is now one card:

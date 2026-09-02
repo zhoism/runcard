@@ -599,7 +599,7 @@ function CurrentInvestigation({ runId, investigation, partnerId }: { runId: stri
   </section>;
 }
 
-function Source({ source }: { source: string }) { return <span className="source-label">via {source === "webmcp" ? "agent / WebMCP" : source === "console" ? "manual console" : "page action"}</span>; }
+function Source({ source }: { source: string }) { return <span className="source-label">via {source === "webmcp" ? "agent / WebMCP" : source === "console" ? "the console" : "page action"}</span>; }
 
 /** Per-frame ΔG with running mean. Inline SVG; every point is a number from the manifest. */
 function Sparkline({ x, lengthPs, window }: { x: number[]; lengthPs: number | null; window?: { start: number; end: number } }) {

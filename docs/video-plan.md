@@ -36,7 +36,7 @@ already loaded, already logged in to the agent. If it loads, it gets cut.
 - **Screen:** `#/run/1l2y-rep4`, split screen. Prompt 1 was pasted just before recording started —
   the recording opens with tool calls already landing in the rail's Tool activity log
   (`explain_result`, `get_run_manifest`…), each tagged "via agent / WebMCP".
-- **Text overlay:** "This MD run page registers 16 WebMCP tools. A real agent is using them."
+- **Text overlay:** "This MD run page registers 17 WebMCP tools. A real agent is using them."
 - **Cut:** start mid-action. No logo, no greeting, no page load.
 
 ### B — the answer that proves the page thinks (0:12–0:32)
@@ -46,7 +46,7 @@ already loaded, already logged in to the agent. If it loads, it gets cut.
 - **Cut:** jump-cut the agent's thinking time to zero; speed up scrolling 1.5×.
 
 ### C — automode: it decides, it cannot act (0:32–0:50)
-- **Screen:** fresh reload. Paste prompt 2 (or click Auto → Investigate in the Tool Console). The
+- **Screen:** fresh reload. Paste prompt 2 (or press **Investigate this run** under the title; the sidebar opens on it). The
   numbered trace renders: which rung is holding the run back, what it checked, one recommendation.
   End the clip on the Proposals panel still saying "None yet."
 - **Text overlay:** "It picks what to investigate from the evidence — and creates nothing."
