@@ -649,18 +649,24 @@ function Sidebar() {
   const allProposals = useStore(s => s.proposals); const calls = useStore(s => s.calls);
   const route = useStore(s => s.route); const webmcp = useStore(s => s.webmcp); const pre = useStore(s => s.console);
   const [tool, setTool] = useState(TOOLS[0].name); const [input, setInput] = useState("{}"); const [out, setOut] = useState(""); const [touched, setTouched] = useState(false);
-  const [mode, setMode] = useState<"auto" | "manual">("manual");
+  // Agent-first on run pages: the console opens on Investigate; the 17-tool console is one click away under Developer tools.
+  // Elsewhere there is no run to investigate, so it opens on the tools. The visitor's own choice sticks for the visit.
+  const [mode, setModeRaw] = useState<"auto" | "manual">("manual"); const [modeTouched, setModeTouched] = useState(false);
+  const setMode = (m: "auto" | "manual") => { setModeTouched(true); setModeRaw(m); };
   // A page button can hand the console a drafted call (the human edits and presses Call — the console is the only path).
   const callRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setOut(""); setTouched(true); set({ console: null }); setTimeout(() => callRef.current?.focus(), 50); } }, [pre]);
+  useEffect(() => { if (pre) { setTool(pre.tool); setInput(pre.input); setOut(""); setTouched(true); setModeRaw("manual"); setModeTouched(true); set({ console: null }); setTimeout(() => callRef.current?.focus(), 50); } }, [pre]);
   // Prefill run_id with the run on screen, so "pick explain_result, press Call" works on a run page.
-  const currentRun = route.startsWith("/run/") ? route.split("/")[2] || "" : "";
+  // The run on screen: a run page's run, or the first run of a compare page (so Investigate stays scoped there too).
+  const currentRun = route.startsWith("/run/") || route.startsWith("/compare/") ? route.split("/")[2] || "" : "";
+  const onRunPage = route.startsWith("/run/");
+  useEffect(() => { if (!modeTouched) setModeRaw(onRunPage ? "auto" : "manual"); }, [onRunPage, modeTouched]);
   // The approval queue is global on purpose: list_proposals is unfiltered, so scoping this list to the
   // route would let a pending proposal sit unseen while the panel said "None yet". Each card names its run.
   const proposals = [...allProposals].sort((a, b) => Number(b.run === currentRun) - Number(a.run === currentRun));
   const prefill = (name: string) => { const props: any = (TOOLS.find(x => x.name === name)!.inputSchema as any).properties ?? {}; return JSON.stringify(currentRun && props.run_id ? { run_id: currentRun } : currentRun && props.run_a ? { run_a: currentRun, run_b: "" } : {}); };
   // On a run page the most useful first call is explain_result for that run — until the human picks a tool themselves.
-  useEffect(() => { if (currentRun && !touched) { setTool("explain_result"); setInput(JSON.stringify({ run_id: currentRun })); setOut(""); } }, [currentRun, touched]);
+  useEffect(() => { if (currentRun && !touched) { setTool(mode === "auto" ? "investigate_run" : "explain_result"); setInput(JSON.stringify({ run_id: currentRun })); setOut(""); } }, [currentRun, touched, mode]);
   const t = TOOLS.find(x => x.name === tool)!;
   const outIsError = out.startsWith("SyntaxError") || out.startsWith("{\"error\"");
   return <aside>
@@ -673,26 +679,33 @@ function Sidebar() {
         return here.length ? <p className="pinned-summary">{pend.length ? <b>{pend.length} awaiting your approval</b> : <span>{here.length} reviewed</span>} on this run — pinned at {stages.map((st, i) => <span key={st}>{i > 0 ? ", " : ""}<button className="linklike" onClick={() => set({ openStage: st })}>{st}</button></span>)}.</p> : null; })()}
       {proposals.filter(p => p.run !== currentRun).map(p => <ProposalThread key={p.id} p={p} compact />)}
     </div>
-    <div className="card" id="tool-console">
-      <h2>Tool console <span className="dim">the same tools an agent sees · ✎ = changes page state</span></h2>
-      {webmcp !== "registered" && <p className="dim small">No agent is connected to this page. In Chrome, enable <code>chrome://flags/#enable-webmcp-testing</code> and reload to let an agent call these tools itself; or call them by hand here.</p>}
-      {/* Auto and manual call the same table: auto is investigate_run, which picks the tools; manual is you picking.
-          Both go through callTool, so the activity log below records them identically. */}
+    <div className="card" id="tool-console" data-mode={mode} data-run={currentRun}>
+      {mode === "auto"
+        ? <h2>Ask runcard about this run <span className="dim">{currentRun ? `investigate_run on ${currentRun}` : "pick a run first"} · the same tool an agent would call</span></h2>
+        : <h2>Developer tools <span className="dim">the 17 tools an agent sees, called by hand · ✎ = changes page state</span></h2>}
+      {webmcp !== "registered" && <p className="dim small">No agent is connected to this page. In Chrome, enable <code>chrome://flags/#enable-webmcp-testing</code> and reload to let an agent call these tools itself{mode === "auto" ? "; the button below runs the same investigation from the page." : "; or call them by hand here."}</p>}
+      {/* Investigate and the developer console call the same table: Investigate is investigate_run, which picks the tools;
+          the console is you picking. Both go through callTool, so the activity log below records them identically. */}
       <div className="mode" role="group" aria-label="console mode">
         <button className={mode === "auto" ? "" : "ghost"} aria-pressed={mode === "auto"}
-          onClick={() => { setMode("auto"); setTool("investigate_run"); setInput(prefill("investigate_run")); }}>Auto</button>
+          onClick={() => { setMode("auto"); setTool("investigate_run"); setInput(prefill("investigate_run")); setOut(""); }}>Investigate</button>
         <button className={mode === "manual" ? "" : "ghost"} aria-pressed={mode === "manual"}
-          onClick={() => setMode("manual")}>Manual</button>
-        <span className="dim small">{mode === "auto"
-          ? "investigate_run reads the ladder, chases whichever rung is holding this run back, and recommends one action. It creates nothing."
-          : "pick any of the 17 tools yourself."}</span>
+          onClick={() => { setMode("manual"); setOut(""); }}>Developer tools</button>
       </div>
-      {mode === "manual" && <select value={tool} aria-label="tool" onChange={e => { setTouched(true); setTool(e.target.value); setInput(prefill(e.target.value)); }}>{TOOLS.map(t => <option key={t.name} value={t.name}>{t.name}{t.readOnly ? "" : " ✎"}</option>)}</select>}
-      {(() => { const q = t.description.indexOf("? "); const head = q > 0 ? t.description.slice(0, q + 1) : t.description; const rest = q > 0 ? t.description.slice(q + 2) : ""; return <div className="dim small">{head}{rest && <details className="small"><summary className="dim">what it returns</summary><p className="dim">{rest}</p></details>}</div>; })()}
-      <div className="dim small mono" id="tool-schema">{JSON.stringify((t.inputSchema as any).properties && Object.fromEntries(Object.entries((t.inputSchema as any).properties).map(([k, v]: any) => [k, v.enum ? v.enum.join("|") : v.type])))}</div>
-      <textarea value={input} onChange={e => { setTouched(true); setInput(e.target.value); }} rows={3} spellCheck={false} aria-label="tool input (JSON)" aria-describedby="tool-schema" aria-invalid={outIsError || undefined} />
-      <button ref={callRef} onClick={async () => { try { setOut(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setOut(String(e)); } }}>{mode === "auto" ? "Investigate" : "Call"}</button>
-      <div role="status" aria-live="polite">{out && <pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre>}</div>
+      {mode === "auto" ? <>
+        <p className="dim small">Reads the confidence ladder, chases whichever rung is holding this run back with the read-only tools, and recommends one action. It creates nothing: no proposal, no bundle, no changed input.</p>
+        <button ref={callRef} disabled={!currentRun} onClick={async () => { try { setOut(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setOut(String(e)); } }}>Investigate {currentRun || "this run"}</button>
+        <div role="status" aria-live="polite">{out && (outIsError
+          ? <pre className="small out">{out}</pre>
+          : <p className="dim small">Trace rendered under <a href="#investigation-title" onClick={e => { e.preventDefault(); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Current investigation ↓</a>.<details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre></details></p>)}</div>
+      </> : <>
+        <select value={tool} aria-label="tool" onChange={e => { setTouched(true); setTool(e.target.value); setInput(prefill(e.target.value)); }}>{TOOLS.map(t => <option key={t.name} value={t.name}>{t.name}{t.readOnly ? "" : " ✎"}</option>)}</select>
+        {(() => { const q = t.description.indexOf("? "); const head = q > 0 ? t.description.slice(0, q + 1) : t.description; const rest = q > 0 ? t.description.slice(q + 2) : ""; return <div className="dim small">{head}{rest && <details className="small"><summary className="dim">what it returns</summary><p className="dim">{rest}</p></details>}</div>; })()}
+        <div className="dim small mono" id="tool-schema">{JSON.stringify((t.inputSchema as any).properties && Object.fromEntries(Object.entries((t.inputSchema as any).properties).map(([k, v]: any) => [k, v.enum ? v.enum.join("|") : v.type])))}</div>
+        <textarea value={input} onChange={e => { setTouched(true); setInput(e.target.value); }} rows={3} spellCheck={false} aria-label="tool input (JSON)" aria-describedby="tool-schema" aria-invalid={outIsError || undefined} />
+        <button ref={callRef} onClick={async () => { try { setOut(await callTool(tool, JSON.parse(input), "console")); } catch (e: any) { setOut(String(e)); } }}>Call</button>
+        <div role="status" aria-live="polite">{out && <pre className="small out">{(() => { try { return JSON.stringify(JSON.parse(out), null, 1); } catch { return out; } })()}</pre>}</div>
+      </>}
     </div>
     {/* What the agent just did, announced to screen readers; the visible log is below. */}
     <div role="status" aria-live="polite" style={srOnly}>{calls[0] ? `${calls[0].tool}: ${calls[0].summary}` : ""}</div>
