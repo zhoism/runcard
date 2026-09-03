@@ -541,12 +541,13 @@ function ForkMenu({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> | 
 /** The three ways to fork a run, each with its one verb, what it does, and the prompt to hand an agent. */
 function forkKinds(m: Manifest, ens: ReturnType<typeof ensemble> | null) {
   const card = `${window.location.origin}${window.location.pathname}#/run/${m.id}`;
+  const seeInvestigation = () => { const el = document.getElementById("investigation-title"); el?.scrollIntoView({ behavior: "smooth", block: "start" }); };
   return [
     { id: "reproduce", title: "Reproduce", desc: "Rerun exactly as-is: pinned seeds, same build. Confirms the pipeline replays; it cannot show the result is stable.", action: "Build bundle", approval: false,
-      run: () => callTool("generate_rerun_bundle", { run_id: m.id, seed: "pinned", target: "local" }, "page"),
+      run: () => { callTool("generate_rerun_bundle", { run_id: m.id, seed: "pinned", target: "local" }, "page"); seeInvestigation(); },
       prompt: `Build the pinned rerun bundle for ${card} and tell me what it contains and what running it would establish.` },
     { id: "replicate", title: "Replicate", desc: ens && ens.all.n > 1 ? `Same protocol, fresh seeds. An executed rerun joins the ${ens.all.n}-run spread above.` : "Same protocol, fresh seeds. An executed rerun starts the run-to-run spread this card lacks.", action: "Plan replicate", approval: false,
-      run: () => callTool("fork_experiment", { run_id: m.id, kind: "replicate" }, "page"),
+      run: () => { callTool("fork_experiment", { run_id: m.id, kind: "replicate" }, "page"); seeInvestigation(); },
       prompt: `Plan a replicate of ${card}: how many more independent runs are needed and at what length? Then prepare the replicate fork.` },
     { id: "extend", title: "Extend", desc: "Change one variable, hold the rest fixed — e.g. temp0 → 310 K. The controlled diff becomes a proposal pinned to its stages.", action: "Prepare extension", approval: true,
       run: () => { set({ console: { tool: "fork_experiment", input: JSON.stringify({ run_id: m.id, kind: "extend", treatment: { key: "temp0", value: "310.0" }, question: "Does binding weaken at 310 K?" }, null, 1) } }); document.getElementById("tool-console")?.scrollIntoView({ behavior: "smooth", block: "start" }); },
