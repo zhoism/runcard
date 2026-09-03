@@ -46,7 +46,7 @@ const n2 = (v: number | null | undefined) => v == null ? "—" : v.toFixed(2);
 
 /** The rung actually holding this run back: worst status first, and among equals the lowest rung, because
  *  the ladder is climbed in order — a gap low down is not excused by something verified above it. */
-function bottleneckOf(rungs: Rung[]): Rung | null {
+export function bottleneckOf(rungs: Rung[]): Rung | null {
   const candidates = rungs.filter(r => r.status !== "verified" && MOVABLE[r.rung] !== "not assessable here");
   if (!candidates.length) return null;
   return candidates.reduce((worst, r) => {
@@ -54,6 +54,18 @@ function bottleneckOf(rungs: Rung[]): Rung | null {
     if (a !== b) return a < b ? r : worst;
     return rungs.indexOf(r) < rungs.indexOf(worst) ? r : worst;   // ladder order breaks the tie
   });
+}
+
+export type NextStepAction = "reproduce" | "replicate" | "extend" | "plan_sampling" | null;
+/** The one next step a run page states, from the same rule automode uses: the bottleneck rung and the action its
+    `to_climb` names. One rule, so the callout under the result and the investigation trace never disagree. Null when
+    the ladder names nothing to do. */
+export function nextStep(ladder: { rungs: Rung[] }): { rung: string; status: string; to_climb: string; action: NextStepAction } | null {
+  const bn = bottleneckOf(ladder.rungs);
+  if (!bn || !bn.to_climb) return null;
+  const t = bn.to_climb;
+  const action: NextStepAction = /kind='replicate'/.test(t) ? "replicate" : /kind='extend'/.test(t) ? "extend" : /pinned bundle|kind='reproduce'/.test(t) ? "reproduce" : /plan_sampling/.test(t) ? "plan_sampling" : null;
+  return { rung: bn.rung, status: bn.status, to_climb: t, action };
 }
 
 export function investigateRun(m: Manifest, idx: IndexEntry[]): Investigation {
@@ -100,7 +112,7 @@ export function investigateRun(m: Manifest, idx: IndexEntry[]): Investigation {
     const sized = en.all.n >= 2 && p.run_to_run?.additional_runs != null;
     steps.push({ tool: "plan_sampling", why: "turn the gap into a number of runs rather than a vague 'more sampling'",
       found: !sized ? `no run-to-run estimate exists yet (${en.all.n} run${en.all.n === 1 ? "" : "s"}); ${toFloor} more comparable independent run${toFloor === 1 ? "" : "s"} are needed before any spread can be quoted, and plan_sampling can size the ensemble only after that`
-        : p.run_to_run.target_met ? `the ±${p.target_uncertainty_kcal} target is already met on the ensemble mean; what is missing is runs at this run's own production length`
+        : p.run_to_run.target_met ? `the ±${p.target_uncertainty_kcal} target is already met on the ensemble mean; what is missing is runs at this run's own length on its own engine`
         : `${p.run_to_run.additional_runs} more independent run${p.run_to_run.additional_runs === 1 ? "" : "s"} to reach ±${p.target_uncertainty_kcal} on the ensemble mean` });
     next = { rationale: bn.to_climb ?? "more independent runs at this run's production length", tool: "fork_experiment",
       input: { run_id: m.id, kind: "replicate" }, needs_a_human: true };
@@ -126,7 +138,8 @@ export function investigateRun(m: Manifest, idx: IndexEntry[]): Investigation {
     // Calling bundleGaps(m) bare would count every archived input as missing and contradict the bundle tool's own
     // self_contained:true on the same page. (RC-006B, batch 08.)
     const gaps = bundleGaps(m, Object.fromEntries((m.system.build_inputs?.present ?? []).map(n => [n, "archived"])));
-    steps.push({ tool: "generate_rerun_bundle", why: "the rung is 'expected' for every run on this site — nothing executes here — so the useful question is whether a bundle would actually replay",
+    // The step is named for what ran: the gap check, in memory. generate_rerun_bundle is the tool that would write a bundle, and it did not run.
+    steps.push({ tool: "bundleGaps (read-only check)", why: "the rung is 'expected' for every run on this site — nothing executes here — so the useful question is whether a bundle would actually replay; checked with the same gap check generate_rerun_bundle uses, without writing a bundle",
       found: gaps.length ? `the bundle is a recipe: ${gaps.join(", ")} must come from the original build directory` : "seeds, environment pins, leap.in and its build inputs are all archived, so a pinned bundle is self-contained" });
     next = { rationale: "run the pinned bundle off-site and extract the result as a card. That is the only rung left that data can move, and it is the one thing this page structurally cannot do for you.",
       tool: "fork_experiment", input: { run_id: m.id, kind: "reproduce" }, needs_a_human: true };

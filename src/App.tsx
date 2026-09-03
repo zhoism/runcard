@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { Manifest, IndexEntry, Owners } from "./lib/types";
-import { loadIndex, loadOwners, ownerStats, ownerHandles, loadRun, validateStage, ensemble, cohorts, type Cohort, projectSummary, protocolPairs, type ForkNetwork, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem, objectiveOf, nextStep } from "./lib/runs";
+import { loadIndex, loadOwners, ownerStats, ownerHandles, loadRun, validateStage, ensemble, cohorts, type Cohort, projectSummary, protocolPairs, type ForkNetwork, diffRuns, zipBundle, uncertaintyFromFrames, verdictOf, confidenceLadderFull, explainResult, internalResidual, forkNetwork, forkNetworks, type Proposal, sameSystem, objectiveOf } from "./lib/runs";
+import { nextStep } from "./lib/investigate";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set, UNDO_WINDOW_MS } from "./store";
@@ -93,10 +94,10 @@ function RunLineage({ idx, r }: { idx: IndexEntry[]; r: IndexEntry }) {
 }
 
 /** "13 comparable runs · 9 by Kevin Zhou · 4 by PACE-ICE (external forks)": who ran what in a project, external forks named per owner. */
-function CountsLine({ c, p, own }: { c: Cohort; p: ReturnType<typeof projectSummary>; own: Owners | null }) {
+function CountsLine({ c, p, own, engines }: { c: Cohort; p: ReturnType<typeof projectSummary>; own: Owners | null; /** name the engine mix here (the project page has its own row for it) */ engines?: boolean }) {
   const byId = new Map(c.runs.map(r => [r.id, r]));
   const extOf = (h: string) => c.runs.filter(r => r.owner === h && r.parent && byId.has(r.parent) && byId.get(r.parent)!.owner !== h).length;
-  return <p className="cohort-counts"><b>{c.n}</b> comparable {plural(c.n, "run")}{p.by_owner.map(o => { const e = extOf(o.handle); return <span key={o.handle}> · <b>{o.n}</b> by <a href={`#/u/${o.handle}`}>{own?.profiles[o.handle]?.name ?? o.handle}</a>{e ? <span className="dim"> ({e === o.n ? "external forks" : `${e} external ${plural(e, "fork")}`})</span> : null}</span>; })}</p>;
+  return <p className="cohort-counts"><b>{c.n}</b> {plural(c.n, "run")} of one system and protocol{p.by_owner.map(o => { const e = extOf(o.handle); return <span key={o.handle}> · <b>{o.n}</b> by <a href={`#/u/${o.handle}`}>{own?.profiles[o.handle]?.name ?? o.handle}</a>{e ? <span className="dim"> ({e === o.n ? "external forks" : `${e} external ${plural(e, "fork")}`})</span> : null}</span>; })}{engines && p.engines.length > 1 && <span className="dim"> · {p.engines.map(e => `${e.engine} × ${e.n}`).join(", ")}</span>}</p>;
 }
 
 /** A project is the repository: one prepared system, its runs as commits. The card says what it is, who ran it, the number
@@ -116,7 +117,7 @@ function ProjectCard({ c, idx, own, rows, handle }: { c: Cohort; idx: IndexEntry
     <Spread runs={c.runs} mean={c.mean} sd={c.sd} own={own} ringId={ringId} ringWhy={p.network ? "the parent of the forks" : "the longest run"} />
     <div className="meta-row">
       <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{c.sd != null ? "" : " · one run, so no run-to-run spread yet"}</span></p>
-      <CountsLine c={c} p={p} own={own} />
+      <CountsLine c={c} p={p} own={own} engines />
     </div>
     <div className="cohort-actions">
       <a className="btn" href={`#/p/${c.slug}`}>Open project →</a>
@@ -144,12 +145,12 @@ function Home({ idx, own }: { idx: IndexEntry[]; own: Owners | null }) {
     <div className="hero">
       <div className="hero-copy">
         <h1>MD runs you can <em>inspect, verify, fork</em> and continue.</h1>
-        <p className="lede">Runcard turns simulation outputs into structured records with provenance, validation and lineage, so collaborators and AI agents can understand what happened and build on it. Every number traces to a file in the run directory, an agent reads the same page through WebMCP, and a person approves every change to an input.</p>
+        <p className="lede">Runcard turns molecular dynamics (MD) simulation outputs into structured records with provenance, validation and lineage, so collaborators and AI agents can understand what happened and build on it. Every number traces to a file in the run directory, an agent reads the same page through WebMCP, and a person approves every change to an input.</p>
         <div className="cta"><a className="btn" href={`#/run/${DEMO_RUN}`}>Explore the demo run →</a><a className="btn ghost" href="#agent-actions" onClick={toActions}>See what an agent can do</a></div>
       </div>
       {demo && <StartHere r={demo} idx={idx} own={own} />}
     </div>
-    {!idx.length && <p className="dim" role="status">loading runs…</p>}
+    {!idx.length && <p className="dim loading" role="status">loading runs…</p>}
     <AgentActionsCard runId={DEMO_RUN} />
     {cs.length > 0 && <h2 className="section-label">projects <span className="dim">one prepared system each; its runs are the commits</span></h2>}
     {cs.map(c => <ProjectCard key={c.key} c={c} idx={idx} own={own} />)}
@@ -192,19 +193,20 @@ function AgentActionsCard({ runId }: { runId: string }) {
   </div>;
 }
 
-/** One next step, from the confidence ladder: the first rung this site can climb from here, its own `to_climb` (which
-    names the tool — that is the trace), and one button that starts it. */
-function NextStepCallout({ step, m, ens }: { step: NonNullable<ReturnType<typeof nextStep>>; m: Manifest; ens: ReturnType<typeof ensemble> | null }) {
-  // A verified rung with a to_climb is the ladder's "what next" beyond the evidence: the record is as established as this site makes it, and what remains is a scientific question.
-  const body = step.status === "verified" ? `The record is as established as this site can make it (repeatable stays expected: nothing is executed here). What remains is a scientific question, not more evidence for this number: ${step.to_climb}.` : `${step.rung} is ${step.status}: ${step.to_climb}.`;
+/** The next step, from the same rule automode uses (the bottleneck rung): one line to strengthen the evidence for this
+    number with the fork action that does it, and — once the robust rung's own "what next" is a question rather than
+    more evidence — a second line to explore the science. Two labels, one rule, so this and the investigation trace agree. */
+function NextStepCallout({ step, ladder, m, ens }: { step: NonNullable<ReturnType<typeof nextStep>>; ladder: ReturnType<typeof confidenceLadderFull>; m: Manifest; ens: ReturnType<typeof ensemble> | null }) {
   const kinds = forkKinds(m, ens);
-  const verb = step.action === "replicate" ? "run independent replicates" : step.action === "extend" ? "vary one modelling choice in a controlled extension" : step.action === "plan_sampling" ? "sample longer" : step.action === "reproduce" ? "replay it exactly" : "climb the next rung";
+  const verb = step.action === "replicate" ? "run an independent replicate" : step.action === "extend" ? "vary one modelling choice in a controlled extension" : step.action === "plan_sampling" ? "sample longer" : step.action === "reproduce" ? "replay it exactly, off-site" : "climb the next rung";
   const k = step.action === "replicate" || step.action === "extend" || step.action === "reproduce" ? kinds.find(x => x.id === step.action) : null;
+  const science = step.action !== "extend" ? ladder.rungs.find(r => r.rung === "robust to analysis-window choices" && r.status === "verified")?.to_climb ?? null : null;
   const planIt = () => set({ console: { tool: "plan_sampling", input: JSON.stringify({ run_id: m.id }, null, 1), run: true } });
   const jump = (e: { preventDefault(): void }) => { e.preventDefault(); const el = document.getElementById("fork-card"); el?.scrollIntoView({ behavior: "smooth", block: "start" }); el?.classList.add("flash"); setTimeout(() => el?.classList.remove("flash"), 1200); };
   return <div className="callout next" role="note">
-    <p className="callout-head">Next step: {verb}</p>
-    <p className="callout-body">{body}</p>
+    <p className="callout-head">To strengthen the evidence: {verb}</p>
+    <p className="callout-body">{step.rung} is {step.status}: {step.to_climb}.</p>
+    {science && <p className="callout-body"><b>To explore the science:</b> {science}. A different question, not more evidence for this number; the extension changes one input and waits for your approval.</p>}
     <div className="callout-actions">
       {k ? <button type="button" onClick={k.run}>{k.action}{k.approval ? " · needs your approval" : ""}</button> : step.action === "plan_sampling" ? <button type="button" onClick={planIt}>Plan the sampling</button> : null}
       <a href="#fork-card" onClick={jump}>Fork and continue ↓</a>
@@ -267,7 +269,7 @@ function CompareStart({ idx }: { idx: IndexEntry[] }) {
     <p className="kicker">Run comparison</p>
     <h1>Compare two <em>runs</em></h1>
     <p className="lede">Choose two run records. runcard first checks whether they share a prepared system, then separates material protocol changes from sampling and output differences.</p>
-    {!idx.length ? <p className="dim" role="status">loading runs…</p> : <div className="card compare-start" role="group" aria-label="choose two runs to compare">
+    {!idx.length ? <p className="dim loading" role="status">loading runs…</p> : <div className="card compare-start" role="group" aria-label="choose two runs to compare">
       <div className="compare-fields">
         <label><span>First run</span><select aria-label="first run" value={a} onChange={e => pickA(e.target.value)}>{options("")}</select></label>
         <span className="compare-with" aria-hidden="true">with</span>
@@ -287,7 +289,7 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
   const [m, setM] = useState<Manifest | null>(null); const [err, setErr] = useState<string | null>(null);
   useEffect(() => { if (!startId) return; let live = true; loadRun(startId).then(x => { if (live) setM(x); }, e => { if (live) setErr(String(e?.message ?? e)); }); return () => { live = false; }; }, [startId]);
   useEffect(() => { document.title = p ? `${p.cohort.title} · runcard` : "runcard"; }, [p?.cohort.title]);
-  if (!idx.length) return <p className="dim" role="status">loading…</p>;
+  if (!idx.length) return <p className="dim loading" role="status">loading…</p>;
   if (!p) return <section><h1>No project <span className="dim mono">{slug}</span></h1><p className="dim">Nothing by that name here. <a href="#/">All projects.</a></p></section>;
   const { cohort: c, start } = p; const sys = describeSystem(c.title, start.ligand);
   const ens = ensemble(idx, start.id); const ladder = m ? confidenceLadderFull(m, idx) : null;
@@ -308,7 +310,7 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
         {ens.long.n > 0 && ens.long.n < ens.all.n && <dl className="facts">
           <dt>≥ {ens.long.min_ps} ps only</dt><dd><b>n={ens.long.n}</b>: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</dd>
         </dl>}
-        {c.sd != null && <p className="dim small">The ± is the observed run-to-run spread across {c.n} comparable runs with different seeds and lengths{p.engines.length > 1 ? ` and ${p.engines.length} disclosed engines` : ""}: an empirical spread, not pure seed noise.</p>}
+        {c.sd != null && <p className="dim small">The ± is the observed run-to-run spread across {c.n} runs of one system and protocol with different seeds and lengths{p.engines.length > 1 ? ` and ${p.engines.length} disclosed engines` : ""}: an empirical spread, not pure seed noise.</p>}
         {/* The sign claim only; the spread and its caveat are stated once, above. signClaim's full sentence is what the tool returns. */}
         <p className="dim small">{ens.all.negative === ens.all.n ? `All ${ens.all.n} runs give ΔG < 0; the sign is robust to seed variation.` : ens.all.negative === 0 ? `None of the ${ens.all.n} runs gives ΔG < 0.` : `${ens.all.negative} of ${ens.all.n} runs give ΔG < 0; the sign is not robust across runs.`}</p>
     </div>
@@ -330,7 +332,7 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
         {ladder ? <>
           <p><b>{ladder.verified_of_assessable} assessed rungs verified.</b> <a href={`#/run/${start.id}`}>Open its ladder and evidence →</a></p>
           <ol className="ladder compact">{ladder.rungs.map((r, i) => <li key={r.rung} className={r.status === "not assessed" ? "dim" : ""}><span className="dim mono">{i + 1}.</span> <span className={`badge ${rungCls(r.status)}`}>{r.status}</span> <b>{r.rung}</b> <span className="dim">— {r.short}</span></li>)}</ol>
-        </> : err ? <p className="dim">{err}</p> : <p className="dim" role="status">loading {start.id}…</p>}
+        </> : err ? <p className="dim">{err}</p> : <p className="dim loading" role="status">loading {start.id}…</p>}
       </div>
     </div>
 
@@ -612,7 +614,6 @@ function AgentPrompts({ runId, partnerId }: { runId: string; partnerId?: string 
   ];
   const copy = async (id: string, text: string) => { try { await navigator.clipboard.writeText(text); setCopied(id); } catch { setCopied(`error:${id}`); } };
   return <>
-    <p className="dim small">Ask your agent — each request names this run's card URL.</p>
     <div className="request-examples" aria-label="Example requests for your agent">{prompts.map(p => <div className="request" key={p.id}>
       <h3>{p.label}</h3><pre className="small">{p.text}</pre>
       <button className="ghost" onClick={() => copy(p.id, p.text)} aria-label={`Copy the ${p.label.toLowerCase()} prompt`}>Copy prompt</button>
@@ -654,7 +655,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
   }, [id, attempt]);
   useEffect(() => { document.title = m ? `${m.title} · runcard` : "runcard"; }, [m]);
   if (err) return <LoadError message={err} onRetry={() => setAttempt(a => a + 1)} />;
-  if (!m) return <p className="dim" role="status">loading {id}…</p>;
+  if (!m) return <p className="dim loading" role="status">loading {id}…</p>;
   const ens = idx.length ? ensemble(idx, id) : null;
   const mm = m.results.mmgbsa; const prod = m.stages.find(s => s.role === "production");
   const reports = Object.fromEntries(m.stages.map(s => [s.name, validateStage(m, s.name)]));
@@ -693,6 +694,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
           {m.parent && <> {m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{qualified(idx, m.parent)}</a>{m.fork?.seed === "fresh" ? ": same prepared system and protocol, fresh seeds" : ""}{parentEntry && prod?.engine && parentEntry.engine !== prod.engine ? `, on ${prod.engine} where the parent used ${parentEntry.engine}` : ""}{m.fork?.complete === false ? ", partially applied" : ""}.</>}
           {net && net.n > 0 && <> Parent of <a href={`#network-${m.id}`}>{net.n} independent {plural(net.n, "fork")}</a>{by.length ? ` executed by ${by.map(h => own?.profiles[h]?.name ?? h).join(", ")}` : ""}.</>}
         </p>; })()}
+      <nav className="onpage" aria-label="on this page"><a href="#result">result</a><a href="#trust">can I trust it?</a><a href="#happened">what happened</a><a href="#build">build on it</a><a href="#produced">how it was produced</a></nav>
 
       {/* Run metadata, one line: who, which engine, which seed (the length is in the objective line). The result comes next, then what qualifies it. */}
       <div className="summary-strip">
@@ -700,15 +702,15 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
         <span><b>{prod?.engine ?? m.environment.pmemd}</b></span><span>seed <span className="mono">{prod?.realized_seed ?? "—"}</span></span>
       </div>
 
-      <div className={m.results.plip ? "grid2" : ""}>
+      <div className={m.results.plip ? "grid2" : ""} id="result">
         <div className="card">
           <h2>Binding free energy <span className="dim">MM-GBSA, single trajectory{mm?.params?.entropy === "0" ? ", no entropy term" : ""}</span></h2>
           {mm ? <>
             {/* Headline: this run's ΔG with the uncertainty the page argues for (run-to-run SD), then the rows in order of what matters; the mechanics are one disclosure away. */}
-            <div className="big">{fmt(mm.delta_total_kcal_mol)}{spreadSd != null && <> ± {fmt(spreadSd)}</>} <span className="unit">kcal/mol</span>{u && u.verdict !== "no drift detected" && <> <span className="badge warn" title="halves test within the archived window">{u.verdict}</span></>}</div>
+            <div className="big">{fmt(mm.delta_total_kcal_mol)} <span className="unit">kcal/mol</span>{spreadSd != null && ens && <span className="spread-sd" title="the run-to-run SD across the independent runs of this prepared system">± {fmt(spreadSd)} <span className="dim">run-to-run SD, {ens.all.n} runs</span></span>}{u && u.verdict !== "no drift detected" && <> <span className="badge warn" title="halves test within the archived window">{u.verdict}</span></>}</div>
             {mm.per_frame && <Sparkline x={mm.per_frame.delta_total} lengthPs={prod?.length_ps ?? null} window={re ? { start: re.window.start_frame, end: re.window.end_frame } : undefined} />}
             <p className="dim small">{spreadSd != null
-              ? <>± is the run-to-run SD across the independent runs of this system (the row below): the uncertainty to quote; the within-run SEM is not.</>
+              ? <>The run-to-run SD, not the within-run SEM, is the uncertainty to quote for one run: seed spread, not frame noise, is what this number is uncertain by.</>
               : u ? <>single run of this system: the within-run corrected SEM below does not estimate run-to-run uncertainty — no spread can be quoted until three independent runs exist.</> : null}</p>
             <dl>
               {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
@@ -735,9 +737,9 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
         </div>}
       </div>
 
-      {step && <NextStepCallout step={step} m={m} ens={ens} />}
+      {ladder && step && <NextStepCallout step={step} ladder={ladder} m={m} ens={ens} />}
 
-      <h2 className="section-label">can I trust it?{ladder && <span className="badge pass">{ladder.verified_of_assessable} assessed rungs verified</span>}</h2>
+      <h2 className="section-label" id="trust">can I trust it?{ladder && <span className="badge pass">{ladder.verified_of_assessable} assessed rungs verified</span>}</h2>
       {net && net.n > 0 && <ForkCallout net={net} detailHref={`#network-${m.id}`} />}
       {ladder && <EvidenceOverview ladder={ladder} explanation={explanation} validationVerdict={overall} />}
       {ladder && (() => { const L = ladder; const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
@@ -746,16 +748,16 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
           <details className="small"><summary className="dim">evidence</summary><p className="dim">{r.evidence}{r.to_climb ? <> · <i>to climb: {r.to_climb}</i></> : null}</p></details></li>)}</ol>
       </div>; })()}
 
-      <h2 className="section-label">what happened</h2>
+      <h2 className="section-label" id="happened">what happened</h2>
         {m.structure && <Boundary label="Structure"><div className="card"><h2>Structure <span className="dim">cluster medoid, dry</span></h2><Viewer url={`/runs/${m.id}/${m.structure}`} ligand={m.system.ligand.resname} /></div></Boundary>}
       <AnalysesCard m={m} />
 
-      <h2 className="section-label">build on it</h2>
+      <h2 className="section-label" id="build">build on it</h2>
       <ForkCards m={m} ens={ens} />
       {net && net.n > 0 && <ForkNetworkCard net={net} compact />}
       <CurrentInvestigation runId={id} investigation={investigation} net={net} partnerId={ens?.all.runs.find(r => r.id !== m.id)?.id ?? others[0]?.id} />
 
-      <h2 className="section-label">how it was produced</h2>
+      <h2 className="section-label" id="produced">how it was produced</h2>
       <div className="card">
         <h2>Stages <span className={`badge ${overall.toLowerCase()}`} title={stageLegend}>input checks {overall}</span></h2>
         <p className="dim small">11 rules on each .in file (timestep vs SHAKE, cutoff, thermostat, barostat, restarts, seeds, output cadence): a sanity check of the input files, not evidence of convergence or physical accuracy and not a rung of the confidence ladder — select a stage for its input and findings.</p>
@@ -846,7 +848,7 @@ function CurrentInvestigation({ runId, investigation, net, partnerId }: { runId:
     {bundle && <div className="investigation-item"><h3>Prepared rerun bundle <Source source={investigation!.bundle!.source} /></h3><p><b>{bundle.name}</b> · {bundle.appliedProposalIds.length} approved proposal{bundle.appliedProposalIds.length === 1 ? "" : "s"} captured at generation · {bundle.selfContained ? "self-contained" : `missing ${bundle.missingInputs.join(", ")}`}. Prepared does not mean simulated.</p>{bundle.forks.map(f => <p className={f.complete ? "dim small" : "warnbox"} key={f.id}>Fork {f.id}: {f.complete ? "complete at generation" : `partially approved — ${f.missingStages.join(", ")} not applied`}.</p>)}{bundle.combinesMultipleForks && <p className="warnbox">This bundle combines multiple fork questions.</p>}
       <details className="small"><summary className="dim">{Object.keys(bundle.files).length} files in this bundle</summary><pre className="small">{Object.keys(bundle.files).join("\n")}</pre></details>
       <button onClick={() => downloadBlob(zipBundle(bundle.files) as BlobPart, "application/zip", bundle.name)}>Download bundle</button></div>}
-    <AgentPrompts runId={runId} partnerId={partnerId} />
+    <details className="small prompts"><summary className="dim">Prompts for your agent, each naming this run's card URL</summary><AgentPrompts runId={runId} partnerId={partnerId} /></details>
     <div className="investigation-actions"><button onClick={prepare}>Prepare evidence brief</button>{brief && <><button className="ghost" onClick={copyBrief}>Copy brief</button><button className="ghost" onClick={() => downloadBlob(brief.markdown, "text/markdown;charset=utf-8", brief.filename)}>Download Markdown</button><span className="dim small">snapshot {new Date(brief.generatedAt).toLocaleString()}</span></>}</div>
     {message && <p role="status" className={message.includes("unavailable") ? "fail small" : "dim small"}>{message}</p>}
   </section>;
@@ -962,7 +964,7 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
         : <h2>What is <em>here</em>? <span className="dim">list_runs · the same tool an agent would call</span></h2>}
       {webmcp === "unsupported" && <p className="dim small">No agent is connected. Chrome 149+ with <code>chrome://flags/#enable-webmcp-testing</code> lets one call these tools itself; the button makes the same call from the page.</p>}
       {webmcp === "registered" && <p className="dim small">Your agent sees these tools. Ask it: <q>{askPrompt}</q> <button className="linklike" onClick={() => copyAsk()}>{copied ? "copied" : "copy"}</button></p>}
-      {context === "run" && <p className="dim small">Investigate reads the confidence ladder, chases whichever rung is holding this run back with the read-only tools, and recommends one action; it creates nothing. Draft a proposal prefills propose_change for you to Call, then Approve or Reject on the thread pinned to its stage.</p>}
+      {context === "run" && <p className="dim small">Investigate chases the rung holding this run back and recommends one action; it creates nothing. Each verb below is one tool; ✎ marks one that writes page state, and only the fork prepares a change, which waits for your Approve.</p>}
       {context === "project" && <p className="dim small">Investigates the longest run, {target}: its ladder, the rung holding it back, one next action; the page moves to that run to show the trace.{projectNet ? " Check the forks asks whether the reruns from its bundle agree with it." : ""} Neither creates anything.</p>}
       {context === "site" && <p className="dim small">Choose a project, or ask what is on this site: every run with its owner, project, length and ΔG.</p>}
       {/* Investigate and the developer console call the same table: Investigate is investigate_run, which picks the tools;

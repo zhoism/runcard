@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { describeSystem } from "../src/lib/systemCatalog";
-import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks, ownerStats, ownerHandles, cohortBySlug, projectSummary, protocolPairs, objectiveOf, nextStep } from "../src/lib/runs";
+import { applyEdits, makeProposal, diffRuns, ensemble, explainResult, rerunBundle, bundleGaps, systemKey, systemFingerprint, signClaim, paramClass, LONG_RUN_MIN_PS, uncertaintyFromFrames, internalResidual, loadRun, loadIndex, RunLoadError, recomputeResult, planSampling, MIN_WINDOW_FRAMES, PLAN_LENGTHS_PS, confidenceLadder, confidenceLadderFull, forkExperiment, forkStages, cohorts, forkNetwork, forkNetworks, ownerStats, ownerHandles, cohortBySlug, projectSummary, protocolPairs, objectiveOf } from "../src/lib/runs";
+import { nextStep, investigateRun } from "../src/lib/investigate";
 import { ANALYSIS_CATALOG, ANALYSIS_CATEGORIES, analysisInfo } from "../src/lib/analysisCatalog";
 import { mean, sd, round } from "../src/lib/stats";
 // mmgbsa.dat prints DELTA TOTAL to 4 dp and the per-frame series is archived at the same precision, so a correct
@@ -361,37 +362,35 @@ describe("review batch 2026-08-29, part 2", () => {
 });
 
 describe("confidence ladder", () => {
-  it("rep4: recomputable and replicated verified, repeatable expected, external not assessed; robust computed over 4 windows", () => {
+  it("rep4: recomputable verified; replicated partly established (2 of 3 at 30 ps on its own engine — the 4 SANDER reruns are cross-engine, disclosed and not counted); repeatable expected; external not assessed; robust computed over 4 windows", () => {
     const L = confidenceLadderFull(B, idx); const by = Object.fromEntries(L.rungs.map(r => [r.rung, r]));
     expect(L.rungs.map(r => r.rung)).toEqual(["recomputable", "repeatable", "independently replicated", "robust to analysis-window choices", "externally supported"]);
-    expect(by["recomputable"].status).toBe("verified"); expect(by["recomputable"].evidence).toMatch(/re-derived here/); expect(L.summary).toMatch(/^3 of 4 assessable rungs verified \(recomputable, independently replicated, robust/); expect(L.summary).not.toMatch(/partly established/);
+    expect(by["recomputable"].status).toBe("verified"); expect(by["recomputable"].evidence).toMatch(/re-derived here/); expect(L.summary).toMatch(/^2 of 4 assessable rungs verified \(recomputable, robust/); expect(L.summary).toMatch(/1 partly established \(independently replicated/);
     expect(by["repeatable"].status).toBe("expected"); expect(by["repeatable"].evidence).toMatch(/3\/3 dynamics stages/);
-    expect(by["independently replicated"].status).toBe("verified"); expect(by["independently replicated"].evidence).toMatch(/13 runs of the same prepared system and production protocol with distinct realized seeds/); expect(by["independently replicated"].short).toBe("seed-replicated ✓ (13 same-protocol runs, 2–30 ps) · at this run's length (30 ps): 6 of 3 needed ✓"); expect(by["independently replicated"].to_climb).toBeNull();
-    // the matched-length spread is wider than the pooled one (±0.80 over six 30 ps runs vs ±0.64 pooled); the rung
-    // must keep reporting it rather than letting the pooled number stand in for replication at this length
-    expect(by["independently replicated"].evidence).toMatch(/Replication of this run's number at its own length \(30 ps\): 6 runs \(SD ±0\.80\)/);
-    const reg = confidenceLadderFull(A, idx).rungs[2]; expect(reg.status).toBe("verified"); expect(reg.short).toMatch(/at this run's length \(5 ps\): 3 of 3 needed ✓/);
-    // engine mix is disclosed wherever the runs counted at a length were not all produced by the same program: the
-    // protocol key fixes &cntrl and the GB model, not the integrator, so counting a sander run in with pmemd runs
-    // without saying so would rest the rung on an agreement the card never states.
-    expect(by["independently replicated"].evidence).toMatch(/Engines at this length: Amber 24 SANDER \(2024\) \(4\), Amber 26 PMEMD \(2026\) \(2\) — the protocol key fixes &cntrl and the GB model, not the integrator/);
-    expect(reg.evidence).not.toMatch(/Engines at this length/);  // 5 ps runs are all one engine; nothing to disclose
+    expect(by["independently replicated"].status).toBe("partly established"); expect(by["independently replicated"].evidence).toMatch(/13 runs of the same prepared system and production protocol with distinct realized seeds/); expect(by["independently replicated"].short).toBe("seed-replicated ✓ (13 same-protocol runs, 2–30 ps) · at 30 ps on Amber 26 PMEMD (2026): 2 of 3 needed ✗ · 4 cross-engine at 30 ps not counted"); expect(by["independently replicated"].to_climb).toBe("1 more independent run at 30 ps on Amber 26 PMEMD (2026) (fork_experiment kind='replicate')");
+    // replication of THIS run's number means the same engine as well as the same length: the four SANDER reruns at
+    // 30 ps are disclosed as cross-engine and not counted, so rep4 stands at 2 of 3 on PMEMD and says which run it lacks
+    expect(by["independently replicated"].evidence).toMatch(/at its own length \(30 ps\) on its own engine \(Amber 26 PMEMD \(2026\)\): 2 runs — fewer than the 3 needed\. 4 more runs at 30 ps were produced by Amber 24 SANDER \(2024\): same &cntrl and GB model, different integrator — disclosed as cross-engine reruns, not counted/);
+    const reg = confidenceLadderFull(A, idx).rungs[2]; expect(reg.status).toBe("verified"); expect(reg.short).toMatch(/at 5 ps on Amber 26 PMEMD \(2026\): 3 of 3 needed ✓/);
+    expect(reg.evidence).not.toMatch(/cross-engine/);  // 5 ps runs are all one engine; nothing to disclose
+    // were every run on one engine, the six 30 ps runs would verify the rung, and the matched-length spread (±0.80,
+    // wider than the ±0.64 pooled) is what the rung would report — the pooled number never stands in for it
     const oneEngine = confidenceLadderFull(B, idx.map((r: any) => ({ ...r, engine: "Amber 26 PMEMD (2026)" })));
-    expect(oneEngine.rungs[2].evidence).not.toMatch(/Engines at this length/);
+    expect(oneEngine.rungs[2].status).toBe("verified"); expect(oneEngine.rungs[2].evidence).toMatch(/at its own length \(30 ps\) on its own engine \(Amber 26 PMEMD \(2026\)\): 6 runs \(SD ±0\.80\)/); expect(oneEngine.rungs[2].evidence).not.toMatch(/cross-engine/);
     expect(["verified", "not established"]).toContain(by["robust to analysis-window choices"].status); expect(by["robust to analysis-window choices"].evidence).toMatch(/4 analysis windows re-analysed/); expect(by["robust to analysis-window choices"].evidence).toMatch(/criterion ≤ 2/);
-    // The partly-established middle state is the thesis of this rung, and since the PACE-ICE replicates landed no
-    // run on the site is in it any more — so it has to be constructed, or the branch (its "✗" short text and the
-    // "N more runs" to_climb it generates) is executed by nothing. It is also the state every new system starts in.
+    // The partly-established middle state is the thesis of this rung. rep4 is in it now that replication is engine-
+    // aware; the same-engine shortfall is constructed too, so the "✗" short text and the "N more runs" to_climb are
+    // exercised without a cross-engine note. It is also the state every new system starts in.
     const twoAt30 = idx.filter((r: any) => r.production_ps !== 30 || ["1l2y-rep4", "1l2y-rep6"].includes(r.id));
     const partly = confidenceLadderFull(B, twoAt30).rungs[2];
     expect(partly.status).toBe("partly established");
-    expect(partly.short).toBe("seed-replicated ✓ (9 same-protocol runs, 2–30 ps) · at this run's length (30 ps): 2 of 3 needed ✗");
-    expect(partly.evidence).toMatch(/at its own length \(30 ps\): 2 runs — fewer than the 3 needed/);
-    expect(partly.to_climb).toBe("1 more independent run at 30 ps (fork_experiment kind='replicate')");
+    expect(partly.short).toBe("seed-replicated ✓ (9 same-protocol runs, 2–30 ps) · at 30 ps on Amber 26 PMEMD (2026): 2 of 3 needed ✗"); expect(partly.evidence).not.toMatch(/cross-engine/);
+    expect(partly.evidence).toMatch(/at its own length \(30 ps\) on its own engine \(Amber 26 PMEMD \(2026\)\): 2 runs — fewer than the 3 needed/);
+    expect(partly.to_climb).toBe("1 more independent run at 30 ps on Amber 26 PMEMD (2026) (fork_experiment kind='replicate')");
     expect(confidenceLadderFull(B, twoAt30).summary).toMatch(/1 partly established \(independently replicated/);
     // singular/plural on the run it still needs
     const oneAt30 = idx.filter((r: any) => r.production_ps !== 30 || r.id === "1l2y-rep4");
-    expect(confidenceLadderFull(B, oneAt30).rungs[2].to_climb).toBe("2 more independent runs at 30 ps (fork_experiment kind='replicate')");
+    expect(confidenceLadderFull(B, oneAt30).rungs[2].to_climb).toBe("2 more independent runs at 30 ps on Amber 26 PMEMD (2026) (fork_experiment kind='replicate')");
     const noProto = confidenceLadderFull(B, idx.map((r: any) => ({ ...r, protocol: undefined }))); expect(noProto.rungs[2].status).toBe("not established"); expect(noProto.rungs[2].evidence).toMatch(/no protocol key/);
     expect(by["externally supported"].status).toBe("not assessed");
     expect(L.summary).toMatch(/of 4 assessable rungs verified/);
@@ -719,31 +718,30 @@ describe("objectiveOf and nextStep", () => {
     const m = load("1l2y-rep4"); const o = objectiveOf({ ...m, title: "unknown system", results: { ...m.results, mmgbsa: null } }, idx);
     expect(o.measures).toBe("A 30 ps production run of MOL bound to the prepared protein; no MM-GBSA result.");
   });
-  it("picks the first climbable rung and reads the action from its to_climb; expected and unassessed rungs are skipped", () => {
-    const rungs = [
+  it("follows automode's bottleneck rule: the worst status first, ladder order on ties, and the action its to_climb names", () => {
+    const base = [
       { rung: "recomputable", status: "verified", to_climb: null },
-      { rung: "repeatable", status: "expected", to_climb: "execute the pinned bundle" },
-      { rung: "independently replicated", status: "partly established", to_climb: "2 more independent runs at 30 ps (fork_experiment kind='replicate')" },
-      { rung: "robust to analysis-window choices", status: "not established", to_climb: "longer sampling (plan_sampling)" },
-      { rung: "externally supported", status: "not assessed", to_climb: "link an external reference" }];
-    expect(nextStep({ rungs })).toEqual({ rung: "independently replicated", status: "partly established", to_climb: rungs[2].to_climb, action: "replicate" });
-    expect(nextStep({ rungs: [rungs[0], rungs[1], { ...rungs[2], status: "verified", to_climb: null }, rungs[3], rungs[4]] })?.action).toBe("plan_sampling");
-  });
-  it("when every assessable rung is verified, the next step is the ladder's own what-next: a controlled extension", () => {
-    const rungs = [
-      { rung: "recomputable", status: "verified", to_climb: null },
-      { rung: "repeatable", status: "expected", to_climb: null },
-      { rung: "independently replicated", status: "verified", to_climb: null },
+      { rung: "repeatable", status: "expected", to_climb: "run the pinned bundle, extract the result as a card, compare" },
+      { rung: "independently replicated", status: "partly established", to_climb: "1 more independent run at 30 ps on Amber 26 PMEMD (2026) (fork_experiment kind='replicate')" },
       { rung: "robust to analysis-window choices", status: "verified", to_climb: "vary a modelling choice in a controlled extension (fork_experiment kind='extend')" },
-      { rung: "externally supported", status: "not assessed", to_climb: "link an external reference" }];
-    expect(nextStep({ rungs })?.action).toBe("extend");
-    expect(nextStep({ rungs: rungs.map(r => ({ ...r, to_climb: null })) })).toBeNull();
+      { rung: "externally supported", status: "not assessed", to_climb: "link an external reference" }] as any;
+    expect(nextStep({ rungs: base })).toEqual({ rung: "independently replicated", status: "partly established", to_climb: base[2].to_climb, action: "replicate" });
+    // "not established" outranks "partly established" wherever it sits on the ladder
+    const notRobust = base.map((r: any) => r.rung === "robust to analysis-window choices" ? { ...r, status: "not established", to_climb: "longer sampling (plan_sampling)" } : r);
+    expect(nextStep({ rungs: notRobust })?.action).toBe("plan_sampling");
+    // every assessable rung verified: the ceiling is repeatable (expected), which only an off-site replay can move
+    const done = base.map((r: any) => r.rung === "independently replicated" ? { ...r, status: "verified", to_climb: null } : r);
+    expect(nextStep({ rungs: done })).toMatchObject({ rung: "repeatable", status: "expected", action: "reproduce" });
+    // externally supported is never the step, and a ladder with nothing to climb yields null
+    expect(nextStep({ rungs: done.map((r: any) => ({ ...r, to_climb: null })) })).toBeNull();
   });
   it("on every real run the ladder yields a next step whose action the page can start", () => {
     for (const r of idx) {
       const m = load(r.id); const step = nextStep(confidenceLadderFull(m, idx));
       expect(step, r.id).not.toBeNull();
       expect(["reproduce", "replicate", "extend", "plan_sampling"], `${r.id}: ${step!.to_climb}`).toContain(step!.action);
+      // and it is the rung automode names as the bottleneck for the same run: one rule, two surfaces
+      expect(step!.rung, r.id).toBe(investigateRun(m, idx).bottleneck!.rung);
     }
   });
 });

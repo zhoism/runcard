@@ -820,18 +820,21 @@ export function confidenceLadderFull(m: Manifest, idx: IndexEntry[]) {
     // Two levels, stated separately: seed replication (distinct seeds, any length) is earned by the cohort; replication AT THIS RUN'S LENGTH
     // (≥ 3 runs of the same production length) is what "verified" means for this card. Anything less is "partly established", and the rung says which part.
     const myPs = me.production_ps; const atMyLen = sameProto.filter(r => r.production_ps === myPs);
-    const verifiedHere = atMyLen.length >= 3; const sdHere = verifiedHere ? stratum(atMyLen).sd : null;
-    // The protocol key covers &cntrl and the MM-GBSA model, not the program that integrated the equations. Runs at
-    // this length were produced by more than one engine here, and counting them silently would let the rung rest on
-    // an agreement it never states. Name the mix; whether the engines agree is a claim only more runs can settle.
-    const engines = [...new Set(atMyLen.map(r => r.engine).filter(Boolean))].sort();
-    const engineMix = engines.length > 1
-      ? ` Engines at this length: ${engines.map(e => `${e} (${atMyLen.filter(r => r.engine === e).length})`).join(", ")} — the protocol key fixes &cntrl and the GB model, not the integrator, so this rung counts runs across engines and says so.`
+    // Replication of THIS run's number means the same experiment repeated: the same length AND the same program that
+    // integrated the equations. The protocol key fixes &cntrl and the GB model, not the integrator, so a run at this
+    // length on another engine is disclosed as a cross-engine rerun and not counted — whether two engines agree is a
+    // claim only same-engine runs can settle, and the fork network reports it when they do not.
+    const myEngine = me.engine; const hereSame = atMyLen.filter(r => r.engine === myEngine); const hereCross = atMyLen.filter(r => r.engine !== myEngine);
+    const verifiedHere = hereSame.length >= 3; const sdHere = verifiedHere ? stratum(hereSame).sd : null;
+    const crossEngines = [...new Set(hereCross.map(r => r.engine).filter(Boolean))].sort();
+    const crossNote = hereCross.length
+      ? ` ${hereCross.length} more run${hereCross.length === 1 ? "" : "s"} at ${myPs} ps ${hereCross.length === 1 ? "was" : "were"} produced by ${crossEngines.join(" and ")}: same &cntrl and GB model, different integrator — disclosed as cross-engine reruns, not counted as replicates of this run.`
       : "";
+    const need = 3 - hereSame.length;
     rungs.push({ rung: "independently replicated", status: verifiedHere ? "verified" : "partly established",
-      short: `seed-replicated ✓ (${st.n} same-protocol runs, ${lengths[0]}–${lengths[lengths.length - 1]} ps) · at this run's length (${myPs} ps): ${atMyLen.length} of 3 needed ${verifiedHere ? "✓" : "✗"}`,
-      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. What this earns: the sign and the spread are robust to the seed. Replication of this run's number at its own length (${myPs} ps): ${atMyLen.length} run${atMyLen.length === 1 ? "" : "s"}${verifiedHere ? ` (SD ±${sdHere?.toFixed(2)})` : " — fewer than the 3 needed"}. ${signClaim(st).split("; the observed")[0].replace(/\.?$/, ".")}${engineMix}`,
-      to_climb: verifiedHere ? null : `${3 - atMyLen.length} more independent run${3 - atMyLen.length === 1 ? "" : "s"} at ${myPs} ps (fork_experiment kind='replicate')` });
+      short: `seed-replicated ✓ (${st.n} same-protocol runs, ${lengths[0]}–${lengths[lengths.length - 1]} ps) · at ${myPs} ps on ${myEngine}: ${hereSame.length} of 3 needed ${verifiedHere ? "✓" : "✗"}${hereCross.length ? ` · ${hereCross.length} cross-engine at ${myPs} ps not counted` : ""}`,
+      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. What this earns: the sign and the spread are robust to the seed. Replication of this run's number at its own length (${myPs} ps) on its own engine (${myEngine}): ${hereSame.length} run${hereSame.length === 1 ? "" : "s"}${verifiedHere ? ` (SD ±${sdHere?.toFixed(2)})` : " — fewer than the 3 needed"}.${crossNote} ${signClaim(st).split("; the observed")[0].replace(/\.?$/, ".")}`,
+      to_climb: verifiedHere ? null : `${need} more independent run${need === 1 ? "" : "s"} at ${myPs} ps on ${myEngine} (fork_experiment kind='replicate')` });
   } else rungs.push({ rung: "independently replicated", status: "not established", short: `${sameProto.length} run${sameProto.length === 1 ? "" : "s"} of this system and protocol on this site; 3 needed`,
     evidence: `${peers.length} run${peers.length === 1 ? "" : "s"} of this prepared system on this site, ${sameProto.length} with the same production protocol${seeded.length && distinct < sameProto.length ? ", not all with distinct seeds" : ""}; at least 3 independent runs (ig=-1, same protocol) are needed`, to_climb: "fork_experiment kind='replicate' (plan_sampling gives the number of runs)" });
   // 4 robust to reasonable analysis choices — analysis-window sensitivity only: each window's ΔG must sit within 2 corrected SEMs (of that window) of the archived value
@@ -880,18 +883,6 @@ export function objectiveOf(m: Manifest, idx: IndexEntry[]): { measures: string;
   const n = me ? idx.filter(r => sameSystem(r, me)).length : 0;
   const place = n > 1 ? `One of ${n} runs of this prepared system on runcard.` : n === 1 ? "The only run of this prepared system on runcard." : "Not in the run index.";
   return { measures, place };
-}
-export type NextAction = "reproduce" | "replicate" | "extend" | "plan_sampling" | null;
-/** The one next step the confidence ladder implies: the first rung this site can climb from here (not verified, not
-    merely expected, not unassessed) with the action its `to_climb` names; when every assessable rung is verified, the
-    last verified rung's own "what next" (a controlled extension). Null when the ladder names nothing. */
-export function nextStep(ladder: { rungs: { rung: string; status: string; to_climb: string | null }[] }): { rung: string; status: string; to_climb: string; action: NextAction } | null {
-  const climbable = ladder.rungs.find(r => !["verified", "expected", "not assessed"].includes(r.status) && r.to_climb)
-    ?? [...ladder.rungs].reverse().find(r => r.status === "verified" && r.to_climb);
-  if (!climbable) return null;
-  const t = climbable.to_climb!;
-  const action: NextAction = /kind='replicate'/.test(t) ? "replicate" : /kind='extend'/.test(t) ? "extend" : /seed='pinned'|kind='reproduce'/.test(t) ? "reproduce" : /plan_sampling/.test(t) ? "plan_sampling" : null;
-  return { rung: climbable.rung, status: climbable.status, to_climb: t, action };
 }
 export type ForkKind = "reproduce" | "replicate" | "extend";
 export interface ForkMeta { id: string; kind: ForkKind; parent: string; question: string | null; treatment: { key: string; meaning: string | null; class: ParamClass; from: Record<string, string>; to: string } | null; stages: string[]; controls: string[]; runs_per_condition?: number | null }

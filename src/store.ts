@@ -12,7 +12,13 @@ export function set(patch: Partial<State> | ((s: State) => Partial<State>)) {
 export function useStore<T>(sel: (s: State) => T): T {
   return useSyncExternalStore(f => { subs.add(f); return () => subs.delete(f); }, () => sel(state));
 }
-window.addEventListener("hashchange", () => set({ route: location.hash.slice(1) || "/" }));
+// In-page anchors (#network-…, #trust) share the hash with the router: a hash that names an element on the page scrolls
+// to it and the route hash is put back, so a reload lands on the page, not on a fragment the router cannot serve.
+window.addEventListener("hashchange", () => {
+  const h = location.hash.slice(1);
+  if (h && !h.startsWith("/")) { const el = document.getElementById(h); if (el) { el.scrollIntoView({ behavior: "smooth", block: "start" }); history.replaceState(null, "", `#${state.route}`); return; } }
+  set({ route: h || "/" });
+});
 export const navigate = (r: string) => { location.hash = r; };
 export function logCall(tool: string, input: unknown, ok: boolean, summary: string, source: InvocationSource) {
   set(s => ({ calls: [{ t: Date.now(), tool, input, ok, summary, source }, ...s.calls].slice(0, 50) }));

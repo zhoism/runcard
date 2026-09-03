@@ -23,6 +23,24 @@ the browser, and the executed forks are the proof the loop closes. Verified end 
 planned fork → bundle; explain and trace from the rail; the home "run it" auto-call; the ice1 objective; compare.
 Tests 691 (agentActions ↔ TOOLS schema check, every verb runs on the demo run, objective/next-step); lint unchanged.
 
+**Coherence pass on the same branch (2026-09-02, from a second GPT review of the preview):** (1) the replication rung is
+engine-aware — verified only with three distinct-seed runs at this length **on this engine**; runs at the length on another
+engine are disclosed as cross-engine reruns and not counted. rep4 drops from "3 of 4" to "2 of 4" verified with "2 of 3 on
+PMEMD at 30 ps; 4 cross-engine not counted", which is the honest number and removes the contradiction between "replicated ✓"
+and "the forks disagree beyond seed noise"; its next step is now one more PMEMD run at 30 ps, the same thing the fork
+callout asks for. "13 comparable runs" reads "13 runs of one system and protocol · … · PMEMD × 9, SANDER × 4". (2) One
+next-step rule: `nextStep` moved to `investigate.ts` and uses automode's `bottleneckOf`, so the callout under the result
+and the investigation trace name the same rung; the callout labels "to strengthen the evidence" (the bottleneck's action)
+and "to explore the science" (the robust rung's controlled extension, once verified). (3) The automode trace names what
+ran: the bundle-readiness step is `bundleGaps (read-only check)`, never `generate_rerun_bundle`, and a test forbids the
+write tool's name in any trace. (4) `recompute_result`, `plan_sampling` and `investigate_run` descriptions say their only
+write is page state, which is why `readOnlyHint` is false. (5) Trims: the two "Ask your agent" prompt cards fold into a
+details, the rail explainer is two sentences. (6) Small: "molecular dynamics (MD)" in the lede; loading text fades in after
+450 ms; the ΔG line sets −19.20 kcal/mol apart from "± 0.64 run-to-run SD, 13 runs"; an "on this page" nav under the
+objective; in-page anchors (`#trust`, `#network-…`) now scroll instead of routing to Home (a pre-existing bug: the router
+treated any hash as a route). Skipped on purpose: route-specific tool registration and shorter tool descriptions — not
+touching the registration path a judge hits first, the day before judging.
+
 ## GitHub-for-MD-runs reframe (2026-09-01)
 
 The intent, decided with the user 2026-09-01: **a shareable, agent-readable GitHub for MD runs.** Since the evening of 2026-09-01: **repo = prepared system (a project),
