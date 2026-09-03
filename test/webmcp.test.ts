@@ -39,6 +39,30 @@ describe("WebMCP registration (mocked browser API)", () => {
   });
 });
 
+describe("WebMCP registration payload", () => {
+  it("keeps tool and schema descriptions concise while preserving write boundaries", async () => {
+    setupGlobals(); const { TOOLS } = await import("../src/webmcp");
+    for (const tool of TOOLS) {
+      expect(tool.description.length, `${tool.name} description length`).toBeLessThanOrEqual(450);
+      expect(tool.description, `${tool.name} question/answer split`).toContain("? ");
+      if (!tool.readOnly) expect(tool.description, `${tool.name} page write`).toMatch(/\bpage\b/i);
+    }
+    expect(TOOLS.reduce((total, tool) => total + tool.description.length, 0)).toBeLessThanOrEqual(5_500);
+    expect(TOOLS.find(tool => tool.name === "propose_change")?.description).toContain("Approve");
+    expect(TOOLS.find(tool => tool.name === "fork_experiment")?.description).toContain("Approve");
+
+    const checkSchemaDescriptions = (value: unknown, path: string) => {
+      if (!value || typeof value !== "object") return;
+      const node = value as Record<string, unknown>;
+      if (typeof node.description === "string") {
+        expect(node.description.length, `${path} schema description length`).toBeLessThanOrEqual(90);
+      }
+      for (const [key, child] of Object.entries(node)) checkSchemaDescriptions(child, `${path}.${key}`);
+    };
+    for (const tool of TOOLS) checkSchemaDescriptions(tool.inputSchema, tool.name);
+  });
+});
+
 // The whole "agent proposes, human approves" boundary rests on one filter in generate_rerun_bundle:
 // rerunBundle itself applies whatever array it is handed. These drive the real store through callTool.
 describe("approval gate: store → callTool → bundle", () => {
