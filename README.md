@@ -15,36 +15,32 @@ work that already happened.
 ## Try it with an agent
 
 Open the live URL in ChatGPT's built-in browser, or in Chrome 149+ with
-`chrome://flags/#enable-webmcp-testing` enabled. (Chrome DevTools → Application →
-WebMCP lists the registered tools and can run any of them by hand.) The header should read
-`WebMCP: registered · 17 tools`. Without the flag it reads
-`no WebMCP here — use the Tool Console ↓`, and the in-page **Tool Console** runs
-the identical tool table by hand — one table drives both, so the console is never
-a mock.
+`chrome://flags/#enable-webmcp-testing` enabled. (Chrome DevTools → Application → WebMCP lists the
+registered tools and can run any of them by hand.) The header pill should read **WebMCP · 17 tools**
+in green. Grey means the tools are still registering; amber means this browser has not exposed WebMCP
+to the page. Without WebMCP, the in-page **Tool Console** runs the identical tool table by hand — one
+table drives both, so the console is never a mock.
 
-A seven-step pass that works end-to-end on the live site with real numbers:
+Start on the demo run, `#/run/1l2y-rep4`, and ask your agent these three things in order. Each is a
+question or an intent, not an instruction: the agent picks the tools.
 
-1. Open `1l2y-rep4` → archived ΔG is −19.20 kcal/mol.
-2. `recompute_result` → the mean and SD are re-derived from the per-frame
-   energies and matched to `mmgbsa.dat`, compared at the four decimals
-   `mmgbsa.dat` prints, to one unit in the last place.
-3. `explain_result` → per-frame SEM 0.17, autocorrelation-corrected SEM 0.28,
-   run-to-run spread ±0.64. The uncertainty you quote is the third one.
-4. `plan_sampling` → the ±0.25 target is now met on the ≥ 10 ps stratum
-   (n=9, SD 0.67, SEM of mean 0.22); 0 more runs needed. It said six before the
-   PACE-ICE replicates landed — the tool asks for runs when the data needs them
-   and stops asking when it doesn't.
-5. `fork_experiment` extend `temp0` 300 → 310 K → two pending proposals
-   (density, product); the heating ramp is deliberately left alone.
-6. Click **Approve**, then `generate_rerun_bundle` → a self-contained 15-file
-   bundle whose `manifest.json` records the parent run and the fork. It carries
-   both halves: `run.sh` for the MD and `run_analysis.sh` + `analysis/mmgbsa.in`
-   for the MM-GBSA, so the bundle reproduces the card's headline ΔG and not just
-   its trajectory. Every analysis setting — masks, `igb`, `saltcon`, frame
-   window — is read from that run's manifest, so a 3HTB bundle carries
-   `:1-163`/`:164` and a 1L2Y one carries `:1-20`/`:21`.
-7. `export_evidence_brief` → a qualified Markdown snapshot of the archived
-   evidence and the run-scoped work actually completed during this visit.
+1. `Using only the tools this page exposes, verify this result. Tell me what I can claim, what I can't, and the single next experiment that would most strengthen it. Be brief.`
+   The archived −19.1953 kcal/mol reproduces from the per-frame energies; the agent should refuse a
+   run-level error bar (2 of 3 matched replicates exist) and recommend one fresh-seed 30 ps run on
+   Amber 26 PMEMD.
+2. `What happens to binding at 310 K? Prepare whatever it takes to find out, and stop before anything changes to a scientific input.`
+   `fork_experiment` pins proposals to `density` and `product` and leaves `heat` alone (its ramp is a
+   schedule, not a condition — the page says so). A planned fork appears under *Current investigation*
+   marked "expected · not yet run". Nothing is applied until you click **Approve** on each pin.
+3. `Approved. Build the bundle.`
+   `generate_rerun_bundle` writes a self-contained 15-file ZIP: `density.in` and `product.in` carry
+   `temp0=310.0`, `heat.in` still `300.0`; `run.sh` for the MD; `run_analysis.sh` and
+   `analysis/mmgbsa.in` for the MM-GBSA with every setting — masks, `igb`, `saltcon`, frame window —
+   read from that run's manifest (a 3HTB bundle carries `:1-163`, a 1L2Y one `:1-20`). Its
+   `manifest.json` records the parent and the fork.
+
+Every call is listed in the **Tool activity** card at the bottom of the right-hand rail with its
+source, so you can confirm each line says `via agent / WebMCP`.
 
 ## The tools
 
