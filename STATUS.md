@@ -56,7 +56,7 @@ experimentally validated"), the card is "Binding free energy estimate" and the s
 "Continue" is narrowed: the lede says a continuation is prepared here, approved, run elsewhere and published back as a
 child card; the fork card and the planned-fork card name `tools/extract_run.py` as the closing step. The rail shows
 three verbs (explain, verify by recomputing, prepare a bounded fork); the other four sit under "All agent tools" with
-the tool chips. Tool-description compression is on Codex's branch `codex/tool-descriptions` (src/webmcp.ts only).
+the tool chips. Tool descriptions: Codex's `codex/tool-descriptions` (4de268b) is merged — 17 descriptions total 4.8k characters (from 9.9k), each ≤ 392, question-first, every tool states what it leaves on the page ("navigates; leaves nothing" for get_run_manifest and diff_runs), "for X use Y" lines on the overlapping pairs, schema property descriptions ≤ 90; a test in test/webmcp.test.ts caps all of it.
 
 ## GitHub-for-MD-runs reframe (2026-09-01)
 
