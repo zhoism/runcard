@@ -81,6 +81,24 @@ the fork card and the next-step link (the h1 keeps the brief's verb; the lede na
 verbs with four folded, like the rail. Not done, on purpose: an import/publish action (uploads are out of scope),
 tool consolidation, flipping investigate_run's annotation (the stated page-state rule stays).
 
+**The machine-readable contract says what the page says (2026-09-02, fifth GPT review, same branch):** six leaks closed.
+(1) The replication rung's `short` follows the matched rule: "matched-condition seed replication not established: 2 of 3
+runs at 30 ps on Amber 26 PMEMD (2026) · 4 cross-engine at 30 ps not counted · sign consistent across 13 heterogeneous runs
+(2–30 ps)" — on the run page, the project page, `confidence_ladder` and the automode trace. (2) `explain_result` drops
+`uncertainty_to_quote`; the compact output carries `project_dispersion` (descriptive, with a note), `matched_seed_uncertainty`
+(this run's error bar or "not yet estimated") and `within_run_frame_noise`; `which_uncertainty_to_quote` is
+`uncertainty_statement`. (3) `this_run_vs_ensemble` is `this_run_vs_project`: rank, `standardized_offset`, `project_mean`,
+`project_sd` and a note saying it is a position in a mixed-condition cohort, not a test statistic and not an estimate for
+any protocol; the brief's sentence says the same. (4) The `ensemble` caveat (also carried by `diff_runs.run_to_run_spread`)
+ends "Project dispersion is descriptive; only the matched same-engine, same-length stratum can estimate seed uncertainty,
+and the per-frame SEM is frame noise only." (5) `fork_network.status` is `cross_engine_shift` (engines differ) or `shift`
+(same engine), never `tension`; `parent_offset_sd` → `parent_offset_over_project_dispersion`, `run_to_run_sd` →
+`project_dispersion_sd`; every badge and callout reads the new statuses through one `shifted()` helper; a test forbids
+"tension" in the JSON. (6) A fork's objective line names the engine change: "Cross-engine fork of kevin/1l2y-rep4 (Amber
+24 SANDER (2024) where the parent used Amber 26 PMEMD (2026)): same prepared system and core parameters, fresh seeds; one
+of 4 matched 30 ps Amber 24 SANDER (2024) replicates." Verified through the in-page console (the same `callTool` path
+WebMCP uses): no legacy key remains in explain_result, fork_network, get_ensemble, diff_runs or confidence_ladder.
+
 ## GitHub-for-MD-runs reframe (2026-09-01)
 
 The intent, decided with the user 2026-09-01: **a shareable, agent-readable GitHub for MD runs.** Since the evening of 2026-09-01: **repo = prepared system (a project),

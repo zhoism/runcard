@@ -78,13 +78,13 @@ export function investigateRun(m: Manifest, idx: IndexEntry[]): Investigation {
   // it is reported for every run regardless of which rung turns out to be the bottleneck.
   const e = explainResult(m, idx) as any;
   const mm = m.results.mmgbsa;
-  const quote = e.uncertainty_to_quote;
+  const quote = e.project_dispersion;
   // Format from the ensemble's own SD, not from the value explain_result already rounded to 3 dp: rounding a
   // rounded number moves 0.645 to "0.65" where explain_result prints "0.64", and the same quantity shown two
   // ways on one page is the thing this project exists to refuse.
   const en = ensemble(idx, m.id); const spreadSd = en.all.sd; const so = en.seed_only;
   const headline = quote && spreadSd != null
-    ? `ΔG = ${n2(mm?.delta_total_kcal_mol)} kcal/mol. Matched seed uncertainty: ${so.sd != null ? `±${so.sd.toFixed(2)} (${so.n} runs at ${so.production_ps} ps on ${so.engine}) — this run's error bar` : `not established (${so.n} of ${so.needed} runs at ${so.production_ps} ps on ${so.engine}) — no error bar yet`}. Project dispersion: ±${spreadSd.toFixed(2)} SD across ${quote.n} mixed-condition runs — descriptive. The within-run SEM ${n2(e.within_run?.corrected_sem)} is frame noise only.`
+    ? `ΔG = ${n2(mm?.delta_total_kcal_mol)} kcal/mol. Matched seed uncertainty: ${so.sd != null ? `±${so.sd.toFixed(2)} (${so.n} runs at ${so.production_ps} ps on ${so.engine}) — this run's error bar` : `not established (${so.n} of ${so.needed} runs at ${so.production_ps} ps on ${so.engine}) — no error bar yet`}. Project dispersion: ±${spreadSd.toFixed(2)} SD across ${quote.n} mixed-condition runs — descriptive. The within-run SEM ${n2(e.within_run_frame_noise?.corrected_sem)} is frame noise only.`
     : `ΔG = ${n2(mm?.delta_total_kcal_mol)} kcal/mol. No run-to-run spread can be quoted: this site has one run of this prepared system.`;
   steps.push({ tool: "explain_result", why: "establish which uncertainty a reader should quote before judging whether the run is trustworthy", found: headline });
 

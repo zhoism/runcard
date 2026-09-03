@@ -29,6 +29,8 @@ const DEMO_RUN = "1l2y-rep4";
 const FEATURED_VERBS = ["explain", "recompute", "fork"];
 /** The project (cohort) a run belongs to, for breadcrumbs. */
 const projectOf = (idx: IndexEntry[], id: string) => cohorts(idx).find(c => c.runs.some(r => r.id === id));
+/** The fork-network statuses that are an observed shift of the forks from their parent (cross-engine, or on the same engine). */
+const shifted = (st: string) => st === "cross_engine_shift" || st === "shift";
 const rungCls = (st: string) => st === "verified" ? "pass" : st === "not established" ? "warn" : st === "partly established" ? "partly" : "";
 /** One color code everywhere (design ruling 2026-09-01): green pass, amber warn, red fail. The copy still scopes PASS as an input sanity check, not physical validity. */
 const Verdict = ({ r }: { r: Report }) => { const v = verdictOf(r); return <span className={`badge ${v.toLowerCase()}`}>{v}</span>; };
@@ -113,7 +115,7 @@ function ProjectCard({ c, idx, own, rows, handle }: { c: Cohort; idx: IndexEntry
   const ringId = p.network?.parent.id ?? c.start_here;
   return <section className="cohort">
     {/* Kicker: the system's code name and the fork status. Headline: what it is, in words. Then the spread, the object a reader can see at once. */}
-    <p className="kicker">{sys ? <span className="mono">{c.title}</span> : <span>project</span>}{st && st !== "none" && <span className={`badge ${st === "agree" ? "pass" : st === "tension" ? "warn" : ""}`}>{st === "agree" ? "forks agree" : st === "tension" ? "forks shifted" : "forks: sign only"}</span>}</p>
+    <p className="kicker">{sys ? <span className="mono">{c.title}</span> : <span>project</span>}{st && st !== "none" && <span className={`badge ${st === "agree" ? "pass" : shifted(st) ? "warn" : ""}`}>{st === "agree" ? "forks agree" : shifted(st) ? "forks shifted" : "forks: sign only"}</span>}</p>
     <h2 className="headline"><a href={`#/p/${c.slug}`}>{sys?.name ?? c.title}</a></h2>
     <p className="cohort-desc">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and core settings, run ${c.n} times with differing seeds and lengths (${span})${p.engines.length > 1 ? " and engines" : ""}.` : "One run so far."}</p>
     <Spread runs={c.runs} mean={c.mean} sd={c.sd} own={own} ringId={ringId} ringWhy={p.network ? "the parent of the forks" : "the longest run"} />
@@ -173,7 +175,7 @@ function StartHere({ r, idx, own }: { r: IndexEntry; idx: IndexEntry[]; own: Own
     <h2 className="headline"><a href={href}>{sys?.name ?? r.title}</a></h2>
     <p className="start-desc">{sys ? `${sys.sentence} ` : ""}{r.production_ps} ps of production on {r.engine}{r.owner ? `, published by ${nameOf(r.owner)}` : ""}.</p>
     <p className="cohort-dg">ΔG <b className="mono">{fmt(r.delta_g)}{ens.seed_only.sd != null ? ` ± ${fmt(ens.seed_only.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{ens.seed_only.sd != null ? ` · ± is the matched seed uncertainty, ${ens.seed_only.n} runs` : ens.all.sd != null ? ` · no error bar yet (${ens.seed_only.n} of ${ens.seed_only.needed} matched runs); project dispersion SD ${fmt(ens.all.sd)} across ${ens.all.n} mixed-condition runs` : ""}</span></p>
-    {net.n > 0 && <p className="start-forks"><span className={`badge ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`}>{net.n} forks · {net.status === "agree" ? "agree" : net.status === "tension" ? "shifted" : "sign only"}</span> {net.n} independent reruns from its bundle{by.length ? `, executed by ${by.map(nameOf).join(", ")}` : ""}{crossEngine ? " on a different engine" : ""}, {net.status === "agree" ? "reproduce it within the project dispersion" : net.status === "tension" ? `are shifted ${fmt(Math.abs(net.parent_offset_kcal!), 1)} kcal/mol from it${crossEngine ? "; engine and seed changed together, so significance and cause cannot yet be determined" : ""}` : "agree with it in sign"}.</p>}
+    {net.n > 0 && <p className="start-forks"><span className={`badge ${net.status === "agree" ? "pass" : shifted(net.status) ? "warn" : ""}`}>{net.n} forks · {net.status === "agree" ? "agree" : shifted(net.status) ? "shifted" : "sign only"}</span> {net.n} independent reruns from its bundle{by.length ? `, executed by ${by.map(nameOf).join(", ")}` : ""}{crossEngine ? " on a different engine" : ""}, {net.status === "agree" ? "reproduce it within the project dispersion" : shifted(net.status) ? `are shifted ${fmt(Math.abs(net.parent_offset_kcal!), 1)} kcal/mol from it${crossEngine ? "; engine and seed changed together, so significance and cause cannot yet be determined" : ""}` : "agree with it in sign"}.</p>}
     <p className="start-open"><a href={href}>Open the run →</a></p>
   </div>;
 }
@@ -223,14 +225,14 @@ function NextStepCallout({ step, ladder, m, ens }: { step: NonNullable<ReturnTyp
 function ForkCallout({ net, detailHref, onReplicate }: { net: ForkNetwork; detailHref: string; onReplicate?: () => void }) {
   const by = [...new Set(net.forks.map(f => f.owner).filter((o): o is string => !!o && o !== net.parent.owner))];
   const crossEngine = net.engines.forks.some(e => e !== net.engines.parent);
-  const head = net.status === "tension" ? `${net.n} ${crossEngine ? "cross-engine " : ""}${net.n === 1 ? "fork is" : "forks are"} shifted ${fmt(Math.abs(net.parent_offset_kcal!), 1)} kcal/mol from ${net.parent.id}`
+  const head = shifted(net.status) ? `${net.n} ${crossEngine ? "cross-engine " : ""}${net.n === 1 ? "fork is" : "forks are"} shifted ${fmt(Math.abs(net.parent_offset_kcal!), 1)} kcal/mol from ${net.parent.id}`
     : net.status === "agree" ? `${net.n} independent ${net.n === 1 ? "fork reproduces" : "forks reproduce"} ${net.parent.id} within the project dispersion`
     : `${net.n} ${net.n === 1 ? "fork agrees" : "forks agree"} with ${net.parent.id} in sign; the spread cannot be judged yet`;
-  const body = net.status === "tension"
-    ? `${net.sign_agrees ? "All keep the sign of ΔG" : "Not all keep the sign of ΔG"}; the shift is ${fmt(Math.abs(net.parent_offset_sd!), 1)}× the project dispersion, a descriptive SD across the mixed cohort that contains these forks. ${crossEngine ? "Engine and seed changed together, so significance and cause cannot yet be determined; a replicate on the parent's engine would separate them." : "Same engine and length, so the seed is the only thing that changed; matched replicates would say whether the shift exceeds seed spread."}`
+  const body = shifted(net.status)
+    ? `${net.sign_agrees ? "All keep the sign of ΔG" : "Not all keep the sign of ΔG"}; the shift is ${fmt(Math.abs(net.parent_offset_over_project_dispersion!), 1)}× the project dispersion, a descriptive SD across the mixed cohort that contains these forks. ${crossEngine ? "Engine and seed changed together, so significance and cause cannot yet be determined; a replicate on the parent's engine would separate them." : "Same engine and length, so the seed is the only thing that changed; matched replicates would say whether the shift exceeds seed spread."}`
     : net.status === "agree" ? `Fork mean ${fmt(net.fork_mean)}${net.fork_sd != null ? ` ± ${fmt(net.fork_sd)}` : ""} kcal/mol; the parent sits within the project dispersion of it${crossEngine ? ", across an engine change" : ""} — an observed agreement, not a test.`
     : `Fork mean ${fmt(net.fork_mean)} kcal/mol; no run-to-run SD is available to judge the spread.`;
-  return <div className={`callout ${net.status === "tension" ? "warn" : net.status === "agree" ? "pass" : ""}`} role="note">
+  return <div className={`callout ${shifted(net.status) ? "warn" : net.status === "agree" ? "pass" : ""}`} role="note">
     <p className="callout-head">{head}{by.length ? <span className="dim"> · by {by.join(", ")}</span> : null}</p>
     <p className="callout-body">{body}</p>
     <div className="callout-actions"><a href={detailHref}>Inspect fork evidence ↓</a>{onReplicate && <button type="button" className="ghost" onClick={onReplicate}>Plan a replicate</button>}</div>
@@ -299,11 +301,11 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
   const ens = ensemble(idx, start.id); const ladder = m ? confidenceLadderFull(m, idx) : null;
   const S = start.system; const pairs = protocolPairs(start.protocol);
   const span = `${c.lengths_ps[0]}–${c.lengths_ps[c.lengths_ps.length - 1]} ps`;
-  const netCls = p.network ? (p.network.status === "agree" ? "pass" : p.network.status === "tension" ? "warn" : "") : "";
+  const netCls = p.network ? (p.network.status === "agree" ? "pass" : shifted(p.network.status) ? "warn" : "") : "";
   return <section className="project">
     <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span><span>{c.title}</span></nav>
     <div className="titlebar"><h1>{sys?.name ?? c.title}</h1>{sys && <span className="dim">{c.title}</span>}
-      {p.network && <a className={`badge fork ${netCls}`} href={`#network-${p.network.parent.id}`}>{p.network.n} forks · {p.network.status === "agree" ? "agree" : p.network.status === "tension" ? "shifted" : "sign only"}</a>}</div>
+      {p.network && <a className={`badge fork ${netCls}`} href={`#network-${p.network.parent.id}`}>{p.network.n} forks · {p.network.status === "agree" ? "agree" : shifted(p.network.status) ? "shifted" : "sign only"}</a>}</div>
     <p className="lede">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and core settings, run ${c.n} times with differing seeds and lengths (${span})${p.engines.length > 1 ? " and engines" : ""}.` : "One run so far."}</p>
     <CountsLine c={c} p={p} own={own} />
 
@@ -688,14 +690,16 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
         {m.parent && <a className="badge fork" href={`#/run/${m.parent}`}>fork of {qualified(idx, m.parent)}</a>}
         <ForkMenu m={m} ens={ens} />
         <button type="button" className="ghost" aria-live="polite" title="Copy a shareable link to this run" onClick={copyRunLink}>{linkState === "copied" ? "Link copied" : linkState === "error" ? "Copy unavailable" : "Copy link"}</button>
-        {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks{(() => { const by = [...new Set(net.forks.map(f => f.owner).filter(o => o && o !== net.parent.owner))]; return by.length ? ` by ${by.join(", ")}` : ""; })()} · {net.status === "agree" ? "agree" : net.status === "tension" ? "shifted" : "sign only"}</a>}
+        {net && net.n > 0 && <a className={`badge fork ${net.status === "agree" ? "pass" : shifted(net.status) ? "warn" : ""}`} href={`#network-${m.id}`}>{net.n} forks{(() => { const by = [...new Set(net.forks.map(f => f.owner).filter(o => o && o !== net.parent.owner))]; return by.length ? ` by ${by.join(", ")}` : ""; })()} · {net.status === "agree" ? "agree" : shifted(net.status) ? "shifted" : "sign only"}</a>}
         <CompareSelect idx={idx} self={id} value="" onPick={other => navigate(`/compare/${id}/${other}`)} /></div>
       {/* The objective line: what this run measures and where it sits, derived from the record — no run directory records
           why a run was made, so the page states only what it can read. Lineage is identity, not provenance trivia: a
           replicate says what it replicates before it shows a number, or a reader takes its ΔG for an independent measurement. */}
       {(() => { const o = objectiveOf(m, idx); const parentEntry = m.parent ? idx.find(r => r.id === m.parent) : null; const by = net ? [...new Set(net.forks.map(f => f.owner).filter((x): x is string => !!x && x !== net.parent.owner))] : [];
         return <p className="objective">{o.measures} {o.place}
-          {m.parent && <> {m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{qualified(idx, m.parent)}</a>{m.fork?.seed === "fresh" ? ": same prepared system and protocol, fresh seeds" : ""}{parentEntry && prod?.engine && parentEntry.engine !== prod.engine ? `, on ${prod.engine} where the parent used ${parentEntry.engine}` : ""}{m.fork?.complete === false ? ", partially applied" : ""}.</>}
+          {m.parent && (() => { const cross = !!(parentEntry && prod?.engine && parentEntry.engine !== prod.engine);
+            const kind = m.fork?.kind === "replicate" ? (cross ? "Cross-engine fork of" : "Independent replicate of") : m.fork?.kind ? `${m.fork.kind} of` : "Derived from";
+            return <> {kind} <a href={`#/run/${m.parent}`}>{qualified(idx, m.parent)}</a>{cross ? ` (${prod!.engine} where the parent used ${parentEntry!.engine})` : ""}{m.fork?.seed === "fresh" ? ": same prepared system and core parameters, fresh seeds" : ""}{ens && ens.matched.n > 1 ? `; one of ${ens.matched.n} matched ${prod?.length_ps} ps ${prod?.engine} replicates` : ""}{m.fork?.complete === false ? ", partially applied" : ""}.</>; })()}
           {net && net.n > 0 && <> Parent of <a href={`#network-${m.id}`}>{net.n} independent {plural(net.n, "fork")}</a>{by.length ? ` executed by ${by.map(h => own?.profiles[h]?.name ?? h).join(", ")}` : ""}.</>}
         </p>; })()}
       <nav className="onpage" aria-label="on this page"><a href="#result">result</a><a href="#trust">what it establishes</a><a href="#happened">what happened</a><a href="#build">build on it</a><a href="#produced">how it was produced</a></nav>
@@ -810,7 +814,7 @@ function EvidenceOverview({ ladder, explanation, validationVerdict }: { ladder: 
     <h2 id="evidence-overview-title">Evidence overview <span className="dim">what this record supports before you build on it; the next step is stated under the result</span></h2>
     <div className="evidence-grid">
       <div><h3>Checks supporting it</h3><p>{ladder.rungs.filter(r => r.status === "verified").map(r => r.rung).join(", ")}. Input sanity checks: <span className={`badge ${validationVerdict.toLowerCase()}`}>{validationVerdict}</span>. A passing input check is not convergence or physical accuracy.</p></div>
-      <div><h3>Still unestablished</h3><p>{missing.map(r => `${r.rung}: ${r.status}`).join("; ")}. {explanation?.within_run?.verdict ? `Archived-window verdict: ${explanation.within_run.verdict}.` : "Within-run drift could not be assessed."}</p></div>
+      <div><h3>Still unestablished</h3><p>{missing.map(r => `${r.rung}: ${r.status}`).join("; ")}. {explanation?.within_run_frame_noise?.verdict ? `Archived-window verdict: ${explanation.within_run_frame_noise.verdict}.` : "Within-run drift could not be assessed."}</p></div>
     </div>
   </section>;
 }
@@ -992,7 +996,7 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
             if (typeof v?.brief === "string") return <p>{v.brief}</p>;
             if (Array.isArray(v)) return <p>{v.length} runs across {cohorts(idx).length} {plural(cohorts(idx).length, "project")}; each row names its owner. Open a project to see them grouped.</p>;
             if (v?.trace) return <p>Trace rendered under <a href="#investigation-title" onClick={e => { e.preventDefault(); document.getElementById("investigation-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Current investigation ↓</a>.</p>;
-            if (typeof v?.verdict === "string") return <p><b>{v.status === "tension" ? "Forks shifted." : v.status === "agree" ? "Forks agree." : "Forks: sign only."}</b> {v.verdict}</p>;
+            if (typeof v?.verdict === "string") return <p><b>{shifted(v.status) ? "Forks shifted." : v.status === "agree" ? "Forks agree." : "Forks: sign only."}</b> {v.verdict}</p>;
             // Any other verb: the call log's one-line summary of what came back, the same line the activity card shows.
             if (last && calls[0]?.tool === last.tool) return <p>{calls[0].summary}</p>;
             return null; })()}<details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{pretty(out)}</pre></details></div>)}</div>

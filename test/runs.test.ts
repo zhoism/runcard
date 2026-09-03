@@ -151,7 +151,7 @@ describe("per-frame ΔG (Tier B)", () => {
   });
   it("explain_result carries numbers, not adjectives", () => {
     const e = explainResult(A, idx, true) as any;
-    expect(e.uncertainty.corrected_sem).toBeGreaterThan(0); expect(e.which_uncertainty_to_quote).toMatch(/^Matched seed uncertainty ±0\.25 kcal\/mol \(3 runs at 5 ps on Amber 26 PMEMD \(2026\), differing only in the seed\) is the error bar for this run's estimate\. Project dispersion: SD 0\.64 kcal\/mol across 13 mixed-condition runs/); expect(e.which_uncertainty_to_quote).toMatch(/matched-length SD .*: 5 ps: n=3, SD ±/);
+    expect(e.uncertainty.corrected_sem).toBeGreaterThan(0); expect(e.uncertainty_statement).toMatch(/^Matched seed uncertainty ±0\.25 kcal\/mol \(3 runs at 5 ps on Amber 26 PMEMD \(2026\), differing only in the seed\) is the error bar for this run's estimate\. Project dispersion: SD 0\.64 kcal\/mol across 13 mixed-condition runs/); expect(e.uncertainty_statement).toMatch(/matched-length SD .*: 5 ps: n=3, SD ±/);
     expect(e.warning_note).toMatch(/kcal\/mol per frame/); expect(e.sign_claim.all_runs).toMatch(/^all 13/i);
   });
 });
@@ -341,9 +341,9 @@ describe("review batch 2026-08-29 (workflow findings)", () => {
   });
   it("explain_result names the stratum, gates the 'dominates' clause on the ratio", () => {
     const e = explainResult(B, idx, true) as any;
-    expect(e.which_uncertainty_to_quote).toMatch(/≥ 10 ps stratum alone gives ±0\.67, n=9/);
-    expect(e.which_uncertainty_to_quote).toMatch(/dominates|comparable|not distinguishable/);
-    const e3 = explainResult(load("1l2y-rep3"), idx, true) as any; expect(e3.which_uncertainty_to_quote).not.toMatch(/1\.0× the corrected SEM, so run-to-run variation, not frame noise, dominates/);
+    expect(e.uncertainty_statement).toMatch(/≥ 10 ps stratum alone gives ±0\.67, n=9/);
+    expect(e.uncertainty_statement).toMatch(/dominates|comparable|not distinguishable/);
+    const e3 = explainResult(load("1l2y-rep3"), idx, true) as any; expect(e3.uncertainty_statement).not.toMatch(/1\.0× the corrected SEM, so run-to-run variation, not frame noise, dominates/);
   });
   it("recompute_result: discard_ps beyond the run names the argument and the length", () => {
     expect(() => recomputeResult(A, { discard_ps: 100 })).toThrow(/discard_ps 100 ≥ the 5 ps production length/);
@@ -373,11 +373,11 @@ describe("confidence ladder", () => {
     expect(L.rungs.map(r => r.rung)).toEqual(["recomputable", "repeatable", "independently replicated", "robust to analysis-window choices", "externally supported"]);
     expect(by["recomputable"].status).toBe("verified"); expect(by["recomputable"].evidence).toMatch(/re-derived here/); expect(L.summary).toMatch(/^2 of 4 assessable rungs verified \(recomputable, robust/); expect(L.summary).toMatch(/1 partly established \(independently replicated/);
     expect(by["repeatable"].status).toBe("expected"); expect(by["repeatable"].evidence).toMatch(/3\/3 dynamics stages/);
-    expect(by["independently replicated"].status).toBe("partly established"); expect(by["independently replicated"].evidence).toMatch(/13 runs of the same prepared system and production protocol with distinct realized seeds/); expect(by["independently replicated"].short).toBe("seed-replicated ✓ (13 same-protocol runs, 2–30 ps) · at 30 ps on Amber 26 PMEMD (2026): 2 of 3 needed ✗ · 4 cross-engine at 30 ps not counted"); expect(by["independently replicated"].to_climb).toBe("1 more independent run at 30 ps on Amber 26 PMEMD (2026) (fork_experiment kind='replicate')");
+    expect(by["independently replicated"].status).toBe("partly established"); expect(by["independently replicated"].evidence).toMatch(/13 runs of the same prepared system and production protocol with distinct realized seeds/); expect(by["independently replicated"].short).toBe("matched-condition seed replication not established: 2 of 3 runs at 30 ps on Amber 26 PMEMD (2026) · 4 cross-engine at 30 ps not counted · sign consistent across 13 heterogeneous runs (2–30 ps)"); expect(by["independently replicated"].to_climb).toBe("1 more independent run at 30 ps on Amber 26 PMEMD (2026) (fork_experiment kind='replicate')");
     // replication of THIS run's number means the same engine as well as the same length: the four SANDER reruns at
     // 30 ps are disclosed as cross-engine and not counted, so rep4 stands at 2 of 3 on PMEMD and says which run it lacks
     expect(by["independently replicated"].evidence).toMatch(/at its own length \(30 ps\) on its own engine \(Amber 26 PMEMD \(2026\)\): 2 runs — fewer than the 3 needed\. 4 more runs at 30 ps were produced by Amber 24 SANDER \(2024\): same &cntrl and GB model, different integrator — disclosed as cross-engine reruns, not counted/);
-    const reg = confidenceLadderFull(A, idx).rungs[2]; expect(reg.status).toBe("verified"); expect(reg.short).toMatch(/at 5 ps on Amber 26 PMEMD \(2026\): 3 of 3 needed ✓/);
+    const reg = confidenceLadderFull(A, idx).rungs[2]; expect(reg.status).toBe("verified"); expect(reg.short).toMatch(/^matched-condition seed replication ✓: 3 runs at 5 ps on Amber 26 PMEMD \(2026\) · sign consistent across 13 heterogeneous runs/);
     expect(reg.evidence).not.toMatch(/cross-engine/);  // 5 ps runs are all one engine; nothing to disclose
     // were every run on one engine, the six 30 ps runs would verify the rung, and the matched-length spread (±0.80,
     // wider than the ±0.64 pooled) is what the rung would report — the pooled number never stands in for it
@@ -390,7 +390,7 @@ describe("confidence ladder", () => {
     const twoAt30 = idx.filter((r: any) => r.production_ps !== 30 || ["1l2y-rep4", "1l2y-rep6"].includes(r.id));
     const partly = confidenceLadderFull(B, twoAt30).rungs[2];
     expect(partly.status).toBe("partly established");
-    expect(partly.short).toBe("seed-replicated ✓ (9 same-protocol runs, 2–30 ps) · at 30 ps on Amber 26 PMEMD (2026): 2 of 3 needed ✗"); expect(partly.evidence).not.toMatch(/cross-engine/);
+    expect(partly.short).toBe("matched-condition seed replication not established: 2 of 3 runs at 30 ps on Amber 26 PMEMD (2026) · sign consistent across 9 heterogeneous runs (2–30 ps)"); expect(partly.evidence).not.toMatch(/cross-engine/);
     expect(partly.evidence).toMatch(/at its own length \(30 ps\) on its own engine \(Amber 26 PMEMD \(2026\)\): 2 runs — fewer than the 3 needed/);
     expect(partly.to_climb).toBe("1 more independent run at 30 ps on Amber 26 PMEMD (2026) (fork_experiment kind='replicate')");
     expect(confidenceLadderFull(B, twoAt30).summary).toMatch(/1 partly established \(independently replicated/);
@@ -478,10 +478,10 @@ describe("judge pass 46ca5ba fixes", () => {
   it("explain_result: brief rounds to the precision it defends, ranks the run in its ensemble, names the ensemble mean ± SEM", () => {
     const e = explainResult(B, idx, true) as any;
     expect(e.brief).toMatch(/^ΔG = -19\.1953 kcal\/mol for this run \(single-trajectory MM-GBSA, 100 frames of 30 ps\)\. Project dispersion: SD 0\.64/); expect(e.brief).not.toMatch(/± 0\.6 kcal/);
-    expect(e.this_run_vs_ensemble).toMatchObject({ rank_most_negative: 1, n: 13 }); expect(e.this_run_vs_ensemble.z_vs_ensemble_mean).toBeLessThan(-1.5);
-    expect(e.brief).toMatch(/This run is 1 of 13 .* vs the ensemble mean -17\.85 ± 0\.18 \(SEM, n=13\)/);
+    expect(e.this_run_vs_project).toMatchObject({ rank_most_negative: 1, n: 13, project_mean: -17.85, project_sd: 0.64 }); expect(e.this_run_vs_project.standardized_offset).toBeLessThan(-1.5); expect(e.this_run_vs_project).not.toHaveProperty("ensemble_sem"); expect(e).not.toHaveProperty("this_run_vs_ensemble");
+    expect(e.brief).toMatch(/This run is 1 of 13 \(most negative first\); standardized offset -\d\.\d+ from the project mean -17\.85 \(SD 0\.64, n=13\) — descriptive across a mixed-condition cohort, not a test\./);
     expect(e.run_to_run.caveat).toMatch(/from one prepared start/); expect(e.sign_claim.all_runs).toMatch(/consistent across all 13 runs/);
-    expect((explainResult(C, idx, true) as any).this_run_vs_ensemble).toBeNull();
+    expect((explainResult(C, idx, true) as any).this_run_vs_project).toBeNull();
   });
   it("plan_sampling: a run already ≥ min_run_ps whose target is not met gets an 'extend this run alone' suggested edit; a met target gets none", () => {
     // the default target is now met on the ≥10 ps stratum (n=9, SD 0.67), so name a tighter one to exercise the
@@ -533,7 +533,7 @@ describe("Codex judge ff85e2f fixes", () => {
     expect(p.recommendation).toMatch(/plug-in estimate; ±1 SE on the SD gives n = \d+–\d+/);
     expect(confidenceLadderFull(B, idx).rungs[3].rung).toBe("robust to analysis-window choices");
     const e = explainResult(C, idx, true) as any; expect(e.brief).toMatch(/does not estimate run-to-run uncertainty/); expect(e.brief).not.toMatch(/understates/);
-    expect((explainResult(B, idx, true) as any).this_run_vs_ensemble.note).toMatch(/conditional on this short-run ensemble/);
+    expect((explainResult(B, idx, true) as any).this_run_vs_project.note).toMatch(/^descriptive: .* not a test statistic/);
   });
 });
 
@@ -541,10 +541,10 @@ describe("Codex judge ff85e2f fixes", () => {
 describe("compact by default, detail on request", () => {
   it("explain_result: compact carries the brief and the deciding numbers; detail:true is the full record and is much larger", () => {
     const c = explainResult(B, idx) as any, f = explainResult(B, idx, true) as any;
-    expect(c.brief).toBe(f.brief); expect(c.uncertainty_to_quote).toMatchObject({ run_to_run_sd: 0.645, n: 13, production_ps: [2, 5, 10, 20, 30] }); expect(c.within_run.corrected_sem).toBe(f.uncertainty.corrected_sem);
+    expect(c.brief).toBe(f.brief); expect(c.project_dispersion).toMatchObject({ sd: 0.645, n: 13, production_ps: [2, 5, 10, 20, 30] }); expect(c.project_dispersion.note).toMatch(/descriptive/); expect(c).not.toHaveProperty("uncertainty_to_quote"); expect(c).not.toHaveProperty("within_run"); expect(c.matched_seed_uncertainty).toMatchObject({ n: 2, needed: 3, sd: null }); expect(c.within_run_frame_noise.note).toMatch(/frame noise/); expect(c.within_run_frame_noise.corrected_sem).toBe(f.uncertainty.corrected_sem);
     expect(typeof c.sign_claim).toBe("string"); expect(c.detail).toMatch(/detail: true/); expect(c.uncertainty).toBeUndefined(); expect(c.provenance).toBeUndefined();
     expect(JSON.stringify(c).length).toBeLessThan(JSON.stringify(f).length / 2); expect(f.uncertainty.block_averaging).toBeTruthy();
-    expect((explainResult(C, idx) as any).uncertainty_to_quote).toBeNull();
+    expect((explainResult(C, idx) as any).project_dispersion).toBeNull(); expect((explainResult(C, idx) as any).matched_seed_uncertainty.n).toBe(1);
   });
   it("plan_sampling and confidence_ladder: compact keeps what an agent acts on; detail adds tables/evidence", () => {
     const c = planSampling(A, idx, {}) as any, f = planSampling(A, idx, { detail: true }) as any;
@@ -619,7 +619,7 @@ describe("the rerun bundle reproduces the number, not just the trajectory", () =
 });
 
 describe("fork network", () => {
-  it("1l2y-rep4 has four replicate forks on SANDER; the parent sits beyond 2 run-to-run SDs, reported as tension with the engine confound named", () => {
+  it("1l2y-rep4 has four replicate forks on SANDER; the parent sits beyond 2 project-dispersion SDs, reported as a cross-engine shift with the confound named", () => {
     const net = forkNetwork(idx, "1l2y-rep4");
     expect(net.forks.map(f => f.id)).toEqual(["1l2y-rep4-ice1", "1l2y-rep4-ice2", "1l2y-rep4-ice3", "1l2y-rep4-ice4"]);
     expect(net.forks.every(f => f.kind === "replicate" && f.seed === "fresh" && f.production_ps === 30)).toBe(true);
@@ -627,10 +627,10 @@ describe("fork network", () => {
     const g = net.forks.map(f => f.delta_g); const mean = g.reduce((a, b) => a + b, 0) / 4;
     expect(net.fork_mean).toBeCloseTo(mean, 6);
     expect(net.parent_offset_kcal).toBeCloseTo(-19.1953 - mean, 6);
-    expect(net.run_to_run_sd).toBeCloseTo(ensemble(idx, "1l2y-rep4").all.sd!, 9);
+    expect(net.project_dispersion_sd).toBeCloseTo(ensemble(idx, "1l2y-rep4").all.sd!, 9); expect(net).not.toHaveProperty("run_to_run_sd");
     expect(net.sign_agrees).toBe(true);
-    expect(Math.abs(net.parent_offset_sd!)).toBeGreaterThan(2);
-    expect(net.status).toBe("tension");
+    expect(Math.abs(net.parent_offset_over_project_dispersion!)).toBeGreaterThan(2);
+    expect(net.status).toBe("cross_engine_shift");
     expect(net.verdict).toMatch(/Shifted by more than that dispersion: an observed shift, not a test of significance/); expect(net.verdict).toMatch(/engine and seed changed together, so significance and cause cannot yet be determined/); expect(net.verdict).toMatch(/same sign/); expect(net.verdict).not.toMatch(/Beyond 2 SDs of the cohort/);
   });
   it("a run with no forks says so and points at fork_experiment; a fork itself has no network", () => {
@@ -641,6 +641,12 @@ describe("fork network", () => {
   });
   it("forkNetworks lists exactly the parents that have forks on the site", () => {
     expect(forkNetworks(idx).map(n => [n.parent.id, n.n])).toEqual([["1l2y-rep4", 4]]);
+  });
+  it("a shift on one engine is status shift, and the machine-readable contract never says tension", () => {
+    const one = idx.map(r => ({ ...r, engine: "Amber 26 PMEMD (2026)" }));
+    const net = forkNetwork(one, "1l2y-rep4");
+    expect(net.status).toBe("shift"); expect(net.verdict).toMatch(/Same engine and length, so the seed is the only thing that changed/);
+    expect(JSON.stringify(forkNetwork(idx, "1l2y-rep4"))).not.toMatch(/tension/);
   });
   it("agree: a parent within 2 SDs of its forks", () => {
     const fake = idx.map(r => r.id === "1l2y-rep4" ? { ...r, delta_g: -17.5 } : r);
@@ -684,7 +690,7 @@ describe("projects", () => {
     expect(p.by_owner).toEqual([{ handle: "kevin", n: 9 }, { handle: "pace-ice", n: 4 }]);
     expect(p.external_forks).toBe(4); expect(p.fork_owners).toEqual(["pace-ice"]);
     expect(p.engines).toEqual([{ engine: "Amber 26 PMEMD (2026)", n: 9 }, { engine: "Amber 24 SANDER (2024)", n: 4 }]);
-    expect(p.network?.status).toBe("tension"); expect(p.network?.parent.id).toBe("1l2y-rep4");
+    expect(p.network?.status).toBe("cross_engine_shift"); expect(p.network?.parent.id).toBe("1l2y-rep4");
     const q = projectSummary(idx, "3htb-jz4"); expect(q.cohort.n).toBe(1); expect(q.network).toBeNull(); expect(q.external_forks).toBe(0);
   });
   it("protocolPairs re-reads the index's protocol key and drops unset entries", () => {
@@ -769,7 +775,7 @@ describe("seed-only spread", () => {
     expect(e.seed_only.note).toMatch(/not yet estimated: 2 of 3 runs at 30 ps on Amber 26 PMEMD \(2026\); the pooled spread across lengths and engines is not a substitute/);
     expect(e.matched.n).toBe(2); expect(e.caveat).toMatch(/and so do engines/); expect(e.caveat).toMatch(/not seed noise/);
     const x = explainResult(load("1l2y-rep4"), idx) as any;
-    expect(x.seed_only_spread).toEqual(e.seed_only);
+    expect(x.matched_seed_uncertainty).toEqual(e.seed_only);
     expect(x.brief).toMatch(/^ΔG = -19\.1953 kcal\/mol for this run/); expect(x.brief).not.toMatch(/ΔG = -19\.2 ± /); expect(x.brief).toMatch(/Project dispersion: SD 0\.64 across 13 mixed-condition runs .* descriptive, not this run's error bar\. Matched seed uncertainty is not established \(2 of 3 runs at 30 ps on Amber 26 PMEMD \(2026\)\); this run has no error bar yet\./);
   });
   it("ice1: the four SANDER reruns at 30 ps differ in nothing but the seed, so a seed-only spread exists", () => {
