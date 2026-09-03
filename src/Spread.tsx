@@ -4,7 +4,7 @@ import type { IndexEntry, Owners } from "./lib/types";
 const fmt = (n: number) => n.toFixed(2);
 const PALETTE = [{ fill: "var(--navy)", word: "navy" }, { fill: "var(--warn)", word: "amber" }, { fill: "var(--pass)", word: "green" }];
 
-/** The spread as an object: one dot per run on the ΔG axis, the band is mean ± run-to-run SD, the ring marks the run
+/** The spread as an object: one dot per run on the ΔG axis, the band is mean ± SD across these runs, a dispersion, the ring marks the run
     the page starts from. Every dot is an index entry (a number read from that run's mmgbsa.dat); mean and SD are the
     cohort's, computed from the same entries. Nothing is drawn that is not one of those numbers. */
 export function Spread({ runs, mean, sd, own, ringId, ringWhy }: { runs: IndexEntry[]; mean: number | null; sd: number | null; own?: Owners | null; ringId?: string | null; ringWhy?: string }) {
@@ -52,6 +52,6 @@ export function Spread({ runs, mean, sd, own, ringId, ringWhy }: { runs: IndexEn
       <text x={`${X(min)}%`} y={H - 4} textAnchor="middle">{fmt(min)}</text>
       <text x={`${X(max)}%`} y={H - 4} textAnchor="middle">{fmt(max)}</text>
     </svg>
-    <figcaption>One dot per run, ΔG in kcal/mol: {owners.map((o, i) => <span key={o}>{i ? " · " : ""}<span className="sw" style={{ background: swatch(o).fill }} aria-hidden="true" />{nameOf(o)}</span>)}{sd != null ? " · dashed line: mean · band: ± run-to-run SD" : " · dashed line: mean"}{ring ? <> · ring: <span className="mono">{ring}</span>{ringWhy ? `, ${ringWhy}` : ""}</> : null}</figcaption>
+    <figcaption>One dot per run, ΔG in kcal/mol: {owners.map((o, i) => <span key={o}>{i ? " · " : ""}<span className="sw" style={{ background: swatch(o).fill }} aria-hidden="true" />{nameOf(o)}</span>)}{sd != null ? " · dashed line: mean · band: mean ± SD across these runs, a dispersion" : " · dashed line: mean"}{ring ? <> · ring: <span className="mono">{ring}</span>{ringWhy ? `, ${ringWhy}` : ""}</> : null}</figcaption>
   </figure>;
 }

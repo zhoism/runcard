@@ -235,8 +235,8 @@ export function forkNetwork(idx: IndexEntry[], id: string): ForkNetwork {
   const signText = sign_agrees == null ? "" : sign_agrees ? `All ${n} forks give the same sign as the parent (ΔG < 0).` : `The forks do not all share the parent's sign.`;
   const verdict = n === 0 ? "No forks yet. fork_experiment prepares a bundle; an executed rerun extracted as a card joins this network."
     : status === "sign" ? `${signText} Fork mean ${fork_mean != null ? r2(fork_mean) : "—"} kcal/mol; no run-to-run SD is available to judge the spread.`
-    : `${signText} Fork mean ${r2(fork_mean!)} ± ${fork_sd != null ? r2(fork_sd) : "—"} kcal/mol (n=${g.length}); the parent (${r2(me.delta_g)}) sits ${r1(Math.abs(parent_offset_kcal!))} kcal/mol ${parent_offset_kcal! < 0 ? "below" : "above"} it, ${r1(Math.abs(parent_offset_sd!))}× the run-to-run SD (±${r2(run_to_run_sd!)}). ` +
-      (status === "agree" ? "Within 2 SDs of the cohort's observed spread: the forks reproduce the parent within that spread." : `Beyond 2 SDs of the cohort's observed spread: the forks are shifted from the parent by more than that spread.${crossEngine ? ` The engines differ (${engines.parent} vs ${engines.forks.join(", ")}), so engine and seed effects are confounded and this record cannot attribute the shift; a same-engine fork would separate them.` : " Same engine and length, so the seed is the only thing that changed."}`);
+    : `${signText} Fork mean ${r2(fork_mean!)} ± ${fork_sd != null ? r2(fork_sd) : "—"} kcal/mol (n=${g.length}); the parent (${r2(me.delta_g)}) sits ${r1(Math.abs(parent_offset_kcal!))} kcal/mol ${parent_offset_kcal! < 0 ? "below" : "above"} it, ${r1(Math.abs(parent_offset_sd!))}× the project dispersion (SD ±${r2(run_to_run_sd!)} across the mixed cohort, which contains these forks). ` +
+      (status === "agree" ? "Within that dispersion: an observed agreement, not a test of significance." : `Shifted by more than that dispersion: an observed shift, not a test of significance.${crossEngine ? ` The engines differ (${engines.parent} vs ${engines.forks.join(", ")}): engine and seed changed together, so significance and cause cannot yet be determined; a same-engine fork would separate them.` : " Same engine and length, so the seed is the only thing that changed; matched replicates would say whether the shift exceeds seed spread."}`);
   return { parent: node(me), forks, n, fork_mean, fork_sd, parent_offset_kcal, parent_offset_sd, run_to_run_sd, sign_agrees, engines, status, verdict };
 }
 /** Every parent that has at least one fork on the site, largest network first. */
@@ -364,7 +364,7 @@ export function planSampling(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}
   const full = planSamplingFull(m, idx, opts);
   if (opts.detail) return full;
   return { label: full.label, run: full.run, target_uncertainty_kcal: full.target_uncertainty_kcal, recommendation: full.recommendation,
-    run_to_run: { planned_on: full.run_to_run.planned_on, n_now: full.run_to_run.n_now, sd_used: full.run_to_run.sd_used, sem_of_mean_now: full.run_to_run.sem_of_mean_now, n_needed: full.run_to_run.n_needed, n_needed_range: full.run_to_run.n_needed_range, additional_runs: full.run_to_run.additional_runs, target_met: full.run_to_run.target_met },
+    run_to_run: { planned_on: full.run_to_run.planned_on, matched: full.run_to_run.matched, matched_runs_needed: full.run_to_run.matched_runs_needed, scale: full.run_to_run.scale, n_now: full.run_to_run.n_now, sd_used: full.run_to_run.sd_used, sem_of_mean_now: full.run_to_run.sem_of_mean_now, n_needed: full.run_to_run.n_needed, n_needed_range: full.run_to_run.n_needed_range, additional_runs: full.run_to_run.additional_runs, target_met: full.run_to_run.target_met },
     within_run: { corrected_sem_now: full.within_run.this_run.corrected_sem, verdict: full.within_run.this_run.verdict, expected_length_for_target_ps: full.within_run.expected_length_for_target_ps, expected_length_note: full.within_run.expected_length_note },
     recommended_run_ps: full.recommended_run_ps, suggested_edits: full.suggested_edits, rerun_note: full.rerun_note, assumptions: full.assumptions,
     detail: "compact by default; call with detail: true for the per-length SEM table, strata, formulas and method" };
@@ -383,8 +383,15 @@ function planSamplingFull(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}) {
   // unrounded inputs for the projection so at_current_length reproduces corrected_sem exactly
   const SD = sd(pf.delta_total, 0), g = statisticalInefficiency(pf.delta_total), dPs = L0 / pf.delta_total.length;
   // run-to-run
-  const plannedOn: "long" | "all" | null = ens.long.n >= 3 ? "long" : ens.all.sd != null ? "all" : null;
-  const st: Stratum | null = plannedOn ? ens[plannedOn] : null;
+  // The SD that sizes an ensemble must describe a defined protocol: runs at one length on one engine, differing only in
+  // the seed. Below SEED_MIN_RUNS of those there is no plan, only a statement of what is missing; the mixed cohort's SD
+  // is reported for scale and never substituted.
+  const matchedOk = ens.matched.n >= SEED_MIN_RUNS && ens.matched.sd != null;
+  const plannedOn: "matched" | null = matchedOk ? "matched" : null;
+  const scaleOn: "long" | "all" | null = ens.long.n >= 3 ? "long" : ens.all.sd != null ? "all" : null;
+  const scaleSt: Stratum | null = scaleOn ? ens[scaleOn] : null;
+  const matchedNeeded = Math.max(0, SEED_MIN_RUNS - ens.matched.n);
+  const st: Stratum | null = plannedOn ? ens.matched : null;
   const s = st?.sd ?? null, nNow = st?.n ?? null;
   const semNow = s != null && nNow ? s / Math.sqrt(nNow) : null;
   const nNeeded = s != null ? Math.ceil((s / T) ** 2) : null;
@@ -426,13 +433,16 @@ function planSamplingFull(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}) {
     note: "Data for propose_change; nothing has been proposed. This is the single-run route; the run-to-run recommendation above is the primary one.",
   } : null;
   const rerunNote = suggested ? null : `This run is already ≥ ${Lrec} ps${targetMet ? " and the target is met" : ""}; independent samples need no &cntrl edit — generate_rerun_bundle with seed='fresh' (ig=-1) for each new run.`;
+  const scaleNote = scaleSt?.sd != null ? ` For scale only: the project dispersion across ${scaleSt.n} mixed-condition runs (SD ${round(scaleSt.sd, 2)}) would imply n ≈ ${Math.ceil((scaleSt.sd / T) ** 2)} for ±${T}, but that SD mixes lengths${ens.engines.length > 1 ? " and engines" : ""} and does not describe a defined protocol.` : "";
   const recommendation = plannedOn == null
-    ? `expected: no run-to-run estimate — this is the only run of its prepared system. Within this run the corrected SEM is ${unc.corrected_sem} kcal/mol at ${L0} ps; ${lengthForTarget != null ? `one run would reach ±${T} at ≈ ${lengthForTarget} ps (expected, stationary)` : `no single-run length is projected (verdict: ${unc.verdict})`}. Seed-to-seed spread cannot be estimated from one run: at least 3 independent runs (ig=-1) of ≥ ${Lrec} ps are needed before an ensemble uncertainty can be quoted.`
+    ? ens.all.n < 2
+      ? `expected: no run-to-run estimate — this is the only run of its prepared system. Within this run the corrected SEM is ${unc.corrected_sem} kcal/mol at ${L0} ps; ${lengthForTarget != null ? `one run would reach ±${T} at ≈ ${lengthForTarget} ps (expected, stationary)` : `no single-run length is projected (verdict: ${unc.verdict})`}. Seed-to-seed spread cannot be estimated from one run: at least ${SEED_MIN_RUNS} independent runs (ig=-1) of ≥ ${Lrec} ps on this engine are needed before an ensemble uncertainty can be quoted.`
+      : `expected: insufficient matched data — ${ens.matched.n} of ${SEED_MIN_RUNS} runs at ${L0} ps on ${ens.matched.engine}. Run ${matchedNeeded} more matched replicate${matchedNeeded === 1 ? "" : "s"} (ig=-1, ${L0} ps, same engine) before the ensemble can be sized.${scaleNote} Within this run the corrected SEM is ${unc.corrected_sem} kcal/mol at ${L0} ps; ${lengthForTarget != null ? `one run alone would reach ±${T} at ≈ ${lengthForTarget} ps (expected, stationary)` : `no single-run length is projected (verdict: ${unc.verdict})`}.`
     : targetMet
-      ? `expected: target ±${T} kcal/mol on the ensemble mean is already met on the ${plannedOn} stratum (n=${nNow}, SD ${round(s!, 2)}, SEM of mean ${round(semNow!, 2)}); 0 more runs needed.`
-      : `expected: ${additional} more independent run${additional === 1 ? "" : "s"} (ig=-1) of ≥ ${Lrec} ps each → n=${nNeeded}${nNeededRange ? ` (plug-in estimate; ±1 SE on the SD gives n = ${nNeededRange.low}–${nNeededRange.high})` : ""}, SEM of the ensemble mean ≈ ${round(semAfter!, 2)} ≤ ${T} kcal/mol. ${lengthForTarget != null ? `Extending this run alone reaches ±${T} at ≈ ${lengthForTarget} ps (expected)` : `No single-run length is projected for this run (verdict: ${unc.verdict})`}; run-to-run SD ${round(s!, 2)} is ${spreadOverWithin}× this run's corrected SEM, ${spreadOverWithin! >= 2 ? "so seed spread, not frame noise, limits the estimate" : spreadOverWithin! >= 1.2 ? "so seed spread and frame noise are comparable" : "so the run-to-run spread is not distinguishable from this run's frame noise"}.`;
+      ? `expected: target ±${T} kcal/mol on the ensemble mean is already met on the matched stratum (n=${nNow} at ${L0} ps on ${ens.matched.engine}, SD ${round(s!, 2)}, SEM of mean ${round(semNow!, 2)}); 0 more runs needed.`
+      : `expected: ${additional} more independent run${additional === 1 ? "" : "s"} (ig=-1) of ≥ ${Lrec} ps each → n=${nNeeded}${nNeededRange ? ` (plug-in estimate; ±1 SE on the SD gives n = ${nNeededRange.low}–${nNeededRange.high})` : ""}, SEM of the ensemble mean ≈ ${round(semAfter!, 2)} ≤ ${T} kcal/mol. ${lengthForTarget != null ? `Extending this run alone reaches ±${T} at ≈ ${lengthForTarget} ps (expected)` : `No single-run length is projected for this run (verdict: ${unc.verdict})`}; the matched seed SD ${round(s!, 2)} is ${spreadOverWithin}× this run's corrected SEM, ${spreadOverWithin! >= 2 ? "so seed spread, not frame noise, limits the estimate" : spreadOverWithin! >= 1.2 ? "so seed spread and frame noise are comparable" : "so the seed spread is not distinguishable from this run's frame noise"}.`;
   const assumptions = [
-    plannedOn ? `The sample SD across the ${plannedOn} stratum (${nNow} runs) holds for new runs of ≥ ${Lrec} ps; it includes within-run noise (not decomposed), so it may shrink slightly with longer runs — not modelled.` : "No run-to-run SD is available from a single run.",
+    plannedOn ? `The sample SD across the matched stratum (${nNow} runs at ${L0} ps on ${ens.matched.engine}) holds for new runs of the same length on the same engine; it includes within-run noise (not decomposed), so it may shrink slightly with longer runs — not modelled.` : ens.all.n < 2 ? "No run-to-run SD is available from a single run." : `No matched seed SD is available yet (${ens.matched.n} of ${SEED_MIN_RUNS} runs at ${L0} ps on ${ens.matched.engine}); the project dispersion is not used to size the ensemble.`,
     "New runs are independent samples (ig=-1) of the same prepared system and protocol.",
     `Within-run projection assumes stationarity: the same per-frame SD (${unc.per_frame_sd}), statistical inefficiency g (${unc.statistical_inefficiency_g}; τ ≈ ${unc.integrated_autocorrelation_time_ps} ps) and output cadence Δ = ${round(dPs, 3)} ps/frame at any length.`,
     ...(unc.verdict !== "no drift detected" ? [`This run's convergence verdict is '${unc.verdict}', so its τ and SD are less reliable inputs.`] : []),
@@ -440,9 +450,11 @@ function planSamplingFull(m: Manifest, idx: IndexEntry[], opts: PlanOpts = {}) {
   ];
   return {
     label: "expected" as const, run: m.id, target_uncertainty_kcal: T,
-    what_the_target_means: "the standard error of the ensemble-mean ΔG (run-to-run SD / √n): how well the mean over independent runs is pinned down — not the spread to quote for a single run (explain_result gives that)",
+    what_the_target_means: "the standard error of the ensemble-mean ΔG (matched seed SD / √n): how well the mean over same-engine, same-length replicates is pinned down — not the spread of any single run (explain_result gives that)",
     min_run_ps: minPs,
-    run_to_run: { planned_on: plannedOn, strata: { all: stratumRow(ens.all), long: { min_ps: ens.long.min_ps, ...stratumRow(ens.long) } },
+    run_to_run: { planned_on: plannedOn, matched: { engine: ens.matched.engine, production_ps: ens.matched.production_ps, n: ens.matched.n, needed: SEED_MIN_RUNS, sd: matchedOk ? round(ens.matched.sd!) : null }, matched_runs_needed: matchedNeeded,
+      scale: scaleSt?.sd != null ? { stratum: scaleOn, n: scaleSt.n, sd: round(scaleSt.sd), n_needed_for_scale: Math.ceil((scaleSt.sd / T) ** 2), note: "descriptive: mixes lengths and engines; not used to size the ensemble" } : null,
+      strata: { all: stratumRow(ens.all), long: { min_ps: ens.long.min_ps, ...stratumRow(ens.long) }, matched: stratumRow(ens.matched) },
       sd_used: s != null ? round(s) : null, n_now: nNow, sem_of_mean_now: semNow != null ? round(semNow) : null, n_needed: nNeeded, n_needed_range: nNeededRange, additional_runs: additional,
       expected_sem_of_mean_after: semAfter != null ? round(semAfter) : null, target_met: targetMet, sign_claim: signClaim(st ?? ens.all) },
     within_run: { this_run: { production_ps: L0, per_frame_sd: unc.per_frame_sd, g: unc.statistical_inefficiency_g, tau_ps: unc.integrated_autocorrelation_time_ps, frame_interval_ps: round(dPs, 3), corrected_sem: unc.corrected_sem, n_eff: unc.n_eff, verdict: unc.verdict },
@@ -486,13 +498,16 @@ function explainResultFull(m: Manifest, idx: IndexEntry[]) {
   const entropyNote = mm.params?.entropy === "0" ? "No entropy term (entropy=0) and a single trajectory (no ligand/receptor strain): this is an effective interaction energy for ranking poses or ligands, not an absolute binding free energy." : null;
   const spreadSd = ens.all.sd;
   // Name the stratum: explain_result quotes the all-runs SD; plan_sampling plans on the ≥ LONG_RUN_MIN_PS ps stratum when it has ≥ 3 runs. Say both so the two tools do not appear to disagree.
-  const stratumNote = ens.long.sd != null && ens.long.n < ens.all.n ? `; the ≥ ${LONG_RUN_MIN_PS} ps stratum alone gives ±${ens.long.sd.toFixed(2)}, n=${ens.long.n}, which is what plan_sampling plans on` : "";
+  const stratumNote = ens.long.sd != null && ens.long.n < ens.all.n ? `; the ≥ ${LONG_RUN_MIN_PS} ps stratum alone gives ±${ens.long.sd.toFixed(2)}, n=${ens.long.n}` : "";
+  const so = ens.seed_only;
+  const matchedLine = so.sd != null ? `Matched seed uncertainty ±${so.sd.toFixed(2)} kcal/mol (${so.n} runs at ${so.production_ps} ps on ${so.engine}, differing only in the seed) is the error bar for this run's estimate.` : `Matched seed uncertainty is not established (${so.n} of ${so.needed} runs at ${so.production_ps} ps on ${so.engine}); this run has no error bar yet.`;
+  const lengthsList = [...new Set(ens.all.runs.map(r => r.production_ps))].sort((a, b) => a - b).join(", ");
   const ratio = unc && spreadSd != null ? spreadSd / unc.corrected_sem : null;
   const dominates = ratio == null ? "" : ratio >= 2 ? "so run-to-run variation, not frame noise, dominates" : ratio >= 1.2 ? "so run-to-run variation and frame noise are comparable" : "so the run-to-run spread is not distinguishable from this run's frame noise";
   const byLen = new Map<number, IndexEntry[]>(); for (const r of ens.all.runs.map(x => idx.find(y => y.id === x.id)!).filter(Boolean)) byLen.set(r.production_ps, [...(byLen.get(r.production_ps) ?? []), r]);
   const matchedSd = [...byLen.entries()].filter(([, rs]) => rs.length >= 3).map(([ps, rs]) => `${ps} ps: n=${rs.length}, SD ±${stratum(rs).sd?.toFixed(2)}`);
   const which = unc && spreadSd != null
-    ? `Quote ±${spreadSd.toFixed(2)} kcal/mol — the observed run-to-run spread over all ${ens.all.n} runs of this system at mixed production lengths${ens.engines.length > 1 ? ` and ${ens.engines.length} engines` : ""}${stratumNote}${matchedSd.length ? `; matched-length SD where ≥ 3 runs share a length: ${matchedSd.join("; ")}` : ""} — as the spread to quote for a single run's ΔG. Seed-only spread at ${ens.seed_only.production_ps} ps on ${ens.seed_only.engine}: ${ens.seed_only.sd != null ? `±${ens.seed_only.sd.toFixed(2)} over ${ens.seed_only.n} runs` : `not yet estimated (${ens.seed_only.n} of ${ens.seed_only.needed} runs)`}. Within this run the correlation-corrected SEM is ${unc.corrected_sem} (N_eff ≈ ${unc.n_eff} of ${unc.n_frames} frames); the naive per-frame SEM ${unc.per_frame_sem} is ${(unc.corrected_sem / unc.per_frame_sem).toFixed(1)}× too small. Run-to-run spread is ${ratio!.toFixed(1)}× the corrected SEM, ${dominates}.`
+    ? `${matchedLine} Project dispersion: SD ${spreadSd.toFixed(2)} kcal/mol across ${ens.all.n} mixed-condition runs (production ${lengthsList} ps${ens.engines.length > 1 ? `, ${ens.engines.length} engines` : ""}${stratumNote}${matchedSd.length ? `; matched-length SD where ≥ 3 runs share a length: ${matchedSd.join("; ")}` : ""}) — descriptive, not this run's uncertainty. Within this run the correlation-corrected SEM is ${unc.corrected_sem} (N_eff ≈ ${unc.n_eff} of ${unc.n_frames} frames); the naive per-frame SEM ${unc.per_frame_sem} is ${(unc.corrected_sem / unc.per_frame_sem).toFixed(1)}× too small; it describes frame noise only. The project dispersion is ${ratio!.toFixed(1)}× the corrected SEM, ${dominates}.`
     : unc ? `Within this run the correlation-corrected SEM is ${unc.corrected_sem}; it does not estimate run-to-run uncertainty — no other runs of this system exist to estimate that spread.` : "per-frame data not archived for this run; only MMPBSA.py's naive SEM is available.";
   // Where this run sits among its peers: rank, z-score vs the ensemble mean, and the ensemble mean ± SEM as the protocol-level estimate.
   const peersSorted = [...ens.all.runs].sort((a, b) => a.delta_g - b.delta_g);
@@ -503,9 +518,9 @@ function explainResultFull(m: Manifest, idx: IndexEntry[]) {
     note: `the ensemble mean ± SEM is the estimate for this protocol conditional on this short-run ensemble (${[...new Set(ens.all.runs.map(r => r.production_ps))].sort((a, b) => a - b).join("–")} ps from one prepared start; between-run variation with seeds, lengths and engines differing, not a survey of conformational space); this run's value is one draw from the run-to-run spread` } : null;
   const brief = [
     spreadSd != null
-      ? `ΔG = ${round(mm.delta_total_kcal_mol, 1)} ± ${round(spreadSd, 1)} kcal/mol for this run (single-trajectory MM-GBSA, ${mm.frames} frames of ${prod?.length_ps ?? "?"} ps; ± = spread over ${ens.all.n} runs of the same prepared system, seeds, lengths and engines differing; archived value ${mm.delta_total_kcal_mol}).`
+      ? `ΔG = ${mm.delta_total_kcal_mol} kcal/mol for this run (single-trajectory MM-GBSA, ${mm.frames} frames of ${prod?.length_ps ?? "?"} ps). Project dispersion: SD ${spreadSd.toFixed(2)} across ${ens.all.n} mixed-condition runs of the same prepared system (seeds, lengths and engines differ) — descriptive, not this run's error bar. ${matchedLine}`
       : `ΔG = ${mm.delta_total_kcal_mol} kcal/mol, single-trajectory MM-GBSA over ${mm.frames} frames of a ${prod?.length_ps ?? "?"} ps production run.`,
-    spreadSd != null ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (spread over all ${ens.all.n} runs${stratumNote}); seed-only spread at ${ens.seed_only.production_ps} ps on ${ens.seed_only.engine}: ${ens.seed_only.sd != null ? `±${ens.seed_only.sd.toFixed(2)} over ${ens.seed_only.n} runs` : `not yet estimated (${ens.seed_only.n} of ${ens.seed_only.needed} runs)`}; the within-run SEM (${unc ? unc.corrected_sem : mm.frame_sem}) is not the uncertainty to report.` : `Only one run of this system: the within-run SEM ${unc ? unc.corrected_sem : mm.frame_sem} does not estimate run-to-run uncertainty; no spread can be quoted until ≥ 3 independent runs exist.`,
+    spreadSd != null ? `The within-run corrected SEM (${unc ? unc.corrected_sem : mm.frame_sem}) describes frame noise only and is not this run's error bar either${stratumNote}.` : `Only one run of this system: the within-run SEM ${unc ? unc.corrected_sem : mm.frame_sem} does not estimate run-to-run uncertainty; no error bar exists until ≥ ${SEED_MIN_RUNS} matched independent runs exist.`,
     ...(vsEnsemble ? [`This run is ${vsEnsemble.rank_most_negative} of ${vsEnsemble.n} (most negative first), z = ${vsEnsemble.z_vs_ensemble_mean} vs the ensemble mean ${vsEnsemble.ensemble_mean} ± ${vsEnsemble.ensemble_sem} (SEM, n=${vsEnsemble.n}) — the protocol's estimate conditional on this short-run ensemble (between-run variation over picoseconds from one prepared start).`] : []),
     unc ? `Convergence: ${unc.verdict} by the halves test over ${prod?.length_ps ?? "?"} ps (N_eff ≈ ${unc.n_eff}, halves ${unc.halves.first} → ${unc.halves.second}); this tests drift within the archived window, not equilibration on longer timescales.` : "Convergence: per-frame data not archived, cannot judge.",
     signClaim(ens.all),
@@ -577,19 +592,31 @@ export function diffRuns(a: Manifest, b: Manifest, ia: IndexEntry[]) {
     diff: same && a.results.mmgbsa && b.results.mmgbsa ? +(a.results.mmgbsa.delta_total_kcal_mol - b.results.mmgbsa.delta_total_kcal_mol).toFixed(4) : null };
   const spread = same && ea ? ensemble(ia, a.id) : null;
   const sdAll = spread?.all.sd ?? null;
+  // A noise verdict needs the noise level of THIS pair's condition: runs at the same length on the same engine, differing
+  // only in the seed. The project dispersion mixes lengths and engines and is shown for scale, never as the verdict.
+  const sameCondition = !!(ea && eb && ea.engine === eb.engine && ea.production_ps === eb.production_ps);
+  const matched = sameCondition && spread ? spread.matched : null;
+  const matchedOk = !!matched && matched.n >= SEED_MIN_RUNS && matched.sd != null;
   // The difference of two independent draws has spread √2·SD; a |ΔΔG| within 2·√2·SD is consistent with sampling noise. Stated, not implied.
-  const sdDiff = sdAll != null ? Math.SQRT2 * sdAll : null;
-  const noise = dg.diff != null && sdDiff != null ? { sd_of_difference: round(sdDiff, 2), ratio: round(Math.abs(dg.diff) / sdDiff, 1), consistent_with_sampling_noise: Math.abs(dg.diff) <= 2 * sdDiff } : null;
-  const vsSpread = dg.diff != null && sdAll != null && noise ? `|ΔΔG| = ${Math.abs(dg.diff).toFixed(2)} kcal/mol vs the expected spread of a two-run difference √2·SD = ${noise.sd_of_difference} (run-to-run SD ${sdAll.toFixed(2)}, n=${spread!.all.n}): ${noise.ratio}σ → ${noise.consistent_with_sampling_noise ? "consistent with sampling noise" : "larger than sampling noise alone would give (> 2σ)"}` : null;
+  const sdMatchedDiff = matchedOk ? Math.SQRT2 * matched!.sd! : null;
+  const noise = dg.diff == null || !same ? null
+    : matchedOk ? { basis: "matched replicates" as const, matched_n: matched!.n, needed: SEED_MIN_RUNS, sd_of_difference: round(sdMatchedDiff!, 2), ratio: round(Math.abs(dg.diff) / sdMatchedDiff!, 1), consistent_with_sampling_noise: Math.abs(dg.diff) <= 2 * sdMatchedDiff! as boolean | null }
+    : sameCondition ? { basis: "insufficient matched replicates" as const, matched_n: matched?.n ?? 0, needed: SEED_MIN_RUNS, sd_of_difference: null, ratio: null, consistent_with_sampling_noise: null }
+    : { basis: "conditions differ" as const, matched_n: null, needed: SEED_MIN_RUNS, sd_of_difference: null, ratio: null, consistent_with_sampling_noise: null };
+  const vsSpread = dg.diff != null && sdAll != null && spread ? `for scale only: the project dispersion across ${spread.all.n} mixed-condition runs is SD ${sdAll.toFixed(2)} (√2·SD = ${(Math.SQRT2 * sdAll).toFixed(2)} for a two-run difference); it mixes lengths and engines and is not this pair's noise level${matchedOk ? `; the matched seed spread (${matched!.n} runs at ${ea!.production_ps} ps on ${ea!.engine}) gives √2·SD = ${round(sdMatchedDiff!, 2)}` : ""}` : null;
   // Descriptive, not evaluative: state what differs and give the reader the scale to judge ΔΔG against. No claim about which run is "better" or converged — that is reported per run by explain_result.
-  const verdict = !same ? "different complexes — ΔG not compared" : noise ? (noise.consistent_with_sampling_noise ? `ΔΔG consistent with sampling noise (${noise.ratio}σ of a two-run difference)` : `ΔΔG larger than sampling noise alone (${noise.ratio}σ of a two-run difference)`) : "no run-to-run spread to judge ΔΔG against";
+  const verdict = !same ? "different complexes — ΔG not compared"
+    : !noise ? "no ΔG to compare"
+    : noise.basis === "matched replicates" ? (noise.consistent_with_sampling_noise ? `ΔΔG ${dg.diff!.toFixed(2)} kcal/mol is consistent with the matched seed spread (${noise.ratio}σ of a two-run difference; ${noise.matched_n} runs at ${ea!.production_ps} ps on ${ea!.engine})` : `ΔΔG ${dg.diff!.toFixed(2)} kcal/mol is larger than the matched seed spread (${noise.ratio}σ of a two-run difference; ${noise.matched_n} runs at ${ea!.production_ps} ps on ${ea!.engine})`)
+    : noise.basis === "insufficient matched replicates" ? `Insufficient matched replicates to classify this difference. Observed ΔΔG ${dg.diff!.toFixed(2)} kcal/mol; ${noise.matched_n} of ${SEED_MIN_RUNS} same-engine, same-length runs exist — ${SEED_MIN_RUNS - (noise.matched_n ?? 0)} more ${SEED_MIN_RUNS - (noise.matched_n ?? 0) === 1 ? "is" : "are"} needed`
+    : `Observed ΔΔG ${dg.diff!.toFixed(2)} kcal/mol; the runs differ in ${[...(ea!.engine !== eb!.engine ? ["engine"] : []), ...(ea!.production_ps !== eb!.production_ps ? ["production length"] : [])].join(" and ")}, so the difference cannot be classified as sampling noise`;
   const interpretation = !same
     ? "Different prepared systems (see the system table). The two ΔG values describe different complexes and are not compared here."
     : material.length === 0
       ? `Same prepared system and protocol; only ${[...classes].join(" and ") || "seeds"}${engineNote} differ, so the two ΔG values are ${engines.differ ? "independent samples of the same protocol on different engines: the difference combines the engine change with sampling, and this record cannot separate them" : "independent samples of the same protocol"}.`
       : material.every(c => c === "sampling_length")
         ? `Same prepared system and physics; the runs differ in production length (${stageDiffs.map(d => `${d.stage}: ${d.length_ps.a} vs ${d.length_ps.b} ps`).join("; ")}), so they are different-length samples of the same protocol${engines.differ ? ` run on different engines (${engines.a} vs ${engines.b}); length, engine and sampling all contribute to the ΔG difference and this record cannot separate them` : ""}. Whether either run is converged is reported per run (drift verdict in explain_result).`
-        : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes)${engineNote ? `,${engineNote}` : ""}. The ΔG difference combines that change with run-to-run sampling; the run-to-run spread is the scale to judge it against.`;
+        : `Same prepared system; the protocol differs in ${material.join(", ")} parameters (see stage changes)${engineNote ? `,${engineNote}` : ""}. The ΔG difference combines that change with run-to-run sampling; the project dispersion is shown for scale only.`;
   return { a: a.id, b: b.id, same_system: same, system: systemDiff, stages: stageDiffs, stages_compared: stages.length, differing_classes: [...classes], material_classes: material,
     realized_seeds: seeds, delta_g: dg, delta_g_vs_noise: noise, run_to_run_spread: spread, engines, verdict, interpretation, scale: vsSpread };
 }
@@ -924,12 +951,12 @@ export function forkExperiment(m: Manifest, idx: IndexEntry[], opts: { kind: For
   if (opts.kind === "replicate") {
     let plan: ReturnType<typeof planSampling> | null = null; try { plan = planSampling(m, idx, {}); } catch { plan = null; }
     // Below 3 comparable runs there is no run-to-run SD, so plan_sampling cannot size the ensemble; say so and give the floor (3 = the replicated rung's threshold) instead of a null.
-    const nNow = ens?.all.n ?? 1; const MIN_RUNS = 3; const toFloor = Math.max(0, MIN_RUNS - nNow);
-    const sized = plan?.run_to_run.additional_runs != null && nNow >= 2;
+    const nNow = ens?.all.n ?? 1; const nMatched = ens?.matched.n ?? 1; const MIN_RUNS = SEED_MIN_RUNS; const toFloor = Math.max(0, MIN_RUNS - nMatched);
+    const sized = plan?.run_to_run.planned_on === "matched" && plan.run_to_run.additional_runs != null;
     const runsRec = { additional_runs: sized ? plan!.run_to_run.additional_runs : toFloor, minimum_runs: MIN_RUNS, min_run_ps: plan?.recommended_run_ps ?? null, target_uncertainty_kcal: plan?.target_uncertainty_kcal ?? null,
-      now: `${nNow} run${nNow === 1 ? "" : "s"} on this site`,
-      why: sized ? `sized from the observed run-to-run SD of ${nNow} runs to reach ±${plan!.target_uncertainty_kcal} kcal/mol on the ensemble mean (plan_sampling)`
-        : `no run-to-run estimate exists yet (${nNow} run${nNow === 1 ? "" : "s"}); at least ${MIN_RUNS} comparable independent runs (same protocol, ig=-1) are needed before a spread can be quoted — ${toFloor} more; plan_sampling can size the ensemble only after that` };
+      now: `${nNow} run${nNow === 1 ? "" : "s"} of this system on this site, ${nMatched} at this run's length on its engine`,
+      why: sized ? `sized from the matched seed SD of ${plan!.run_to_run.n_now} runs to reach ±${plan!.target_uncertainty_kcal} kcal/mol on the ensemble mean (plan_sampling)`
+        : `no matched seed estimate exists yet (${nMatched} of ${MIN_RUNS} runs at this length on this engine); at least ${MIN_RUNS} same-engine, same-length independent runs (ig=-1) are needed before a spread can be quoted — ${toFloor} more; plan_sampling can size the ensemble only after that` };
     return { fork_id: id, kind: opts.kind, parent: m.id, tests: "independent replication — once executed and extracted, an independent-seed run of the same protocol joins the run-to-run spread, which is the uncertainty to quote",
       seed_policy: "fresh: ig=-1, an independent sample of the same protocol", controls_held: controlsHeld(m, null), controls_note: controlsNote, proposals: [],
       runs_recommended: runsRec,
@@ -973,11 +1000,11 @@ export function forkExperiment(m: Manifest, idx: IndexEntry[], opts: { kind: For
     sampling: plan ? (() => {
       // A controlled comparison needs controls at the treated length: count the parent's same-protocol runs at recommended_run_ps and say how many more are needed.
       const me = idx.find(r => r.id === m.id); const Lrec = plan!.recommended_run_ps;
-      const matchedControls = me ? idx.filter(r => sameSystem(r, me) && r.protocol === me.protocol && r.production_ps === Lrec) : [];
+      const matchedControls = me ? idx.filter(r => sameSystem(r, me) && r.protocol === me.protocol && r.production_ps === Lrec && r.engine === me.engine) : [];
       const needControls = Math.max(0, (runsPerCondition ?? 3) - matchedControls.length);
       return { runs_per_condition: runsPerCondition, min_run_ps: Lrec, parent_run_to_run_sd: plan!.run_to_run.sd_used,
         control: { matched_length_ps: Lrec, parent_runs_at_that_length: matchedControls.map(r => r.id), additional_control_runs_needed: needControls,
-          note: needControls ? `the parent's ${plan!.run_to_run.n_now ?? "?"} runs span several production lengths; a controlled comparison at ${Lrec} ps needs ${runsPerCondition} control runs at ${Lrec} ps too — ${matchedControls.length} exist, so plan ${needControls} more control runs (fork_experiment kind='replicate') or stratify the comparison by production length` : `${matchedControls.length} parent runs at ${Lrec} ps serve as the matched control` },
+          note: needControls ? `a controlled comparison needs ${runsPerCondition} matched control runs (${Lrec} ps on ${me?.engine ?? "the parent's engine"}) — ${matchedControls.length} exist, so plan ${needControls} more (fork_experiment kind='replicate'); the parent's ${ens?.all.n ?? "?"} runs span several lengths${(ens?.engines.length ?? 0) > 1 ? " and engines" : ""} and do not substitute` : `${matchedControls.length} parent runs at ${Lrec} ps on ${me?.engine} serve as the matched control` },
         note: `one bundle = one member: with seed='fresh' (ig=-1) each execution draws a new seed, so run the bundle ${runsPerCondition} times (in separate copies — outputs share names) to build the treated ensemble` }; })() : null,
     next_steps: [`approve ${proposals.length} proposal${proposals.length === 1 ? "" : "s"} in the Proposals panel (human)`, "generate_rerun_bundle seed='fresh' target='local'|'slurm'", "run it elsewhere; extract the result as a child card"],
     note: approval, _proposals: proposals };

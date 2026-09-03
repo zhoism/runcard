@@ -58,6 +58,29 @@ child card; the fork card and the planned-fork card name `tools/extract_run.py` 
 three verbs (explain, verify by recomputing, prepare a bounded fork); the other four sit under "All agent tools" with
 the tool chips. Tool descriptions: Codex's `codex/tool-descriptions` (4de268b) is merged — 17 descriptions total 4.8k characters (from 9.9k), each ≤ 392, question-first, every tool states what it leaves on the page ("navigates; leaves nothing" for get_run_manifest and diff_runs), "for X use Y" lines on the overlapping pairs, schema property descriptions ≤ 90; a test in test/webmcp.test.ts caps all of it.
 
+**Matched-only rule everywhere (2026-09-02, fourth GPT review, same branch):** one rule now governs every claim about
+noise: only runs at the same length on the same engine (the `matched` stratum, ≥ `SEED_MIN_RUNS` = 3) can produce a
+"seed" or "noise" statement; everything pooled is descriptive dispersion. (1) `diffRuns` classifies ΔΔG only against
+the matched seed spread (`delta_g_vs_noise.basis` = "matched replicates" / "insufficient matched replicates" /
+"conditions differ"); rep4 vs rep6 reads "Insufficient matched replicates to classify this difference. Observed ΔΔG
+−1.59 kcal/mol; 2 of 3 same-engine, same-length runs exist — 1 more is needed"; the project dispersion is a `scale`
+line, never the verdict. (2) The headline is the number alone; the rows beneath are "project dispersion" (descriptive,
+not an error bar for any run), "matched seed uncertainty" (this run's error bar, or "not established — 2 of 3") and
+"within run"; the ± beside the number appears only when a matched error bar exists (ice1: ±0.54, 4 runs).
+explain_result's brief and `which_uncertainty_to_quote` say the same three things and never "quote ±pooled"; the
+automode headline too. (3) `planSampling` sizes the ensemble on the matched stratum only (`planned_on` = "matched" |
+null); below three matched runs it says "insufficient matched data — k of 3 … run n more matched replicates" with the
+mixed-cohort projection marked "for scale only"; `run_to_run.matched`, `matched_runs_needed` and `scale` are in the
+output; an extension's control runs are matched runs (rep4: 2 exist, 1 more). (4) The replication rung keeps its
+engine-aware short text. (5) The fork network is an observed shift: "4 cross-engine forks are shifted 1.7 kcal/mol
+from 1l2y-rep4 … engine and seed changed together, so significance and cause cannot yet be determined"; badges say
+"shifted", never "in tension" (status key unchanged). Wording: "one prepared system and core parameters"; the demo and
+project cards show "ΔG mean … dispersion SD 0.64 across 13 mixed-condition runs" instead of "±"; the Spread caption's
+band is "mean ± SD across these runs, a dispersion". "Continue" is narrowed to "Prepare a continuation" on the button,
+the fork card and the next-step link (the h1 keeps the brief's verb; the lede narrows it). The home card shows three
+verbs with four folded, like the rail. Not done, on purpose: an import/publish action (uploads are out of scope),
+tool consolidation, flipping investigate_run's annotation (the stated page-state rule stays).
+
 ## GitHub-for-MD-runs reframe (2026-09-01)
 
 The intent, decided with the user 2026-09-01: **a shareable, agent-readable GitHub for MD runs.** Since the evening of 2026-09-01: **repo = prepared system (a project),

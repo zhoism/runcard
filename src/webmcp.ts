@@ -100,7 +100,7 @@ function summarize(name: string, out: any): string {
         ? `${out.run}: ${out.verdict} — ${out.stages.map((s: any) => `${s.stage} ${verdict(s)}`).join(", ")}`
         : `${out.stage}: ${verdict(out)} — ${out.findings.filter((x: any) => x.level !== "PASS").map((x: any) => `${x.level} ${x.rule}`).join(", ") || "no warnings"}`;
       case "explain_result": return out.brief ?? out.error ?? "";
-      case "diff_runs": return `${out.same_system ? "same prepared system" : "different systems"}; material: ${out.material_classes?.join(", ") || "none"}; ${out.same_system ? `ΔΔG ${f(out.delta_g?.diff)}${out.delta_g_vs_noise ? ` (${out.delta_g_vs_noise.ratio}σ of a two-run difference: ${out.delta_g_vs_noise.consistent_with_sampling_noise ? "sampling noise" : "beyond sampling noise"})` : ""}` : "ΔΔG n/a (different complexes)"}; compare view opened`;
+      case "diff_runs": return `${out.same_system ? "same prepared system" : "different systems"}; material: ${out.material_classes?.join(", ") || "none"}; ${out.same_system ? `ΔΔG ${f(out.delta_g?.diff)}${out.delta_g_vs_noise?.ratio != null ? ` (${out.delta_g_vs_noise.ratio}σ of a matched two-run difference: ${out.delta_g_vs_noise.consistent_with_sampling_noise ? "within seed spread" : "beyond seed spread"})` : out.delta_g_vs_noise?.basis ? ` (${out.delta_g_vs_noise.basis}: not classified)` : ""}` : "ΔΔG n/a (different complexes)"}; compare view opened`;
       case "get_ensemble": return `n=${out.all.n}, mean ${f(out.all.mean)}, SD ${f(out.all.sd)} (≥${out.long.min_ps} ps: n=${out.long.n}, SD ${f(out.long.sd)})`;
       case "propose_change": return `${out.status}: ${(out.changes ?? []).map((c: any) => `${c.key} ${c.before ?? "(unset)"} → ${c.after}`).join(", ")}${out.material_classes?.length ? ` (material: ${out.material_classes.join(", ")})` : ""}; before ${verdict(out.before)} → after ${verdict(out.after)}; ${out.after?.hasFail ? "cannot be approved (fails validation)" : "awaiting your Approve"}`;
       case "list_proposals": return `${out.length} proposals (${out.filter((p: any) => p.status === "pending").length} pending)`;
@@ -113,8 +113,10 @@ function summarize(name: string, out: any): string {
       case "plan_sampling": { const r = out.run_to_run, Lp = out.within_run.expected_length_for_target_ps, T = out.target_uncertainty_kcal;
         const one = Lp != null ? `one run alone would need ≈ ${f(Lp, 0)} ps` : `single-run length not projected (${out.within_run.this_run.verdict})`;
         return r.planned_on
-        ? `expected: ${r.additional_runs} more run${r.additional_runs === 1 ? "" : "s"} ≥ ${out.recommended_run_ps} ps for ±${T} (${r.planned_on} stratum: n=${r.n_now}, SD ${f(r.sd_used)}); ${one}`
-        : `expected: only run of its system, no run-to-run estimate; ${one} for ±${T}; ≥ 3 independent runs of ≥ ${out.recommended_run_ps} ps before an ensemble uncertainty can be quoted`; }
+        ? `expected: ${r.additional_runs} more matched run${r.additional_runs === 1 ? "" : "s"} for ±${T} (matched stratum: n=${r.n_now} at ${r.matched?.production_ps} ps on ${r.matched?.engine}, SD ${f(r.sd_used)}); ${one}`
+        : r.matched && r.matched.n > 0 && r.matched_runs_needed != null && out.run_to_run.scale
+        ? `expected: insufficient matched data (${r.matched.n} of ${r.matched.needed} at ${r.matched.production_ps} ps on ${r.matched.engine}); ${r.matched_runs_needed} more matched replicate${r.matched_runs_needed === 1 ? "" : "s"} before sizing; ${one} for ±${T}`
+        : `expected: only run of its system, no run-to-run estimate; ${one} for ±${T}; ≥ 3 matched independent runs of ≥ ${out.recommended_run_ps} ps before an ensemble uncertainty can be quoted`; }
       case "investigate_run": return `${out.summary} Next: ${out.next?.rationale ?? "nothing outstanding"} (created nothing)`;
       case "export_evidence_brief": return `${out.filename} prepared with ${out.included_sections.length} sections; copy/download available on the page`;
     }

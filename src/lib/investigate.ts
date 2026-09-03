@@ -11,7 +11,7 @@
 // scientific input stays something a human or an agent asks for explicitly.
 import type { Manifest, IndexEntry } from "./types";
 import { confidenceLadderFull, explainResult, ensemble, planSampling, recomputeResult, bundleGaps,
-  uncertaintyFromFrames, type Rung } from "./runs";
+  uncertaintyFromFrames, SEED_MIN_RUNS, type Rung } from "./runs";
 
 /** What could move a rung. The ladder's own status says whether a rung is earned; this says who can earn it. */
 export type MovableBy = "archived data on this site" | "a run executed elsewhere" | "not assessable here";
@@ -84,7 +84,7 @@ export function investigateRun(m: Manifest, idx: IndexEntry[]): Investigation {
   // ways on one page is the thing this project exists to refuse.
   const en = ensemble(idx, m.id); const spreadSd = en.all.sd; const so = en.seed_only;
   const headline = quote && spreadSd != null
-    ? `ΔG = ${n2(mm?.delta_total_kcal_mol)} kcal/mol. Quote ±${spreadSd.toFixed(2)} (spread over ${quote.n} runs of this system; seeds, lengths and engines differ), not the within-run SEM ${n2(e.within_run?.corrected_sem)} — between-run variation, not frame noise, is what a single run's number is uncertain by. Seed-only spread at ${so.production_ps} ps on ${so.engine}: ${so.sd != null ? `±${so.sd.toFixed(2)} over ${so.n} runs` : `not yet estimated (${so.n} of ${so.needed} runs)`}.`
+    ? `ΔG = ${n2(mm?.delta_total_kcal_mol)} kcal/mol. Matched seed uncertainty: ${so.sd != null ? `±${so.sd.toFixed(2)} (${so.n} runs at ${so.production_ps} ps on ${so.engine}) — this run's error bar` : `not established (${so.n} of ${so.needed} runs at ${so.production_ps} ps on ${so.engine}) — no error bar yet`}. Project dispersion: ±${spreadSd.toFixed(2)} SD across ${quote.n} mixed-condition runs — descriptive. The within-run SEM ${n2(e.within_run?.corrected_sem)} is frame noise only.`
     : `ΔG = ${n2(mm?.delta_total_kcal_mol)} kcal/mol. No run-to-run spread can be quoted: this site has one run of this prepared system.`;
   steps.push({ tool: "explain_result", why: "establish which uncertainty a reader should quote before judging whether the run is trustworthy", found: headline });
 
@@ -108,12 +108,12 @@ export function investigateRun(m: Manifest, idx: IndexEntry[]): Investigation {
       found: `${en.all.n} run${en.all.n === 1 ? "" : "s"} of this prepared system${en.all.sd != null ? `, run-to-run SD ±${n2(en.all.sd)}` : " — a single run, so no spread exists to quote"}` });
     // Below two runs there is no SD to size an ensemble from, so plan_sampling cannot answer and must not be
     // made to look as if it did. State the 3-run floor the rung itself requires instead of printing a null.
-    const MIN_RUNS = 3, toFloor = Math.max(0, MIN_RUNS - en.all.n);
-    const sized = en.all.n >= 2 && p.run_to_run?.additional_runs != null;
+    const MIN_RUNS = SEED_MIN_RUNS, toFloor = Math.max(0, MIN_RUNS - en.matched.n);
+    const sized = p.run_to_run?.planned_on === "matched" && p.run_to_run?.additional_runs != null;
     steps.push({ tool: "plan_sampling", why: "turn the gap into a number of runs rather than a vague 'more sampling'",
-      found: !sized ? `no run-to-run estimate exists yet (${en.all.n} run${en.all.n === 1 ? "" : "s"}); ${toFloor} more comparable independent run${toFloor === 1 ? "" : "s"} are needed before any spread can be quoted, and plan_sampling can size the ensemble only after that`
-        : p.run_to_run.target_met ? `the ±${p.target_uncertainty_kcal} target is already met on the ensemble mean; what is missing is runs at this run's own length on its own engine`
-        : `${p.run_to_run.additional_runs} more independent run${p.run_to_run.additional_runs === 1 ? "" : "s"} to reach ±${p.target_uncertainty_kcal} on the ensemble mean` });
+      found: !sized ? `no matched seed estimate exists yet (${en.matched.n} of ${MIN_RUNS} runs at ${en.matched.production_ps} ps on ${en.matched.engine}); ${toFloor} more matched independent run${toFloor === 1 ? "" : "s"} ${toFloor === 1 ? "is" : "are"} needed before any spread can be quoted, and plan_sampling can size the ensemble only after that`
+        : p.run_to_run.target_met ? `the ±${p.target_uncertainty_kcal} target is already met on the matched stratum's ensemble mean`
+        : `${p.run_to_run.additional_runs} more matched independent run${p.run_to_run.additional_runs === 1 ? "" : "s"} to reach ±${p.target_uncertainty_kcal} on the ensemble mean` });
     next = { rationale: bn.to_climb ?? "more independent runs at this run's production length", tool: "fork_experiment",
       input: { run_id: m.id, kind: "replicate" }, needs_a_human: true };
   } else if (bn.rung === "robust to analysis-window choices") {

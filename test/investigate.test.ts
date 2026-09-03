@@ -58,7 +58,7 @@ describe("automode (investigate_run)", () => {
   it("a single-run system is told the 3-run floor, not a null sizing", () => {
     const r = investigateRun(load("3htb-jz4"), idx);
     const plan = r.steps.find(s => s.tool === "plan_sampling")!;
-    expect(plan.found).toMatch(/no run-to-run estimate exists yet \(1 run\); 2 more comparable independent runs/);
+    expect(plan.found).toMatch(/no matched seed estimate exists yet \(1 of 3 runs at 5 ps on Amber 26 PMEMD \(2026\)\); 2 more matched independent runs are needed/);
     expect(plan.found).not.toMatch(/\?|null|undefined|NaN/);
   });
 
