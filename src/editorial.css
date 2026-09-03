@@ -268,7 +268,7 @@ details.card.proposals[open] > summary { margin-bottom: 10px; }
 /* the objective line sits between the title and the result: what the run measures, where it sits, what it descends from */
 .objective { margin: -2px 0 14px; font-size: 15.5px; line-height: 1.55; color: var(--ink-2); max-width: 84ch; }
 .objective a { font-family: var(--mono); font-size: 14px; }
-.onpage { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: -6px 0 18px; font-size: 14px; } .onpage a { color: var(--muted); } .onpage a:hover { color: var(--navy); }
+.onpage { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: -6px 0 18px; font-size: 14px; } .onpage a { color: var(--navy); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--navy) 35%, transparent); text-underline-offset: 3px; } .onpage a:hover, .onpage a:focus-visible { text-decoration-color: var(--navy); }
 
 /* stage pipeline: dots on a line, coloured by verdict */
 .stages { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(96px, 1fr); gap: 0; position: relative; padding-top: 8px; overflow-x: auto; }
