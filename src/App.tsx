@@ -873,9 +873,36 @@ function Sparkline({ x, lengthPs, window }: { x: number[]; lengthPs: number | nu
   const W = 480, H = 90, P = 4; const lo = Math.min(...x), hi = Math.max(...x); const rm = runningMean(x);
   const sx = (i: number) => P + (i / (x.length - 1)) * (W - 2 * P), sy = (v: number) => P + (1 - (v - lo) / (hi - lo || 1)) * (H - 2 * P);
   const path = (v: number[]) => v.map((y, i) => `${i ? "L" : "M"}${sx(i).toFixed(1)},${sy(y).toFixed(1)}`).join(" ");
-  return <figure className="spark"><svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="per-frame ΔG">
+  /* Hover/keyboard readout: the frame under the pointer, its ΔG and the running mean there. The svg stretches
+     (preserveAspectRatio="none"), so the index comes from the element's own width and the markers are positioned
+     in percentages of the viewBox — a circle drawn in svg units would be squashed by the non-uniform scale. */
+  const [i, setI] = useState<number | null>(null);
+  const at = (e: { currentTarget: Element; clientX: number }) => {
+    const r = e.currentTarget.getBoundingClientRect(); if (!r.width) return;
+    const f = (e.clientX - r.left - (P / W) * r.width) / (r.width * (1 - 2 * P / W));
+    setI(Math.max(0, Math.min(x.length - 1, Math.round(f * (x.length - 1)))));
+  };
+  const step = (d: number) => setI(p => Math.max(0, Math.min(x.length - 1, (p ?? 0) + d)));
+  const key = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step(e.key === "ArrowRight" ? 1 : -1); }
+    else if (e.key === "Home") { e.preventDefault(); setI(0); } else if (e.key === "End") { e.preventDefault(); setI(x.length - 1); }
+    else if (e.key === "Escape") setI(null);
+  };
+  const ps = i != null && lengthPs != null ? (lengthPs * (i + 1) / x.length) : null;
+  return <figure className="spark">
+    <div className="spark-plot" tabIndex={0} role="slider" aria-label="per-frame ΔG; arrow keys read a frame"
+      aria-valuemin={1} aria-valuemax={x.length} aria-valuenow={(i ?? 0) + 1}
+      aria-valuetext={i == null ? "no frame selected" : `frame ${i + 1} of ${x.length}, ${x[i].toFixed(2)} kcal per mole`}
+      onPointerMove={at} onPointerDown={at} onPointerLeave={() => setI(null)} onBlur={() => setI(null)} onKeyDown={key}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="per-frame ΔG">
       {window && <rect x={sx(window.start - 1)} y={0} width={Math.max(1, sx(window.end - 1) - sx(window.start - 1))} height={H} fill="var(--acc)" opacity="0.12" />}
-      <path d={path(x)} fill="none" stroke="var(--dim)" strokeWidth="1" /><path d={path(rm)} fill="none" stroke="var(--acc)" strokeWidth="1.5" /></svg>
+      <path d={path(x)} fill="none" stroke="var(--dim)" strokeWidth="1" /><path d={path(rm)} fill="none" stroke="var(--acc)" strokeWidth="1.5" />
+      {i != null && <line x1={sx(i)} x2={sx(i)} y1={0} y2={H} className="spark-guide" vectorEffect="non-scaling-stroke" />}</svg>
+      {i != null && <><span className="spark-dot frame" style={{ left: `${sx(i) / W * 100}%`, top: `${sy(x[i]) / H * 100}%` }} />
+        <span className="spark-dot mean" style={{ left: `${sx(i) / W * 100}%`, top: `${sy(rm[i]) / H * 100}%` }} /></>}
+    </div>
+    <p className="spark-read" role="status">{i == null ? <span className="dim">hover or arrow-key the plot to read a frame</span>
+      : <>frame <b>{i + 1}</b> of {x.length}{ps != null ? ` · ≈${ps.toFixed(1)} ps` : ""} · ΔG <b>{x[i].toFixed(2)}</b> · running mean <b>{rm[i].toFixed(2)}</b> kcal/mol</>}</p>
     <figcaption>per-frame ΔG over {x.length} frames{lengthPs != null ? ` (${lengthPs} ps)` : ""}: grey = frame values ({lo.toFixed(1)} … {hi.toFixed(1)} kcal/mol), blue = running mean</figcaption></figure>;
 }
 
