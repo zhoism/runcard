@@ -41,6 +41,23 @@ objective; in-page anchors (`#trust`, `#network-…`) now scroll instead of rout
 treated any hash as a route). Skipped on purpose: route-specific tool registration and shorter tool descriptions — not
 touching the registration path a judge hits first, the day before judging.
 
+**Stratified uncertainty (2026-09-02, third GPT review, same branch):** the pooled ±0.64 over 13 runs mixes seeds, lengths
+(2–30 ps) and two engines, and the page had called it "seed spread". Now `ensemble` carries a `matched` stratum (same
+engine, same length) and a `seed_only` summary that is quoted only from 3 such runs (`SEED_MIN_RUNS`) and never
+substituted by the pooled spread. rep4: "± 0.64 spread over 13 runs" on the headline with the caption "seed-only
+uncertainty at 30 ps on PMEMD is not yet estimated (2 of 3 runs)"; ice1: "± 0.54 seed-only spread, 4 runs" because the
+four SANDER reruns differ in nothing but the seed. A seed-only row joins the run-to-run table; explain_result and the
+automode headline state both numbers; `seed_only_spread` is in explain_result's output. Wording: the sign claim is
+"consistent across all n runs", the fork verdict measures "beyond the cohort's observed spread" and names engine and seed
+as confounded, project blurbs say "same prepared system and core settings, differing seeds, lengths and engines"; a test
+forbids the affirmative "seed noise" phrases in anything computed. A qualifier sits under the number ("short-run
+estimate · a 30 ps MM-GBSA estimate from the archived trajectory: not a converged binding free energy, and not
+experimentally validated"), the card is "Binding free energy estimate" and the section "what this record establishes".
+"Continue" is narrowed: the lede says a continuation is prepared here, approved, run elsewhere and published back as a
+child card; the fork card and the planned-fork card name `tools/extract_run.py` as the closing step. The rail shows
+three verbs (explain, verify by recomputing, prepare a bounded fork); the other four sit under "All agent tools" with
+the tool chips. Tool-description compression is on Codex's branch `codex/tool-descriptions` (src/webmcp.ts only).
+
 ## GitHub-for-MD-runs reframe (2026-09-01)
 
 The intent, decided with the user 2026-09-01: **a shareable, agent-readable GitHub for MD runs.** Since the evening of 2026-09-01: **repo = prepared system (a project),

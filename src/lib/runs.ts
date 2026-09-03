@@ -99,6 +99,8 @@ export function sameSystem(a: IndexEntry, b: IndexEntry) { return systemFingerpr
 // ---- ensemble: run-to-run statistics, all runs and long runs --------------
 /** Production length below which a run is reported separately. Chosen 2026-08-28; the page shows both strata. */
 export const LONG_RUN_MIN_PS = 10;
+/** Runs at one length on one engine before a seed-only spread is quoted. */
+export const SEED_MIN_RUNS = 3;
 export interface Stratum { n: number; mean: number | null; sd: number | null; min: number | null; max: number | null; negative: number; runs: { id: string; delta_g: number; production_ps: number }[] }
 function stratum(rs: IndexEntry[]): Stratum {
   const g = rs.map(r => r.delta_g); const n = g.length;
@@ -112,13 +114,20 @@ export function ensemble(idx: IndexEntry[], id: string) {
   const peers = idx.filter(r => sameSystem(r, me));
   const all = stratum(peers), long = stratum(peers.filter(r => r.production_ps >= LONG_RUN_MIN_PS));
   const engines = [...peers.reduce((m, r) => m.set(r.engine, (m.get(r.engine) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
-  return { fingerprint: systemFingerprint(me.system), all, long: { min_ps: LONG_RUN_MIN_PS, ...long },
+  // Seed-only spread: the runs that repeat THIS run's experiment — same engine, same production length — so nothing but
+  // the realized seed differs. Below SEED_MIN_RUNS it is not estimated, and the pooled spread is never substituted for it.
+  const matched = stratum(peers.filter(r => r.engine === me.engine && r.production_ps === me.production_ps));
+  const seed_only = { engine: me.engine, production_ps: me.production_ps, n: matched.n, needed: SEED_MIN_RUNS,
+    mean: matched.n >= SEED_MIN_RUNS ? matched.mean : null, sd: matched.n >= SEED_MIN_RUNS ? matched.sd : null,
+    note: matched.n >= SEED_MIN_RUNS ? `seed-only spread: ${matched.n} runs at ${me.production_ps} ps on ${me.engine}, differing in nothing but the realized seed`
+      : `not yet estimated: ${matched.n} of ${SEED_MIN_RUNS} runs at ${me.production_ps} ps on ${me.engine}; the pooled spread across lengths and engines is not a substitute` };
+  return { fingerprint: systemFingerprint(me.system), all, long: { min_ps: LONG_RUN_MIN_PS, ...long }, matched: { engine: me.engine, production_ps: me.production_ps, ...matched }, seed_only,
     sd_convention: "sample SD (n−1) across runs",
     /** engine × count across the peers: the spread is run-to-run across whatever engines are disclosed here, not pure seed noise */
     engines: engines.map(([engine, n]) => ({ engine, n })),
     caveat: peers.length < 2
       ? `Only one run of this prepared system (${me.production_ps} ps); no run-to-run spread can be estimated. At least 3 independent runs (ig=-1) are needed before an ensemble uncertainty can be quoted.`
-      : `Independent runs of the same prepared system — same build inputs, force fields and protocol, different realized seeds (ig=-1 Langevin). Production lengths differ (${[...new Set(peers.map(r => r.production_ps))].sort((a, b) => a - b).join(", ")} ps), so 'all' mixes short and long runs; 'long' keeps runs ≥ ${LONG_RUN_MIN_PS} ps. The spread is run-to-run variation over picoseconds from one prepared start, not a survey of conformational space. Run-to-run spread, not the per-frame SEM, is the uncertainty to quote.` };
+      : `Runs of the same prepared system — same build inputs, force fields and &cntrl protocol, different realized seeds (ig=-1 Langevin). Production lengths differ (${[...new Set(peers.map(r => r.production_ps))].sort((a, b) => a - b).join(", ")} ps)${engines.length > 1 ? ` and so do engines (${engines.map(([e, n]) => `${e} × ${n}`).join(", ")})` : ""}, so 'all' is a between-run spread across lengths${engines.length > 1 ? " and engines" : ""}, not seed noise; 'long' keeps runs ≥ ${LONG_RUN_MIN_PS} ps; 'matched' keeps runs at this run's length on its engine, the seed-only spread, quoted once it has ${SEED_MIN_RUNS} runs. The spread is run-to-run variation over picoseconds from one prepared start, not a survey of conformational space. Between-run spread, not the per-frame SEM, is the uncertainty to quote.` };
 }
 /** "all 9 runs give ΔG < 0" / "7 of 9" / "none" — computed, never assumed. `label` names the stratum when it is empty ("no runs ≥ 10 ps of this system"). */
 export function signClaim(st: Stratum, label = ""): string {
@@ -126,7 +135,7 @@ export function signClaim(st: Stratum, label = ""): string {
   const range = st.n === 1 ? `ΔG = ${st.min!.toFixed(2)} kcal/mol` : `range ${st.min!.toFixed(2)} to ${st.max!.toFixed(2)} kcal/mol`;
   const ps = st.runs.map(r => r.production_ps).filter(x => x != null); const psRange = ps.length ? `${Math.min(...ps)}–${Math.max(...ps)} ps` : "";
   const pinned = st.sd != null ? `; the observed run-to-run SD is ±${st.sd.toFixed(1)} kcal/mol in this short, mixed-length ensemble (${psRange}; range width ${(st.max! - st.min!).toFixed(1)}; seeds and lengths differ, and engines where disclosed) — a spread, not a converged uncertainty` : "";
-  if (st.negative === st.n) return `${st.n === 1 ? "The single run gives" : `All ${st.n} independent runs give`} ΔG < 0 (${range}); ${st.n >= 3 ? `the sign is robust to seed variation${pinned}` : "the sign is not yet established (n < 3)"}.`;
+  if (st.negative === st.n) return `${st.n === 1 ? "The single run gives" : `All ${st.n} independent runs give`} ΔG < 0 (${range}); ${st.n >= 3 ? `the sign is consistent across all ${st.n} runs${pinned}` : "the sign is not yet established (n < 3)"}.`;
   if (st.negative === 0) return `None of the ${st.n} runs gives ΔG < 0 (${range}).`;
   return `${st.negative} of ${st.n} runs give ΔG < 0 (${range}); the sign is not robust across runs.`;
 }
@@ -227,7 +236,7 @@ export function forkNetwork(idx: IndexEntry[], id: string): ForkNetwork {
   const verdict = n === 0 ? "No forks yet. fork_experiment prepares a bundle; an executed rerun extracted as a card joins this network."
     : status === "sign" ? `${signText} Fork mean ${fork_mean != null ? r2(fork_mean) : "—"} kcal/mol; no run-to-run SD is available to judge the spread.`
     : `${signText} Fork mean ${r2(fork_mean!)} ± ${fork_sd != null ? r2(fork_sd) : "—"} kcal/mol (n=${g.length}); the parent (${r2(me.delta_g)}) sits ${r1(Math.abs(parent_offset_kcal!))} kcal/mol ${parent_offset_kcal! < 0 ? "below" : "above"} it, ${r1(Math.abs(parent_offset_sd!))}× the run-to-run SD (±${r2(run_to_run_sd!)}). ` +
-      (status === "agree" ? "Within 2 SDs: the forks reproduce the parent to seed noise." : `Beyond 2 SDs: the forks disagree with the parent by more than seed noise.${crossEngine ? ` The engines differ (${engines.parent} vs ${engines.forks.join(", ")}), so this record cannot attribute the gap to engine or to seed; a same-engine fork would separate them.` : ""}`);
+      (status === "agree" ? "Within 2 SDs of the cohort's observed spread: the forks reproduce the parent within that spread." : `Beyond 2 SDs of the cohort's observed spread: the forks are shifted from the parent by more than that spread.${crossEngine ? ` The engines differ (${engines.parent} vs ${engines.forks.join(", ")}), so engine and seed effects are confounded and this record cannot attribute the shift; a same-engine fork would separate them.` : " Same engine and length, so the seed is the only thing that changed."}`);
   return { parent: node(me), forks, n, fork_mean, fork_sd, parent_offset_kcal, parent_offset_sd, run_to_run_sd, sign_agrees, engines, status, verdict };
 }
 /** Every parent that has at least one fork on the site, largest network first. */
@@ -463,7 +472,7 @@ export function explainResult(m: Manifest, idx: IndexEntry[], detail = false) {
   return { brief: f.brief, value_kcal_mol: f.value_kcal_mol,
     uncertainty_to_quote: f.run_to_run.all.sd != null ? { run_to_run_sd: round(f.run_to_run.all.sd), n: f.run_to_run.all.n, production_ps: [...new Set(f.run_to_run.all.runs.map(r => r.production_ps))].sort((a, b) => a - b), long_stratum: f.run_to_run.long.n >= 2 ? { min_ps: f.run_to_run.long.min_ps, n: f.run_to_run.long.n, sd: f.run_to_run.long.sd != null ? round(f.run_to_run.long.sd) : null } : null } : null,
     within_run: f.uncertainty ? { corrected_sem: f.uncertainty.corrected_sem, naive_sem: f.uncertainty.per_frame_sem, n_eff: f.uncertainty.n_eff, verdict: f.uncertainty.verdict } : null,
-    which_uncertainty_to_quote: f.which_uncertainty_to_quote, this_run_vs_ensemble: f.this_run_vs_ensemble, sign_claim: f.sign_claim.all_runs, entropy_term: f.entropy_term, warning_note: f.warning_note ?? null,
+    which_uncertainty_to_quote: f.which_uncertainty_to_quote, seed_only_spread: f.seed_only_spread, this_run_vs_ensemble: f.this_run_vs_ensemble, sign_claim: f.sign_claim.all_runs, entropy_term: f.entropy_term, warning_note: f.warning_note ?? null,
     detail: "compact by default; call with detail: true for per-frame statistics, block averaging, the run list, seeds, the MMPBSA residual by term and provenance" };
 }
 function explainResultFull(m: Manifest, idx: IndexEntry[]) {
@@ -483,7 +492,7 @@ function explainResultFull(m: Manifest, idx: IndexEntry[]) {
   const byLen = new Map<number, IndexEntry[]>(); for (const r of ens.all.runs.map(x => idx.find(y => y.id === x.id)!).filter(Boolean)) byLen.set(r.production_ps, [...(byLen.get(r.production_ps) ?? []), r]);
   const matchedSd = [...byLen.entries()].filter(([, rs]) => rs.length >= 3).map(([ps, rs]) => `${ps} ps: n=${rs.length}, SD ±${stratum(rs).sd?.toFixed(2)}`);
   const which = unc && spreadSd != null
-    ? `Quote ±${spreadSd.toFixed(2)} kcal/mol — the observed run-to-run spread over all ${ens.all.n} runs of this system at mixed production lengths${stratumNote}${matchedSd.length ? `; matched-length SD where ≥ 3 runs share a length: ${matchedSd.join("; ")}` : ""} — as the spread to quote for a single run's ΔG. Within this run the correlation-corrected SEM is ${unc.corrected_sem} (N_eff ≈ ${unc.n_eff} of ${unc.n_frames} frames); the naive per-frame SEM ${unc.per_frame_sem} is ${(unc.corrected_sem / unc.per_frame_sem).toFixed(1)}× too small. Run-to-run spread is ${ratio!.toFixed(1)}× the corrected SEM, ${dominates}.`
+    ? `Quote ±${spreadSd.toFixed(2)} kcal/mol — the observed run-to-run spread over all ${ens.all.n} runs of this system at mixed production lengths${ens.engines.length > 1 ? ` and ${ens.engines.length} engines` : ""}${stratumNote}${matchedSd.length ? `; matched-length SD where ≥ 3 runs share a length: ${matchedSd.join("; ")}` : ""} — as the spread to quote for a single run's ΔG. Seed-only spread at ${ens.seed_only.production_ps} ps on ${ens.seed_only.engine}: ${ens.seed_only.sd != null ? `±${ens.seed_only.sd.toFixed(2)} over ${ens.seed_only.n} runs` : `not yet estimated (${ens.seed_only.n} of ${ens.seed_only.needed} runs)`}. Within this run the correlation-corrected SEM is ${unc.corrected_sem} (N_eff ≈ ${unc.n_eff} of ${unc.n_frames} frames); the naive per-frame SEM ${unc.per_frame_sem} is ${(unc.corrected_sem / unc.per_frame_sem).toFixed(1)}× too small. Run-to-run spread is ${ratio!.toFixed(1)}× the corrected SEM, ${dominates}.`
     : unc ? `Within this run the correlation-corrected SEM is ${unc.corrected_sem}; it does not estimate run-to-run uncertainty — no other runs of this system exist to estimate that spread.` : "per-frame data not archived for this run; only MMPBSA.py's naive SEM is available.";
   // Where this run sits among its peers: rank, z-score vs the ensemble mean, and the ensemble mean ± SEM as the protocol-level estimate.
   const peersSorted = [...ens.all.runs].sort((a, b) => a.delta_g - b.delta_g);
@@ -491,13 +500,13 @@ function explainResultFull(m: Manifest, idx: IndexEntry[]) {
     rank_most_negative: peersSorted.findIndex(r => r.id === m.id) + 1, n: ens.all.n,
     z_vs_ensemble_mean: round((mm.delta_total_kcal_mol - ens.all.mean) / ens.all.sd, 2),
     ensemble_mean: round(ens.all.mean, 2), ensemble_sem: round(ens.all.sd / Math.sqrt(ens.all.n), 2),
-    note: `the ensemble mean ± SEM is the estimate for this protocol conditional on this short-run ensemble (${[...new Set(ens.all.runs.map(r => r.production_ps))].sort((a, b) => a - b).join("–")} ps from one prepared start; seed variation, not a survey of conformational space); this run's value is one draw from the run-to-run spread` } : null;
+    note: `the ensemble mean ± SEM is the estimate for this protocol conditional on this short-run ensemble (${[...new Set(ens.all.runs.map(r => r.production_ps))].sort((a, b) => a - b).join("–")} ps from one prepared start; between-run variation with seeds, lengths and engines differing, not a survey of conformational space); this run's value is one draw from the run-to-run spread` } : null;
   const brief = [
     spreadSd != null
-      ? `ΔG = ${round(mm.delta_total_kcal_mol, 1)} ± ${round(spreadSd, 1)} kcal/mol for this run (single-trajectory MM-GBSA, ${mm.frames} frames of ${prod?.length_ps ?? "?"} ps; ± = run-to-run SD over ${ens.all.n} independent runs of the same prepared system; archived value ${mm.delta_total_kcal_mol}).`
+      ? `ΔG = ${round(mm.delta_total_kcal_mol, 1)} ± ${round(spreadSd, 1)} kcal/mol for this run (single-trajectory MM-GBSA, ${mm.frames} frames of ${prod?.length_ps ?? "?"} ps; ± = spread over ${ens.all.n} runs of the same prepared system, seeds, lengths and engines differing; archived value ${mm.delta_total_kcal_mol}).`
       : `ΔG = ${mm.delta_total_kcal_mol} kcal/mol, single-trajectory MM-GBSA over ${mm.frames} frames of a ${prod?.length_ps ?? "?"} ps production run.`,
-    spreadSd != null ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (run-to-run SD over all ${ens.all.n} independent runs${stratumNote}); the within-run SEM (${unc ? unc.corrected_sem : mm.frame_sem}) is not the uncertainty to report.` : `Only one run of this system: the within-run SEM ${unc ? unc.corrected_sem : mm.frame_sem} does not estimate run-to-run uncertainty; no spread can be quoted until ≥ 3 independent runs exist.`,
-    ...(vsEnsemble ? [`This run is ${vsEnsemble.rank_most_negative} of ${vsEnsemble.n} (most negative first), z = ${vsEnsemble.z_vs_ensemble_mean} vs the ensemble mean ${vsEnsemble.ensemble_mean} ± ${vsEnsemble.ensemble_sem} (SEM, n=${vsEnsemble.n}) — the protocol's estimate conditional on this short-run ensemble (seed variation over picoseconds from one prepared start).`] : []),
+    spreadSd != null ? `Quote ±${spreadSd.toFixed(2)} kcal/mol (spread over all ${ens.all.n} runs${stratumNote}); seed-only spread at ${ens.seed_only.production_ps} ps on ${ens.seed_only.engine}: ${ens.seed_only.sd != null ? `±${ens.seed_only.sd.toFixed(2)} over ${ens.seed_only.n} runs` : `not yet estimated (${ens.seed_only.n} of ${ens.seed_only.needed} runs)`}; the within-run SEM (${unc ? unc.corrected_sem : mm.frame_sem}) is not the uncertainty to report.` : `Only one run of this system: the within-run SEM ${unc ? unc.corrected_sem : mm.frame_sem} does not estimate run-to-run uncertainty; no spread can be quoted until ≥ 3 independent runs exist.`,
+    ...(vsEnsemble ? [`This run is ${vsEnsemble.rank_most_negative} of ${vsEnsemble.n} (most negative first), z = ${vsEnsemble.z_vs_ensemble_mean} vs the ensemble mean ${vsEnsemble.ensemble_mean} ± ${vsEnsemble.ensemble_sem} (SEM, n=${vsEnsemble.n}) — the protocol's estimate conditional on this short-run ensemble (between-run variation over picoseconds from one prepared start).`] : []),
     unc ? `Convergence: ${unc.verdict} by the halves test over ${prod?.length_ps ?? "?"} ps (N_eff ≈ ${unc.n_eff}, halves ${unc.halves.first} → ${unc.halves.second}); this tests drift within the archived window, not equilibration on longer timescales.` : "Convergence: per-frame data not archived, cannot judge.",
     signClaim(ens.all),
   ].join(" ");
@@ -511,6 +520,7 @@ function explainResultFull(m: Manifest, idx: IndexEntry[]) {
     stochasticity: { requested_seed: prod?.requested_seed, realized_seed: prod?.realized_seed, thermostat: `ntt=${prod?.cntrl.ntt} gamma_ln=${prod?.cntrl.gamma_ln}`,
       note: "ig=-1 draws a wallclock seed; pmemd wrote the realized seed to the .out. Two runs with different seeds are different samples of the same ensemble — differing ΔG is expected, not a bug." },
     run_to_run: ens,
+    seed_only_spread: ens.seed_only,
     sign_claim: { all_runs: signClaim(ens.all), long_runs: signClaim(ens.long, `≥ ${LONG_RUN_MIN_PS} ps`) },
     warnings: mm.warnings, internal_term_residual: resid,
     warning_note: mm.warnings.length ? (resid ? `MMPBSA.py's warning is consistent with the internal-term residual quantified in internal_term_residual: ${resid.total.mean} ± ${resid.total.sd} kcal/mol per frame (${(resid.fraction_of_delta_g * 100).toFixed(3)} % of ΔG), from ${resid.dominant_term} — the only internal term that does not cancel. MMPBSA.py's exact trigger condition is not recorded in the artifacts, so this is the residual that accompanies the warning, not a proven cause. Recorded verbatim, quantified, not suppressed.` : "MMPBSA.py emits this when complex − receptor − ligand internal terms do not cancel exactly in single-trajectory mode; per-frame data not archived, so the size of the residual is unknown.") : undefined,
@@ -833,7 +843,7 @@ export function confidenceLadderFull(m: Manifest, idx: IndexEntry[]) {
     const need = 3 - hereSame.length;
     rungs.push({ rung: "independently replicated", status: verifiedHere ? "verified" : "partly established",
       short: `seed-replicated ✓ (${st.n} same-protocol runs, ${lengths[0]}–${lengths[lengths.length - 1]} ps) · at ${myPs} ps on ${myEngine}: ${hereSame.length} of 3 needed ${verifiedHere ? "✓" : "✗"}${hereCross.length ? ` · ${hereCross.length} cross-engine at ${myPs} ps not counted` : ""}`,
-      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. What this earns: the sign and the spread are robust to the seed. Replication of this run's number at its own length (${myPs} ps) on its own engine (${myEngine}): ${hereSame.length} run${hereSame.length === 1 ? "" : "s"}${verifiedHere ? ` (SD ±${sdHere?.toFixed(2)})` : " — fewer than the 3 needed"}.${crossNote} ${signClaim(st).split("; the observed")[0].replace(/\.?$/, ".")}`,
+      evidence: `${st.n} runs of the same prepared system and production protocol with distinct realized seeds (production ${lengths.join(", ")} ps — same protocol at different lengths, not identical replicates): mean ${st.mean?.toFixed(2)}, run-to-run SD ±${st.sd?.toFixed(2)} kcal/mol${long.n >= 2 && long.n < st.n ? ` (≥ ${LONG_RUN_MIN_PS} ps: n=${long.n}, SD ±${long.sd?.toFixed(2)})` : ""}. What this earns: the sign is consistent across runs, and a between-run spread exists — seeds, lengths and engines differ within it. Replication of this run's number at its own length (${myPs} ps) on its own engine (${myEngine}): ${hereSame.length} run${hereSame.length === 1 ? "" : "s"}${verifiedHere ? ` (SD ±${sdHere?.toFixed(2)})` : " — fewer than the 3 needed"}.${crossNote} ${signClaim(st).split("; the observed")[0].replace(/\.?$/, ".")}`,
       to_climb: verifiedHere ? null : `${need} more independent run${need === 1 ? "" : "s"} at ${myPs} ps on ${myEngine} (fork_experiment kind='replicate')` });
   } else rungs.push({ rung: "independently replicated", status: "not established", short: `${sameProto.length} run${sameProto.length === 1 ? "" : "s"} of this system and protocol on this site; 3 needed`,
     evidence: `${peers.length} run${peers.length === 1 ? "" : "s"} of this prepared system on this site, ${sameProto.length} with the same production protocol${seeded.length && distinct < sameProto.length ? ", not all with distinct seeds" : ""}; at least 3 independent runs (ig=-1, same protocol) are needed`, to_climb: "fork_experiment kind='replicate' (plan_sampling gives the number of runs)" });

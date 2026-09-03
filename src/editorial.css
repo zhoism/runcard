@@ -331,6 +331,7 @@ pre.out { max-height: 280px; } pre.small { font-size: 13px; }
 .unit { font-family: var(--sans); font-size: 15px; color: var(--muted); font-weight: 400; letter-spacing: 0; }
 .big .badge { vertical-align: 8px; font-family: var(--sans); }
 .big .spread-sd { font-family: var(--sans); font-size: 15px; font-weight: 500; letter-spacing: 0; color: var(--ink-2); margin-left: 12px; white-space: nowrap; } .big .spread-sd .dim { font-weight: 400; }
+.qualifier { margin: 0 0 10px; font-size: 14px; line-height: 1.5; color: var(--ink-2); } .qualifier .badge { margin-right: 6px; }
 
 /* warnings and interpretations: tinted, no borders */
 .warnbox { margin-top: 12px; padding: 10px 14px; background: var(--warn-bg); border-radius: 8px; font-size: 14.5px; line-height: 1.5; color: var(--ink); font-weight: 600; text-transform: lowercase; }
@@ -412,6 +413,7 @@ aside .agent .kicker { margin-bottom: 8px; }
 aside .agent .row.wrap { margin: 4px 0 2px; }
 .agent-verbs { list-style: none; display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 4px; padding: 0; }
 .agent-verbs button.chip { font-family: var(--sans); font-size: 13.5px; font-weight: 500; padding: 3px 11px; }
+details.devtools .agent-verbs { margin: 0 0 8px; }
 /* a failed call in the rail: the callout sits under the buttons or the input box, its raw JSON folded */
 aside .callout { margin: 10px 0 0; padding: 10px 14px; } aside .callout p:last-of-type { margin-bottom: 4px; } aside .callout pre { margin-top: 6px; }
 details.devtools { margin-top: 14px; border-top: 1px solid rgba(30, 58, 95, .15); padding-top: 10px; }

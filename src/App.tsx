@@ -25,6 +25,8 @@ const qualified = (idx: IndexEntry[], id: string) => { const o = ownerOf(idx, id
 const plural = (n: number, w: string) => (n === 1 ? w : w + "s");
 /** The run a first visitor is sent to: the parent of the site's one executed fork network, so the fork story on its page is true. */
 const DEMO_RUN = "1l2y-rep4";
+/** The verbs the rail shows on a run page; the rest sit under All agent tools with the tool chips. */
+const FEATURED_VERBS = ["explain", "recompute", "fork"];
 /** The project (cohort) a run belongs to, for breadcrumbs. */
 const projectOf = (idx: IndexEntry[], id: string) => cohorts(idx).find(c => c.runs.some(r => r.id === id));
 const rungCls = (st: string) => st === "verified" ? "pass" : st === "not established" ? "warn" : st === "partly established" ? "partly" : "";
@@ -113,7 +115,7 @@ function ProjectCard({ c, idx, own, rows, handle }: { c: Cohort; idx: IndexEntry
     {/* Kicker: the system's code name and the fork status. Headline: what it is, in words. Then the spread, the object a reader can see at once. */}
     <p className="kicker">{sys ? <span className="mono">{c.title}</span> : <span>project</span>}{st && st !== "none" && <span className={`badge ${st === "agree" ? "pass" : st === "tension" ? "warn" : ""}`}>{st === "agree" ? "forks agree" : st === "tension" ? "forks in tension" : "forks: sign only"}</span>}</p>
     <h2 className="headline"><a href={`#/p/${c.slug}`}>{sys?.name ?? c.title}</a></h2>
-    <p className="cohort-desc">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and protocol run ${c.n} times with fresh seeds, ${span}.` : "One run so far."}</p>
+    <p className="cohort-desc">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and core settings, run ${c.n} times with differing seeds and lengths (${span})${p.engines.length > 1 ? " and engines" : ""}.` : "One run so far."}</p>
     <Spread runs={c.runs} mean={c.mean} sd={c.sd} own={own} ringId={ringId} ringWhy={p.network ? "the parent of the forks" : "the longest run"} />
     <div className="meta-row">
       <p className="cohort-dg">ΔG <b className="mono">{fmt(c.mean)}{c.sd != null ? ` ± ${fmt(c.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{c.sd != null ? "" : " · one run, so no run-to-run spread yet"}</span></p>
@@ -145,7 +147,7 @@ function Home({ idx, own }: { idx: IndexEntry[]; own: Owners | null }) {
     <div className="hero">
       <div className="hero-copy">
         <h1>MD runs you can <em>inspect, verify, fork</em> and continue.</h1>
-        <p className="lede">Runcard turns molecular dynamics (MD) simulation outputs into structured records with provenance, validation and lineage, so collaborators and AI agents can understand what happened and build on it. Every number traces to a file in the run directory, an agent reads the same page through WebMCP, and a person approves every change to an input.</p>
+        <p className="lede">Runcard turns molecular dynamics (MD) simulation outputs into structured records with provenance, validation and lineage, so collaborators and AI agents can understand what happened and build on it. Every number traces to a file in the run directory; an agent reads the same page through WebMCP and can prepare a continuation, which a person approves, runs elsewhere, and publishes back as a child card.</p>
         <div className="cta"><a className="btn" href={`#/run/${DEMO_RUN}`}>Explore the demo run →</a><a className="btn ghost" href="#agent-actions" onClick={toActions}>See what an agent can do</a></div>
       </div>
       {demo && <StartHere r={demo} idx={idx} own={own} />}
@@ -170,8 +172,8 @@ function StartHere({ r, idx, own }: { r: IndexEntry; idx: IndexEntry[]; own: Own
     <p className="kicker">start here <span className="badge start">demo run</span><span className="mono">{r.id}</span></p>
     <h2 className="headline"><a href={href}>{sys?.name ?? r.title}</a></h2>
     <p className="start-desc">{sys ? `${sys.sentence} ` : ""}{r.production_ps} ps of production on {r.engine}{r.owner ? `, published by ${nameOf(r.owner)}` : ""}.</p>
-    <p className="cohort-dg">ΔG <b className="mono">{fmt(r.delta_g)}{ens.all.sd != null ? ` ± ${fmt(ens.all.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{ens.all.sd != null ? ` · ± is the run-to-run SD over ${ens.all.n} runs` : ""}</span></p>
-    {net.n > 0 && <p className="start-forks"><span className={`badge ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`}>{net.n} forks · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</span> {net.n} independent reruns from its bundle{by.length ? `, executed by ${by.map(nameOf).join(", ")}` : ""}{crossEngine ? " on a different engine" : ""}, {net.status === "agree" ? "reproduce it to seed noise" : net.status === "tension" ? "disagree with it beyond seed noise" : "agree with it in sign"}.</p>}
+    <p className="cohort-dg">ΔG <b className="mono">{fmt(r.delta_g)}{ens.seed_only.sd != null ? ` ± ${fmt(ens.seed_only.sd)}` : ens.all.sd != null ? ` ± ${fmt(ens.all.sd)}` : ""}</b> kcal/mol <span className="dim">MM-GBSA{ens.seed_only.sd != null ? ` · ± is the seed-only spread over ${ens.seed_only.n} runs` : ens.all.sd != null ? ` · ± is the spread over ${ens.all.n} runs${ens.engines.length > 1 ? `, ${ens.engines.length} engines` : ""}` : ""}</span></p>
+    {net.n > 0 && <p className="start-forks"><span className={`badge ${net.status === "agree" ? "pass" : net.status === "tension" ? "warn" : ""}`}>{net.n} forks · {net.status === "agree" ? "agree" : net.status === "tension" ? "in tension" : "sign only"}</span> {net.n} independent reruns from its bundle{by.length ? `, executed by ${by.map(nameOf).join(", ")}` : ""}{crossEngine ? " on a different engine" : ""}, {net.status === "agree" ? "reproduce it within the cohort's observed spread" : net.status === "tension" ? "are shifted from it by more than the cohort's observed spread" : "agree with it in sign"}.</p>}
     <p className="start-open"><a href={href}>Open the run →</a></p>
   </div>;
 }
@@ -219,8 +221,8 @@ function NextStepCallout({ step, ladder, m, ens }: { step: NonNullable<ReturnTyp
 function ForkCallout({ net, detailHref, onReplicate }: { net: ForkNetwork; detailHref: string; onReplicate?: () => void }) {
   const by = [...new Set(net.forks.map(f => f.owner).filter((o): o is string => !!o && o !== net.parent.owner))];
   const crossEngine = net.engines.forks.some(e => e !== net.engines.parent);
-  const head = net.status === "tension" ? `${net.n} independent ${net.n === 1 ? "fork disagrees" : "forks disagree"} with ${net.parent.id} beyond seed noise`
-    : net.status === "agree" ? `${net.n} independent ${net.n === 1 ? "fork reproduces" : "forks reproduce"} ${net.parent.id} to seed noise`
+  const head = net.status === "tension" ? `${net.n} independent ${net.n === 1 ? "fork disagrees" : "forks disagree"} with ${net.parent.id} beyond the cohort's observed spread`
+    : net.status === "agree" ? `${net.n} independent ${net.n === 1 ? "fork reproduces" : "forks reproduce"} ${net.parent.id} within the cohort's observed spread`
     : `${net.n} ${net.n === 1 ? "fork agrees" : "forks agree"} with ${net.parent.id} in sign; the spread cannot be judged yet`;
   const body = net.status === "tension"
     ? `${net.sign_agrees ? "All keep the sign of ΔG" : "Not all keep the sign of ΔG"}; the fork mean sits ${fmt(Math.abs(net.parent_offset_kcal!), 1)} kcal/mol from the parent, ${fmt(Math.abs(net.parent_offset_sd!), 1)}× the run-to-run SD.${crossEngine ? " Engine and seed changed together, so the cause is unresolved; a replicate on the parent's engine would separate them." : " Same engine, so seed noise alone does not explain it."}`
@@ -300,7 +302,7 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
     <nav className="crumbs" aria-label="breadcrumb"><a href="#/">projects</a><span aria-hidden="true">/</span><span>{c.title}</span></nav>
     <div className="titlebar"><h1>{sys?.name ?? c.title}</h1>{sys && <span className="dim">{c.title}</span>}
       {p.network && <a className={`badge fork ${netCls}`} href={`#network-${p.network.parent.id}`}>{p.network.n} forks · {p.network.status === "agree" ? "agree" : p.network.status === "tension" ? "in tension" : "sign only"}</a>}</div>
-    <p className="lede">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and protocol run ${c.n} times with fresh seeds, ${span}.` : "One run so far."}</p>
+    <p className="lede">{sys ? `${sys.sentence} ` : ""}{c.n > 1 ? `The same prepared system and core settings, run ${c.n} times with differing seeds and lengths (${span})${p.engines.length > 1 ? " and engines" : ""}.` : "One run so far."}</p>
     <CountsLine c={c} p={p} own={own} />
 
     <div className="card">
@@ -312,7 +314,7 @@ function ProjectPage({ slug, idx, own }: { slug: string; idx: IndexEntry[]; own:
         </dl>}
         {c.sd != null && <p className="dim small">The ± is the observed run-to-run spread across {c.n} runs of one system and protocol with different seeds and lengths{p.engines.length > 1 ? ` and ${p.engines.length} disclosed engines` : ""}: an empirical spread, not pure seed noise.</p>}
         {/* The sign claim only; the spread and its caveat are stated once, above. signClaim's full sentence is what the tool returns. */}
-        <p className="dim small">{ens.all.negative === ens.all.n ? `All ${ens.all.n} runs give ΔG < 0; the sign is robust to seed variation.` : ens.all.negative === 0 ? `None of the ${ens.all.n} runs gives ΔG < 0.` : `${ens.all.negative} of ${ens.all.n} runs give ΔG < 0; the sign is not robust across runs.`}</p>
+        <p className="dim small">{ens.all.negative === ens.all.n ? `All ${ens.all.n} runs give ΔG < 0: every observed run, across seeds, lengths and engines, gives a negative estimate.` : ens.all.negative === 0 ? `None of the ${ens.all.n} runs gives ΔG < 0.` : `${ens.all.negative} of ${ens.all.n} runs give ΔG < 0; the sign is not robust across runs.`}</p>
     </div>
 
     {p.network && <ForkCallout net={p.network} detailHref={`#network-${p.network.parent.id}`} onReplicate={m ? () => forkKinds(m, ens).find(k => k.id === "replicate")?.run() : undefined} />}
@@ -551,7 +553,7 @@ function ForkCards({ m, ens }: { m: Manifest; ens: ReturnType<typeof ensemble> |
   const [copied, setCopied] = useState<string | null>(null);
   const copy = async (id: string, text: string) => { try { await navigator.clipboard.writeText(text); setCopied(id); } catch { setCopied(`error:${id}`); } };
   const kinds = forkKinds(m, ens);
-  return <div className="card" id="fork-card"><h2>Fork and continue <span className="dim">a fork inherits the prepared system, protocol, force fields and MM-GBSA model, and records what changed — reproduce and replicate change no inputs; extend changes one and waits for your approval</span></h2>
+  return <div className="card" id="fork-card"><h2>Fork and continue <span className="dim">a fork inherits the prepared system, protocol, force fields and MM-GBSA model, and records what changed — reproduce and replicate change no inputs; extend changes one and waits for your approval. Prepared here, executed elsewhere: an executed fork comes back as a child card with lineage (tools/extract_run.py)</span></h2>
     <div className="fork-cards">{kinds.map(k => <div key={k.id} className="fork-card">
       {k.approval && <span className="badge warn">needs your approval</span>}
       <h3>{k.title}</h3><p>{k.desc}</p>
@@ -694,7 +696,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
           {m.parent && <> {m.fork?.kind === "replicate" ? "Independent replicate of" : m.fork?.kind ? `${m.fork.kind} of` : "Derived from"} <a href={`#/run/${m.parent}`}>{qualified(idx, m.parent)}</a>{m.fork?.seed === "fresh" ? ": same prepared system and protocol, fresh seeds" : ""}{parentEntry && prod?.engine && parentEntry.engine !== prod.engine ? `, on ${prod.engine} where the parent used ${parentEntry.engine}` : ""}{m.fork?.complete === false ? ", partially applied" : ""}.</>}
           {net && net.n > 0 && <> Parent of <a href={`#network-${m.id}`}>{net.n} independent {plural(net.n, "fork")}</a>{by.length ? ` executed by ${by.map(h => own?.profiles[h]?.name ?? h).join(", ")}` : ""}.</>}
         </p>; })()}
-      <nav className="onpage" aria-label="on this page"><a href="#result">result</a><a href="#trust">can I trust it?</a><a href="#happened">what happened</a><a href="#build">build on it</a><a href="#produced">how it was produced</a></nav>
+      <nav className="onpage" aria-label="on this page"><a href="#result">result</a><a href="#trust">what it establishes</a><a href="#happened">what happened</a><a href="#build">build on it</a><a href="#produced">how it was produced</a></nav>
 
       {/* Run metadata, one line: who, which engine, which seed (the length is in the objective line). The result comes next, then what qualifies it. */}
       <div className="summary-strip">
@@ -704,18 +706,21 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
 
       <div className={m.results.plip ? "grid2" : ""} id="result">
         <div className="card">
-          <h2>Binding free energy <span className="dim">MM-GBSA, single trajectory{mm?.params?.entropy === "0" ? ", no entropy term" : ""}</span></h2>
+          <h2>Binding free energy estimate <span className="dim">MM-GBSA, single trajectory{mm?.params?.entropy === "0" ? ", no entropy term" : ""}</span></h2>
           {mm ? <>
             {/* Headline: this run's ΔG with the uncertainty the page argues for (run-to-run SD), then the rows in order of what matters; the mechanics are one disclosure away. */}
-            <div className="big">{fmt(mm.delta_total_kcal_mol)} <span className="unit">kcal/mol</span>{spreadSd != null && ens && <span className="spread-sd" title="the run-to-run SD across the independent runs of this prepared system">± {fmt(spreadSd)} <span className="dim">run-to-run SD, {ens.all.n} runs</span></span>}{u && u.verdict !== "no drift detected" && <> <span className="badge warn" title="halves test within the archived window">{u.verdict}</span></>}</div>
+            <div className="big">{fmt(mm.delta_total_kcal_mol)} <span className="unit">kcal/mol</span>{ens && ens.seed_only.sd != null ? <span className="spread-sd" title={ens.seed_only.note}>± {fmt(ens.seed_only.sd)} <span className="dim">seed-only spread, {ens.seed_only.n} runs</span></span> : spreadSd != null && ens ? <span className="spread-sd" title="the spread across all runs of this prepared system on runcard; seeds, lengths and engines differ">± {fmt(spreadSd)} <span className="dim">spread over {ens.all.n} runs</span></span> : null}{u && u.verdict !== "no drift detected" && <> <span className="badge warn" title="halves test within the archived window">{u.verdict}</span></>}</div>
+            {/* The qualification sits with the number, not after it: what kind of estimate this is, read from the record. */}
+            <p className="qualifier"><span className="badge warn">short-run estimate</span> A {prod?.length_ps ?? "?"} ps MM-GBSA estimate from the archived trajectory: not a converged binding free energy, and not experimentally validated.</p>
             {mm.per_frame && <Sparkline x={mm.per_frame.delta_total} lengthPs={prod?.length_ps ?? null} window={re ? { start: re.window.start_frame, end: re.window.end_frame } : undefined} />}
             <p className="dim small">{spreadSd != null
-              ? <>The run-to-run SD, not the within-run SEM, is the uncertainty to quote for one run: seed spread, not frame noise, is what this number is uncertain by.</>
+              ? <>{ens && (ens.seed_only.sd != null ? `Seed-only spread at ${ens.seed_only.production_ps} ps on ${ens.seed_only.engine}: ±${fmt(ens.seed_only.sd)} over ${ens.seed_only.n} runs.` : `Seed-only uncertainty at ${ens.seed_only.production_ps} ps on ${ens.seed_only.engine} is not yet estimated (${ens.seed_only.n} of ${ens.seed_only.needed} runs); the ± above is the spread of the whole project across lengths${ens.engines.length > 1 ? " and engines" : ""}, not seed noise.`)} The within-run SEM below is not the uncertainty to quote for one run.</>
               : u ? <>single run of this system: the within-run corrected SEM below does not estimate run-to-run uncertainty — no spread can be quoted until three independent runs exist.</> : null}</p>
             <dl>
               {ens && ens.all.n > 1 && <><dt>run-to-run</dt><dd><b>n={ens.all.n}</b>: mean {fmt(ens.all.mean)}, SD {fmt(ens.all.sd)}, range {fmt(ens.all.min)} … {fmt(ens.all.max)}
                 {ens.long.n > 0 && ens.long.n < ens.all.n && <><br /><b>n={ens.long.n}</b> runs ≥ {ens.long.min_ps} ps: mean {fmt(ens.long.mean)}, SD {fmt(ens.long.sd)}, range {fmt(ens.long.min)} … {fmt(ens.long.max)}</>}
                 <span className="dim"> — observed run-to-run variation from one prepared start at {[...new Set(ens.all.runs.map(r => r.production_ps))].sort((x, y) => x - y).join(", ")} ps; seeds and lengths differ{ens.engines.length > 1 ? `, and so do engines (${ens.engines.map(e => `${e.engine} × ${e.n}`).join(", ")})` : ""}</span></dd></>}
+              {ens && ens.all.n > 1 && <><dt>seed-only</dt><dd>at {ens.seed_only.production_ps} ps on {ens.seed_only.engine}: <b>n={ens.seed_only.n}</b>{ens.seed_only.sd != null ? <>, mean {fmt(ens.seed_only.mean)}, SD {fmt(ens.seed_only.sd)} <span className="dim">— runs differing in nothing but the seed</span></> : <> of {ens.seed_only.needed} needed <span className="dim">— no seed-only spread is quoted below {ens.seed_only.needed} such runs, and the pooled spread is not substituted for it</span></>}</dd></>}
               {u && <><dt>within run</dt><dd>corrected SEM <b>{fmt(u.corrected_sem, 3)}</b> (g = {u.statistical_inefficiency_g}, N<sub>eff</sub> ≈ {u.n_eff}) · halves {fmt(u.halves.first)} → {fmt(u.halves.second)} · <b>{u.verdict}</b> <span className="dim">(halves test over {prod?.length_ps ?? "?"} ps)</span></dd></>}
               {re && <><dt>current reanalysis</dt><dd>frames {re.window.start_frame}–{re.window.end_frame}{re.window.interval > 1 ? ` every ${re.window.interval}th` : ""} ({re.window.frames_used} frames{re.window.start_ps != null ? `, ${re.window.start_ps}–${re.window.end_ps} ps` : ""}) → <b>{fmt(re.delta_g.mean)} ± {fmt(re.delta_g.corrected_sem)}</b>, {re.delta_g.verdict} <span className="dim">(recomputed in the browser from the archived per-frame energies; ± is the corrected SEM; the archived value above is unchanged)</span></dd></>}
               <dt>method</dt><dd>MM-GBSA igb={mm.igb}, saltcon={mm.saltcon} · computed {mm.run_on}</dd></dl>
@@ -739,7 +744,7 @@ function RunPage({ id, idx, own }: { id: string; idx: IndexEntry[]; own: Owners 
 
       {ladder && step && <NextStepCallout step={step} ladder={ladder} m={m} ens={ens} />}
 
-      <h2 className="section-label" id="trust">can I trust it?{ladder && <span className="badge pass">{ladder.verified_of_assessable} assessed rungs verified</span>}</h2>
+      <h2 className="section-label" id="trust">what this record establishes{ladder && <span className="badge pass">{ladder.verified_of_assessable} assessed rungs verified</span>}</h2>
       {net && net.n > 0 && <ForkCallout net={net} detailHref={`#network-${m.id}`} />}
       {ladder && <EvidenceOverview ladder={ladder} explanation={explanation} validationVerdict={overall} />}
       {ladder && (() => { const L = ladder; const cls = (s: string) => s === "verified" ? "pass" : s === "not established" ? "warn" : s === "partly established" ? "partly" : ""; return <div className="card">
@@ -839,7 +844,7 @@ function CurrentInvestigation({ runId, investigation, net, partnerId }: { runId:
         <p><b>Inherits</b> the prepared system, protocol, force fields and MM-GBSA model of {runId}{v.treatment ? <> except <span className="mono">{v.treatment.key}</span></> : null}; the bundle's manifest records {runId} as parent and {v.kind === "reproduce" ? "pins the seeds" : "draws fresh seeds"}.</p>
         {v.treatment ? <p><b>Changes</b> <span className="mono">{v.treatment.key}</span>: {Object.entries(v.treatment.from).map(([s, x]) => `${s} ${x}`).join(", ")} → {v.treatment.to}; stages {v.stages_changed.join(", ")}.</p> : <p><b>Changes</b> no input.</p>}
         {ps.length > 0 && <p><b>Approval</b> {approved} of {ps.length} stage {plural(ps.length, "edit")} approved{ready ? "." : <> — the rest wait on their pinned threads: {ps.filter(p => p.status !== "approved").map((p, i) => <span key={p.id}>{i ? ", " : ""}<button type="button" className="linklike" onClick={() => set({ openStage: p.stage })}>{p.stage}</button> ({p.status})</span>)}.</>}</p>}
-        {inBundle ? <p className="dim small">In the bundle prepared at {fmtTime(bundle!.generatedAt)}, below{inBundle.complete ? "" : `, with ${inBundle.missingStages.join(", ")} not applied`}. No result yet: it runs when the bundle is executed elsewhere and comes back as a child card.</p>
+        {inBundle ? <p className="dim small">In the bundle prepared at {fmtTime(bundle!.generatedAt)}, below{inBundle.complete ? "" : `, with ${inBundle.missingStages.join(", ")} not applied`}. No result yet: run the bundle elsewhere, then <span className="mono">tools/extract_run.py</span> on the result directory writes the child card with parent lineage — the same step that published every card on this site.</p>
           : ready ? <div className="row"><button type="button" onClick={async () => { const raw = await callTool("generate_rerun_bundle", { run_id: runId, seed: v.kind === "reproduce" ? "pinned" : "fresh", target: "slurm" }, "page"); const o = JSON.parse(raw); setMessage(o.error ? o.error : "Rerun bundle prepared; download below."); }}>Prepare rerun bundle</button><span className="dim small">writes the bundle with the parent link; nothing runs here</span></div> : null}
         <p className="dim small">{v.stages_unchanged_note || v.controls_note}</p>
       </div>; })}
@@ -945,6 +950,7 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
   const askPrompt = context === "site" ? "What is on this site, and which run should I start with?" : `Investigate ${target} on this page and tell me what to do next.`;
   const [copied, setCopied] = useState(false);
   const copyAsk = async () => { try { await navigator.clipboard.writeText(askPrompt); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { setCopied(false); } };
+  const verbChip = (a: AgentAction) => { const t = TOOLS.find(x => x.name === a.tool)!; return <li key={a.id}><button type="button" className={`chip ${last?.id === a.id ? "on" : ""}`} title={`${a.does} (${t.name}${a.prefill ? ", prepared in the console; its proposals wait for your Approve" : ""})`} onClick={() => act(a)}>{a.verb}{t.readOnly ? "" : " ✎"}</button></li>; };
   const act = async (a: AgentAction) => { if (!target) return; if (a.prefill) { set({ console: { tool: a.tool, input: JSON.stringify(a.input(target), null, 1) } }); return; } setLast(a); try { setOut(await callTool(a.tool, a.input(target), "page")); } catch (e: any) { setOut(String(e)); } };
   const prefill = (name: string) => { const props: any = (TOOLS.find(x => x.name === name)!.inputSchema as any).properties ?? {}; return JSON.stringify(currentRun && props.run_id ? { run_id: currentRun } : currentRun && props.run_a ? { run_a: currentRun, run_b: "" } : {}); };
   // On a run page the most useful first call is explain_result for that run — until the human picks a tool themselves.
@@ -977,7 +983,7 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
         {context === "run" && !allProposals.some(p => p.run === currentRun) && <button className="ghost" onClick={draftProposal} title="Prefills propose_change below; you press Call, then Approve or Reject on the thread pinned to the stage">Draft a proposal</button>}
       </div>
       {/* The seven things an agent does here, as verbs: each is one tool from the table below, called from the page on the run on screen. ✎ marks a tool that writes page state; only the fork prepares a change to an input, and it waits for Approve. */}
-      {context !== "site" && <ul className="agent-verbs" aria-label="what an agent can do on this run">{AGENT_ACTIONS.map(a => { const t = TOOLS.find(x => x.name === a.tool)!; return <li key={a.id}><button type="button" className={`chip ${last?.id === a.id ? "on" : ""}`} title={`${a.does} (${t.name}${a.prefill ? ", prepared in the console; its proposals wait for your Approve" : ""})`} onClick={() => act(a)}>{a.verb}{t.readOnly ? "" : " ✎"}</button></li>; })}</ul>}
+      {context !== "site" && <ul className="agent-verbs" aria-label="what an agent can do on this run">{AGENT_ACTIONS.filter(a => FEATURED_VERBS.includes(a.id)).map(verbChip)}</ul>}
       <div role="status" aria-live="polite">{out && (outErr
         ? <ToolFail e={outErr} tool={outTool} />
         : <div className="dim small">{(() => { let v: any = null; try { v = JSON.parse(out); } catch { return null; }
@@ -989,7 +995,8 @@ function Sidebar({ idx }: { idx: IndexEntry[] }) {
             if (last && calls[0]?.tool === last.tool) return <p>{calls[0].summary}</p>;
             return null; })()}<details className="small"><summary className="dim">raw JSON</summary><pre className="small out">{pretty(out)}</pre></details></div>)}</div>
       <details className="devtools" open={mode === "manual"} onToggle={e => setMode((e.target as HTMLDetailsElement).open ? "manual" : "auto")}>
-        <summary>Developer tools <span className="dim">· the {TOOLS.length} tools an agent sees, called by hand · ✎ changes page state</span></summary>
+        <summary>All agent tools <span className="dim">· the {TOOLS.length} tools an agent sees, called by hand · ✎ leaves something on the page</span></summary>
+        {context !== "site" && <ul className="agent-verbs" aria-label="the other verbs">{AGENT_ACTIONS.filter(a => !FEATURED_VERBS.includes(a.id)).map(verbChip)}</ul>}
         <div className="tool-chips" role="group" aria-label="tool">{TOOLS.map(x => <button type="button" key={x.name} className={`chip ${tool === x.name ? "on" : ""}`} aria-pressed={tool === x.name} onClick={() => { setTouched(true); setEdited(true); setTool(x.name); setInput(prefill(x.name)); }}>{x.name}{x.readOnly ? "" : " ✎"}</button>)}</div>
         {(() => { const q = t.description.indexOf("? "); const head = q > 0 ? t.description.slice(0, q + 1) : t.description; const rest = q > 0 ? t.description.slice(q + 2) : ""; return <div className="dim small">{head}{rest && <details className="small"><summary className="dim">what it returns</summary><p className="dim">{rest}</p></details>}</div>; })()}
         <div className="dim small mono" id="tool-schema">{JSON.stringify((t.inputSchema as any).properties && Object.fromEntries(Object.entries((t.inputSchema as any).properties).map(([k, v]: any) => [k, v.enum ? v.enum.join("|") : v.type])))}</div>

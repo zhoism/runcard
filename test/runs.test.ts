@@ -474,7 +474,7 @@ describe("judge pass 46ca5ba fixes", () => {
     expect(e.brief).toMatch(/^ΔG = -19\.2 ± 0\.6 kcal\/mol for this run/); expect(e.brief).toMatch(/archived value -19\.1953/);
     expect(e.this_run_vs_ensemble).toMatchObject({ rank_most_negative: 1, n: 13 }); expect(e.this_run_vs_ensemble.z_vs_ensemble_mean).toBeLessThan(-1.5);
     expect(e.brief).toMatch(/This run is 1 of 13 .* vs the ensemble mean -17\.85 ± 0\.18 \(SEM, n=13\)/);
-    expect(e.run_to_run.caveat).toMatch(/from one prepared start/); expect(e.sign_claim.all_runs).toMatch(/robust to seed variation/);
+    expect(e.run_to_run.caveat).toMatch(/from one prepared start/); expect(e.sign_claim.all_runs).toMatch(/consistent across all 13 runs/);
     expect((explainResult(C, idx, true) as any).this_run_vs_ensemble).toBeNull();
   });
   it("plan_sampling: a run already ≥ min_run_ps whose target is not met gets an 'extend this run alone' suggested edit; a met target gets none", () => {
@@ -743,5 +743,38 @@ describe("objectiveOf and nextStep", () => {
       // and it is the rung automode names as the bottleneck for the same run: one rule, two surfaces
       expect(step!.rung, r.id).toBe(investigateRun(m, idx).bottleneck!.rung);
     }
+  });
+});
+
+// ---- the uncertainty is stratified: the pooled spread is named for what it mixes, and seed-only is never substituted ----
+describe("seed-only spread", () => {
+  it("rep4: 2 of 3 runs at 30 ps on PMEMD, so no seed-only spread is quoted; the pooled ±0.64 is labelled a spread across lengths and engines", () => {
+    const e = ensemble(idx, "1l2y-rep4");
+    expect(e.seed_only).toMatchObject({ engine: "Amber 26 PMEMD (2026)", production_ps: 30, n: 2, needed: 3, sd: null, mean: null });
+    expect(e.seed_only.note).toMatch(/not yet estimated: 2 of 3 runs at 30 ps on Amber 26 PMEMD \(2026\); the pooled spread across lengths and engines is not a substitute/);
+    expect(e.matched.n).toBe(2); expect(e.caveat).toMatch(/and so do engines/); expect(e.caveat).toMatch(/not seed noise/);
+    const x = explainResult(load("1l2y-rep4"), idx) as any;
+    expect(x.seed_only_spread).toEqual(e.seed_only);
+    expect(x.brief).toMatch(/seeds, lengths and engines differing/); expect(x.brief).toMatch(/seed-only spread at 30 ps on Amber 26 PMEMD \(2026\): not yet estimated \(2 of 3 runs\)/);
+  });
+  it("ice1: the four SANDER reruns at 30 ps differ in nothing but the seed, so a seed-only spread exists", () => {
+    const e = ensemble(idx, "1l2y-rep4-ice1");
+    expect(e.seed_only.n).toBe(4); expect(e.seed_only.sd).toBeGreaterThan(0); expect(e.seed_only.engine).toBe("Amber 24 SANDER (2024)");
+    expect((explainResult(load("1l2y-rep4-ice1"), idx) as any).brief).toMatch(/seed-only spread at 30 ps on Amber 24 SANDER \(2024\): ±0\.\d\d over 4 runs/);
+  });
+  it("a single run has a seed-only stratum of one and no spread", () => {
+    const e = ensemble(idx, "3htb-jz4"); expect(e.seed_only.n).toBe(1); expect(e.seed_only.sd).toBeNull();
+  });
+  it("nothing computed on this site calls the pooled spread seed noise", () => {
+    for (const r of idx) {
+      const m = load(r.id);
+      const text = JSON.stringify([explainResult(m, idx, true), confidenceLadderFull(m, idx), ensemble(idx, r.id), forkNetwork(idx, r.id), investigateRun(m, idx)]);
+      // affirmative uses only: "not seed noise" is the correct denial and stays
+      expect(text, r.id).not.toMatch(/(to|beyond|than) seed noise|seed spread, not frame|robust to (the )?seed/);
+    }
+  });
+  it("the fork verdict measures against the cohort's observed spread and names the confound", () => {
+    const v = forkNetwork(idx, "1l2y-rep4").verdict;
+    expect(v).toMatch(/Beyond 2 SDs of the cohort's observed spread/); expect(v).toMatch(/engine and seed effects are confounded/);
   });
 });

@@ -82,9 +82,9 @@ export function investigateRun(m: Manifest, idx: IndexEntry[]): Investigation {
   // Format from the ensemble's own SD, not from the value explain_result already rounded to 3 dp: rounding a
   // rounded number moves 0.645 to "0.65" where explain_result prints "0.64", and the same quantity shown two
   // ways on one page is the thing this project exists to refuse.
-  const spreadSd = ensemble(idx, m.id).all.sd;
+  const en = ensemble(idx, m.id); const spreadSd = en.all.sd; const so = en.seed_only;
   const headline = quote && spreadSd != null
-    ? `ΔG = ${n2(mm?.delta_total_kcal_mol)} kcal/mol. Quote ±${spreadSd.toFixed(2)} (run-to-run SD over ${quote.n} runs of this system), not the within-run SEM ${n2(e.within_run?.corrected_sem)} — seed spread, not frame noise, is what a single run's number is uncertain by.`
+    ? `ΔG = ${n2(mm?.delta_total_kcal_mol)} kcal/mol. Quote ±${spreadSd.toFixed(2)} (spread over ${quote.n} runs of this system; seeds, lengths and engines differ), not the within-run SEM ${n2(e.within_run?.corrected_sem)} — between-run variation, not frame noise, is what a single run's number is uncertain by. Seed-only spread at ${so.production_ps} ps on ${so.engine}: ${so.sd != null ? `±${so.sd.toFixed(2)} over ${so.n} runs` : `not yet estimated (${so.n} of ${so.needed} runs)`}.`
     : `ΔG = ${n2(mm?.delta_total_kcal_mol)} kcal/mol. No run-to-run spread can be quoted: this site has one run of this prepared system.`;
   steps.push({ tool: "explain_result", why: "establish which uncertainty a reader should quote before judging whether the run is trustworthy", found: headline });
 
