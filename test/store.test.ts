@@ -6,6 +6,16 @@ const A = JSON.parse(readFileSync("public/runs/1l2y-regression/manifest.json", "
 // store.ts reads location and window at import time; give it the stubs webmcp.test.ts uses, fresh for every test.
 async function fresh() { vi.resetModules(); vi.stubGlobal("location", { hash: "" }); vi.stubGlobal("window", { addEventListener: vi.fn() }); return await import("../src/store"); }
 
+describe("route", () => {
+  it("the bare URL (empty hash) is its own route, the landing; #/ is Projects", async () => {
+    const st = await fresh(); expect(st.get().route).toBe("");
+    vi.resetModules(); vi.stubGlobal("location", { hash: "#/" }); vi.stubGlobal("window", { addEventListener: vi.fn() });
+    expect((await import("../src/store")).get().route).toBe("/");
+    vi.resetModules(); vi.stubGlobal("location", { hash: "#/run/1l2y-rep4" }); vi.stubGlobal("window", { addEventListener: vi.fn() });
+    expect((await import("../src/store")).get().route).toBe("/run/1l2y-rep4");
+  });
+});
+
 describe("setProposalStatus: approve, reject, undo", () => {
   it("Approve stamps when it happened; Undo returns an approved proposal to pending and clears the stamp", async () => {
     const st = await fresh(); const p = makeProposal(A, "product", { dt: "0.001" }, "halve dt"); st.set({ proposals: [p] });

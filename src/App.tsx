@@ -12,6 +12,7 @@ import { TOOLS, callTool } from "./webmcp";
 import { parseToolError, type ToolError } from "./lib/toolError";
 import { Viewer, Boundary } from "./Viewer";
 import { Spread } from "./Spread";
+import { Landing } from "./Landing";
 import type { InvestigationState } from "./lib/investigation";
 import { AGENT_ACTIONS, type AgentAction } from "./agentActions";
 
@@ -47,7 +48,9 @@ export default function App() {
   return (
     <div className="app">
       <Header />
-      <main>
+      {/* The bare URL (no hash) is the landing: the front door, with the same header and agent rail as every other page, so an agent
+          connected there sees its tools and its calls in the activity log. `#/` stays Projects, and every existing link is untouched. */}
+      {route === "" ? <Boundary label="Landing"><Landing idx={idx} own={own} err={idxErr} /></Boundary> : <main>
         {idxErr && <div className="interp warn" role="alert">{idxErr} — reload the page to try again.</div>}
         <Boundary label="Page">{parts[0] === "run" && parts[1] ? <RunPage key={parts[1]} id={parts[1]} idx={idx} own={own} /> :
          parts[0] === "compare" && parts[2] ? <ComparePage a={parts[1]} b={parts[2]} idx={idx} /> :
@@ -55,7 +58,7 @@ export default function App() {
          parts[0] === "p" && parts[1] ? <ProjectPage key={parts[1]} slug={decodeURIComponent(parts[1])} idx={idx} own={own} /> :
          parts[0] === "u" && parts[1] ? <Profile key={parts[1]} handle={decodeURIComponent(parts[1])} idx={idx} own={own} /> :
          <Home idx={idx} own={own} />}</Boundary>
-      </main>
+      </main>}
       <Sidebar idx={idx} />
     </div>
   );

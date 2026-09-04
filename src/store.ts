@@ -3,7 +3,7 @@ import type { Proposal } from "./lib/runs";
 import { emptyInvestigation, type InvestigationState, type InvocationSource } from "./lib/investigation";
 export interface ToolCall { t: number; tool: string; input: unknown; ok: boolean; summary: string; source: InvocationSource }
 interface State { route: string; proposals: Proposal[]; calls: ToolCall[]; investigations: Record<string, InvestigationState>; webmcp: "unsupported" | "registering" | "registered" | "error"; tools: string[]; console: { tool: string; input: string; /** make the call at once as a page action instead of waiting for Call */ run?: boolean } | null; /** a request from elsewhere on the page to open one stage's proposal thread */ openStage: string | null }
-let state: State = { route: location.hash.slice(1) || "/", proposals: [], calls: [], investigations: {}, webmcp: "unsupported", tools: [], console: null, openStage: null };
+let state: State = { route: location.hash.slice(1), proposals: [], calls: [], investigations: {}, webmcp: "unsupported", tools: [], console: null, openStage: null };
 const subs = new Set<() => void>();
 export const get = () => state;
 export function set(patch: Partial<State> | ((s: State) => Partial<State>)) {
@@ -17,7 +17,7 @@ export function useStore<T>(sel: (s: State) => T): T {
 window.addEventListener("hashchange", () => {
   const h = location.hash.slice(1);
   if (h && !h.startsWith("/")) { const el = document.getElementById(h); if (el) { el.scrollIntoView({ behavior: "smooth", block: "start" }); history.replaceState(null, "", `#${state.route}`); return; } }
-  set({ route: h || "/" });
+  set({ route: h }); // "" is the landing (bare URL), "/" is Projects
 });
 export const navigate = (r: string) => { location.hash = r; };
 export function logCall(tool: string, input: unknown, ok: boolean, summary: string, source: InvocationSource) {

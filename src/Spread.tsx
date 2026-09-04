@@ -7,7 +7,8 @@ const PALETTE = [{ fill: "var(--navy)", word: "navy" }, { fill: "var(--warn)", w
 /** The spread as an object: one dot per run on the ΔG axis, the band is mean ± SD across these runs, a dispersion, the ring marks the run
     the page starts from. Every dot is an index entry (a number read from that run's mmgbsa.dat); mean and SD are the
     cohort's, computed from the same entries. Nothing is drawn that is not one of those numbers. */
-export function Spread({ runs, mean, sd, own, ringId, ringWhy }: { runs: IndexEntry[]; mean: number | null; sd: number | null; own?: Owners | null; ringId?: string | null; ringWhy?: string }) {
+/** `onPick`: a dot click hands the run id to the caller instead of navigating (the landing swaps its card); every other call site navigates as before. */
+export function Spread({ runs, mean, sd, own, ringId, ringWhy, onPick }: { runs: IndexEntry[]; mean: number | null; sd: number | null; own?: Owners | null; ringId?: string | null; ringWhy?: string; onPick?: (id: string) => void }) {
   // The drawn width decides how close two dots may sit: measured, so a phone gets more lanes rather than overlapping dots.
   const ref = useRef<SVGSVGElement>(null); const [width, setWidth] = useState(600);
   // Hover or focus names one run: its dot grows, the others fade, a label sits above it. Nothing here is a new number.
@@ -43,7 +44,7 @@ export function Spread({ runs, mean, sd, own, ringId, ringWhy }: { runs: IndexEn
       {sd != null && <rect x={`${X(mean - sd)}%`} y={2} width={`${X(mean + sd) - X(mean - sd)}%`} height={axis - 2} rx={5} fill="var(--navy)" opacity={0.08} />}
       <line x1={`${X(mean)}%`} x2={`${X(mean)}%`} y1={2} y2={axis} stroke="var(--navy)" strokeWidth={1.5} strokeDasharray="3 3" />
       <line x1="3%" x2="97%" y1={axis} y2={axis} stroke="var(--line)" strokeWidth={1.5} />
-      {sorted.map(r => { const dg = r.delta_g as number; const isRing = r.id === ring; return <a key={r.id} href={`#/run/${r.id}`} className={hover === r.id ? "on" : undefined} aria-label={`${r.id} · ${fmt(dg)} kcal/mol · ${r.production_ps} ps · ${r.engine}${r.owner ? ` · ${nameOf(r.owner)}` : ""}`}
+      {sorted.map(r => { const dg = r.delta_g as number; const isRing = r.id === ring; return <a key={r.id} href={`#/run/${r.id}`} onClick={onPick ? e => { e.preventDefault(); onPick(r.id); } : undefined} className={hover === r.id ? "on" : undefined} aria-label={`${r.id} · ${fmt(dg)} kcal/mol · ${r.production_ps} ps · ${r.engine}${r.owner ? ` · ${nameOf(r.owner)}` : ""}`}
         onMouseEnter={() => setHover(r.id)} onMouseLeave={() => setHover(h => h === r.id ? null : h)} onFocus={() => setHover(r.id)} onBlur={() => setHover(h => h === r.id ? null : h)}>
         <circle cx={`${X(dg)}%`} cy={cy(lane.get(r.id) as number)} r={12} fill="transparent" />
         {isRing && <circle cx={`${X(dg)}%`} cy={cy(lane.get(r.id) as number)} r={10.5} fill="none" stroke="var(--navy)" strokeWidth={1.5} />}
