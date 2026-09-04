@@ -6,6 +6,7 @@ import { nextStep } from "./lib/investigate";
 import { runningMean } from "./lib/stats";
 import type { Report } from "./lib/amberCheck";
 import { useStore, navigate, setProposalStatus, set, UNDO_WINDOW_MS } from "./store";
+import { NAV_HREF } from "./routes";
 import { analysisInfo, ANALYSIS_CATEGORIES, type AnalysisCategory } from "./lib/analysisCatalog";
 import { describeSystem } from "./lib/systemCatalog";
 import { TOOLS, callTool } from "./webmcp";
@@ -79,10 +80,10 @@ function Header() {
   const route = useStore(s => s.route);
   return (
     <header>
-      <a href="#/" className="brand"><Mark />runcard</a>
+      <a href={NAV_HREF.landing} className="brand" aria-current={route === "" ? "page" : undefined}><Mark />runcard</a>
       <nav className="top-nav" aria-label="primary">
-        <a href="#/" aria-current={route === "/" || route.startsWith("/p/") ? "page" : undefined}>Projects</a>
-        <a href="#/compare" aria-current={route.startsWith("/compare") ? "page" : undefined}>Compare</a>
+        <a href={NAV_HREF.projects} aria-current={route === "/" || route.startsWith("/p/") ? "page" : undefined}>Projects</a>
+        <a href={NAV_HREF.compare} aria-current={route.startsWith("/compare") ? "page" : undefined}>Compare</a>
       </nav>
       {/* One pill says what an agent gets here. Green: registered with navigator.modelContext. Amber: this browser does not expose WebMCP; the pill leads to the console, which calls the same table by hand. */}
       {st === "registered" ? <span className="webmcp registered" title="Registered with navigator.modelContext — an agent in this browser can call every tool on this page">WebMCP · {TOOLS.length} tools</span>
@@ -372,7 +373,7 @@ function Profile({ handle, idx, own }: { handle: string; idx: IndexEntry[]; own:
   useEffect(() => { document.title = `${name} · runcard`; }, [name]);
   const allProposals = useStore(s => s.proposals);
   const mine = idx.filter(r => r.owner === handle);
-  if (idx.length && !mine.length && !p) return <section><h1>No profile <span className="dim handle">@{handle}</span></h1><p className="dim">Nobody by that handle has a run here. <a href="#/">Back to the home page.</a></p></section>;
+  if (idx.length && !mine.length && !p) return <section><h1>No profile <span className="dim handle">@{handle}</span></h1><p className="dim">Nobody by that handle has a run here. <a href={NAV_HREF.projects}>Back to projects.</a></p></section>;
   const st = ownerStats(idx, handle);
   const others = ownerHandles(idx).filter(h => h !== handle);
   const cs = cohorts(idx).map(c => ({ c, rows: c.runs.filter(r => r.owner === handle) })).filter(x => x.rows.length);

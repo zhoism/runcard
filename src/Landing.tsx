@@ -3,6 +3,7 @@ import { Spread } from "./Spread";
 import { cohorts, confidenceLadderFull, ensemble, loadRun, sameSystem } from "./lib/runs";
 import { TOOLS } from "./webmcp";
 import type { IndexEntry, Owners } from "./lib/types";
+import { NAV_HREF } from "./routes";
 import "./landing.css";
 
 /* The landing page (the bare URL, no hash): the run card is the object at the top, and it is live — a dot in the
@@ -113,7 +114,7 @@ export function Landing({ idx, own, err }: { idx: IndexEntry[]; own: Owners | nu
         </p>
         <div className="cta lp-cta">
           <a className="btn lp-sheen" href={`#/run/${DEMO}`}>Open the demo run</a>
-          <a className="btn ghost" href="#/">Browse every project</a>
+          <a className="btn ghost" href={NAV_HREF.projects}>Browse every project</a>
         </div>
       </section>
 
